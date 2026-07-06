@@ -1,0 +1,273 @@
+import { clsx } from 'clsx'
+import type { ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
+
+/* ------------------------------------------------------------------ */
+/* Card                                                                */
+/* ------------------------------------------------------------------ */
+export function Card({
+  children,
+  className,
+  padded = true,
+}: {
+  children: ReactNode
+  className?: string
+  padded?: boolean
+}) {
+  return <div className={clsx('card', padded && 'card-pad', className)}>{children}</div>
+}
+
+export function CardTitle({
+  title,
+  subtitle,
+  action,
+}: {
+  title: ReactNode
+  subtitle?: ReactNode
+  action?: ReactNode
+}) {
+  return (
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div>
+        <h3 className="text-base font-semibold text-ink-900">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-sm text-ink-500">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Page header                                                         */
+/* ------------------------------------------------------------------ */
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string
+  description?: string
+  actions?: ReactNode
+}) {
+  return (
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-ink-900">{title}</h1>
+        {description && <p className="mt-1 text-sm text-ink-500">{description}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Stat card                                                           */
+/* ------------------------------------------------------------------ */
+const tones = {
+  blue: 'bg-blue-50 text-blue-600',
+  green: 'bg-emerald-50 text-emerald-600',
+  orange: 'bg-orange-50 text-orange-600',
+  purple: 'bg-violet-50 text-violet-600',
+  red: 'bg-rose-50 text-rose-600',
+  slate: 'bg-slate-100 text-slate-600',
+} as const
+
+export type Tone = keyof typeof tones
+
+export function StatCard({
+  label,
+  value,
+  icon: Icon,
+  tone = 'blue',
+  footer,
+}: {
+  label: string
+  value: ReactNode
+  icon: LucideIcon
+  tone?: Tone
+  footer?: ReactNode
+}) {
+  return (
+    <Card className="transition-shadow hover:shadow-cardhover">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-ink-500">{label}</p>
+          <p className="mt-1 text-3xl font-bold tracking-tight text-ink-900">{value}</p>
+        </div>
+        <div className={clsx('flex h-11 w-11 items-center justify-center rounded-xl', tones[tone])}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      {footer && <div className="mt-3 text-xs font-medium text-ink-500">{footer}</div>}
+    </Card>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Badge                                                               */
+/* ------------------------------------------------------------------ */
+const badgeTones: Record<string, string> = {
+  green: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  blue: 'bg-blue-50 text-blue-700 ring-blue-600/20',
+  orange: 'bg-orange-50 text-orange-700 ring-orange-600/20',
+  red: 'bg-rose-50 text-rose-700 ring-rose-600/20',
+  purple: 'bg-violet-50 text-violet-700 ring-violet-600/20',
+  slate: 'bg-slate-100 text-slate-600 ring-slate-500/20',
+  yellow: 'bg-amber-50 text-amber-700 ring-amber-600/20',
+}
+
+export function Badge({
+  children,
+  tone = 'slate',
+  dot = false,
+}: {
+  children: ReactNode
+  tone?: keyof typeof badgeTones
+  dot?: boolean
+}) {
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
+        badgeTones[tone],
+      )}
+    >
+      {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+      {children}
+    </span>
+  )
+}
+
+/** Map common status strings to badge tones. */
+export function statusTone(status: string): keyof typeof badgeTones {
+  const s = status.toLowerCase()
+  if (s === 'n/a' || s === 'na') return 'slate'
+  if (['active', 'healthy', 'passed', 'pass', 'resolved', 'approved', 'enabled', 'compliant', 'live', 'online', 'operational', 'success', 'delivered', 'connected', 'mitigated', 'low'].some((k) => s.includes(k)))
+    return 'green'
+  if (['pending', 'review', 'draft', 'medium', 'warning', 'degraded', 'in progress', 'investigating', 'mitigating', 'staging', 'gap'].some((k) => s.includes(k)))
+    return 'orange'
+  if (['failed', 'fail', 'critical', 'high', 'blocked', 'denied', 'error', 'suspended', 'offline', 'expired', 'breach', 'open', 'churned'].some((k) => s.includes(k)))
+    return 'red'
+  if (['deprecated', 'archived', 'inactive', 'disabled'].some((k) => s.includes(k))) return 'slate'
+  if (['beta', 'trial', 'canary', 'provisioning'].some((k) => s.includes(k))) return 'purple'
+  return 'blue'
+}
+
+export function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge tone={statusTone(status)} dot>
+      {status}
+    </Badge>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Table                                                               */
+/* ------------------------------------------------------------------ */
+export function Table({
+  columns,
+  children,
+}: {
+  columns: string[]
+  children: ReactNode
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full">
+        <thead>
+          <tr className="border-b border-slate-200">
+            {columns.map((c) => (
+              <th key={c} className="table-th">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">{children}</tbody>
+      </table>
+    </div>
+  )
+}
+
+export function Tr({ children }: { children: ReactNode }) {
+  return <tr className="transition-colors hover:bg-slate-50/70">{children}</tr>
+}
+
+export function Td({ children, className }: { children: ReactNode; className?: string }) {
+  return <td className={clsx('table-td', className)}>{children}</td>
+}
+
+/* ------------------------------------------------------------------ */
+/* Progress bar                                                        */
+/* ------------------------------------------------------------------ */
+export function Progress({
+  value,
+  tone = 'green',
+}: {
+  value: number
+  tone?: 'green' | 'blue' | 'orange' | 'red' | 'purple'
+}) {
+  const colors = {
+    green: 'bg-emerald-500',
+    blue: 'bg-blue-500',
+    orange: 'bg-orange-500',
+    red: 'bg-rose-500',
+    purple: 'bg-violet-500',
+  }
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+      <div
+        className={clsx('h-full rounded-full transition-all', colors[tone])}
+        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+      />
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Avatar / initials                                                   */
+/* ------------------------------------------------------------------ */
+export function Avatar({ name, className }: { name: string; className?: string }) {
+  const initials = name
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+  const palette = ['bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-violet-100 text-violet-700', 'bg-orange-100 text-orange-700', 'bg-rose-100 text-rose-700']
+  const idx = name.charCodeAt(0) % palette.length
+  return (
+    <span
+      className={clsx(
+        'inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold',
+        palette[idx],
+        className,
+      )}
+    >
+      {initials}
+    </span>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Empty state                                                         */
+/* ------------------------------------------------------------------ */
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: LucideIcon
+  title: string
+  description?: string
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-14 text-center">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+        <Icon className="h-6 w-6" />
+      </div>
+      <p className="font-semibold text-ink-700">{title}</p>
+      {description && <p className="mt-1 max-w-sm text-sm text-ink-500">{description}</p>}
+    </div>
+  )
+}
