@@ -7,13 +7,28 @@ import {
   CreditCard,
   Plug,
   Shield,
+  ShieldCheck,
   Save,
   Check,
+  Crown,
+  UserCog,
+  FlaskConical,
+  Eye,
+  KeyRound,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
 
-type TabKey = 'General' | 'Branding' | 'Notifications' | 'Billing' | 'Integrations' | 'Security'
+type TabKey =
+  | 'General'
+  | 'Branding'
+  | 'Notifications'
+  | 'Billing'
+  | 'Integrations'
+  | 'Roles & Permissions'
+  | 'Security'
 
 const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'General', icon: SettingsIcon },
@@ -21,8 +36,115 @@ const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'Notifications', icon: Bell },
   { key: 'Billing', icon: CreditCard },
   { key: 'Integrations', icon: Plug },
+  { key: 'Roles & Permissions', icon: KeyRound },
   { key: 'Security', icon: Shield },
 ]
+
+/* ------------------------------------------------------------------ */
+/* Role-based access control                                           */
+/* ------------------------------------------------------------------ */
+type Tone = 'purple' | 'blue' | 'green' | 'orange' | 'slate'
+
+interface Cap {
+  label: string
+  granted: boolean
+}
+
+interface Role {
+  name: string
+  desc: string
+  icon: LucideIcon
+  tone: Tone
+  caps: Cap[]
+}
+
+// The seven baseline capabilities are shown for every role (granted or not);
+// role-specific capabilities are appended and always granted.
+const base = (flags: boolean[]): Cap[] =>
+  ['User Enrollment', 'Define Admin Accounts', 'Full Read/Write', 'Policy Management', 'Model Deployment', 'Access All Clients', 'Modify Settings'].map(
+    (label, i) => ({ label, granted: flags[i] }),
+  )
+
+const extra = (labels: string[]): Cap[] => labels.map((label) => ({ label, granted: true }))
+
+const roles: Role[] = [
+  {
+    name: 'Superuser',
+    desc: 'Complete system control and multi-tenant administration',
+    icon: Crown,
+    tone: 'purple',
+    caps: base([true, true, true, true, true, true, true]),
+  },
+  {
+    name: 'Platform Admin',
+    desc: 'Initial onboarding and infrastructure updates',
+    icon: UserCog,
+    tone: 'blue',
+    caps: base([true, false, true, true, true, false, true]),
+  },
+  {
+    name: 'Compliance Officer',
+    desc: 'Regulatory reporting and drift monitoring',
+    icon: ShieldCheck,
+    tone: 'green',
+    caps: [...base([false, false, false, false, false, false, false]), ...extra(['Audit Logs', 'Policy Review', 'Factsheets'])],
+  },
+  {
+    name: 'Model Validator',
+    desc: 'Verifying model safety before client rollout',
+    icon: FlaskConical,
+    tone: 'orange',
+    caps: [...base([false, false, false, false, false, false, false]), ...extra(['Sandbox Access', 'Testing', 'Bias Evaluation'])],
+  },
+  {
+    name: 'Read Only',
+    desc: 'View-only access to dashboards, reports, and audit trails',
+    icon: Eye,
+    tone: 'slate',
+    caps: [...base([false, false, false, false, false, false, false]), ...extra(['View Dashboards', 'View Reports'])],
+  },
+]
+
+const roleTone: Record<Tone, string> = {
+  purple: 'bg-violet-50 text-violet-600',
+  blue: 'bg-blue-50 text-blue-600',
+  green: 'bg-emerald-50 text-emerald-600',
+  orange: 'bg-orange-50 text-orange-600',
+  slate: 'bg-slate-100 text-slate-500',
+}
+
+function RoleCard({ role }: { role: Role }) {
+  const Icon = role.icon
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${roleTone[role.tone]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-semibold text-ink-900">{role.name}</p>
+            <p className="text-sm text-ink-500">{role.desc}</p>
+          </div>
+        </div>
+        <Badge tone={role.tone}>{role.name}</Badge>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {role.caps.map((c) => (
+          <div key={c.label} className="flex items-center gap-2">
+            {c.granted ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <XCircle className="h-4 w-4 shrink-0 text-slate-300" />
+            )}
+            <span className={`text-sm ${c.granted ? 'text-ink-700' : 'text-slate-400'}`}>{c.label}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
 
 function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
@@ -266,6 +388,20 @@ export default function Settings() {
                   </div>
                 </Card>
               ))}
+            </div>
+          )}
+
+          {active === 'Roles & Permissions' && (
+            <div>
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-ink-900">Role-Based Access Control</h3>
+                <p className="mt-0.5 text-sm text-ink-500">Access is strictly segmented by role profile</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                {roles.map((role) => (
+                  <RoleCard key={role.name} role={role} />
+                ))}
+              </div>
             </div>
           )}
 
