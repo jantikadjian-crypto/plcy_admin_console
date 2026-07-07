@@ -18,6 +18,11 @@ import {
   Crown,
   Settings,
   Package,
+  Rocket,
+  Boxes,
+  Cpu,
+  BadgeCheck,
+  Globe,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -43,6 +48,19 @@ export const navGroups: NavGroup[] = [
       { label: 'Customers', to: '/customers', icon: Users },
       { label: 'Instances', to: '/instances', icon: Server },
     ],
+  },
+  {
+    title: 'Fleet',
+    items: [
+      { label: 'Releases', to: '/releases', icon: Rocket },
+      { label: 'Update Bundles', to: '/bundles', icon: Boxes },
+      { label: 'Cluster Health', to: '/clusters', icon: Cpu },
+      { label: 'Licensing', to: '/licensing', icon: BadgeCheck },
+    ],
+  },
+  {
+    title: 'Sovereignty',
+    items: [{ label: 'Regions', to: '/regions', icon: Globe }],
   },
   {
     title: 'Governance',

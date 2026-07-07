@@ -3,6 +3,11 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import Instances from './pages/Instances'
+import Releases from './pages/Releases'
+import Bundles from './pages/Bundles'
+import Clusters from './pages/Clusters'
+import Licensing from './pages/Licensing'
+import Regions from './pages/Regions'
 import Models from './pages/Models'
 import ModelRegistry from './pages/ModelRegistry'
 import DataClassification from './pages/DataClassification'
@@ -27,6 +32,11 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/instances" element={<Instances />} />
+        <Route path="/releases" element={<Releases />} />
+        <Route path="/bundles" element={<Bundles />} />
+        <Route path="/clusters" element={<Clusters />} />
+        <Route path="/licensing" element={<Licensing />} />
+        <Route path="/regions" element={<Regions />} />
         <Route path="/models" element={<Models />} />
         <Route path="/model-registry" element={<ModelRegistry />} />
         <Route path="/data-classification" element={<DataClassification />} />
