@@ -13,7 +13,7 @@ import { useSession } from '@/context/Session'
  * present in `public/`, and falls back to the styled wordmark otherwise so the
  * header never looks broken.
  */
-const LOGO_CANDIDATES = ['/plcy-logo.svg', '/plcy-logo.png']
+const LOGO_CANDIDATES = ['/plcy-logo.png', '/plcy-logo.svg']
 
 function BrandMark() {
   const [idx, setIdx] = useState(0)
