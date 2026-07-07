@@ -4,6 +4,8 @@ import { Card, CardTitle, PageHeader, StatCard, Badge, StatusBadge, Table, Tr, T
 import { provisions as seedProvisions, PROVISION_STEPS, provisionStep, opsTotals } from '@/data/ops'
 import type { Provision, ProvTemplate } from '@/data/ops'
 import { regionByCode } from '@/data/fleet'
+import { useSession } from '@/context/Session'
+import { GatedButton } from '@/components/GatedButton'
 
 const templateTone: Record<ProvTemplate, 'blue' | 'purple' | 'red'> = {
   SaaS: 'blue',
@@ -29,6 +31,7 @@ const cardTone: Record<'blue' | 'purple' | 'red', string> = {
 const nodeSize: Record<ProvTemplate, string> = { SaaS: 'm6i.2xlarge', 'Sovereign Cloud': 'm6i.4xlarge', 'Air-gapped': 'on-prem' }
 
 export default function Provisioning() {
+  const { logAction } = useSession()
   const [rows, setRows] = useState<Provision[]>(seedProvisions)
   const [sel, setSel] = useState<Provision | null>(null)
 
@@ -42,7 +45,7 @@ export default function Provisioning() {
       <PageHeader
         title="Provisioning"
         description="Day-0 onboarding — provision new single-tenant environments via IaC"
-        actions={<button className="btn-primary"><Plus className="h-4 w-4" />New environment</button>}
+        actions={<GatedButton cap="provision.manage" className="btn-primary"><Plus className="h-4 w-4" />New environment</GatedButton>}
       />
 
       {/* Stat row */}
@@ -91,9 +94,12 @@ export default function Provisioning() {
               <Td className="font-mono text-xs text-ink-500">{p.owner}</Td>
               <Td>
                 {p.status === 'Failed' ? (
-                  <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => retry(p.id)}>
+                  <GatedButton cap="provision.manage" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => {
+                    logAction({ action: 'provision.retry', target: p.customer, category: 'provisioning' })
+                    retry(p.id)
+                  }}>
                     <RotateCcw className="h-3.5 w-3.5" />Retry
-                  </button>
+                  </GatedButton>
                 ) : (
                   <span className="text-xs text-ink-400">—</span>
                 )}

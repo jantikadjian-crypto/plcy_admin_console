@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Plus, Eye, ArrowRight, ShieldCheck, ShieldAlert, Ban } from 'lucide-react'
 import { PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Modal } from '@/components/ui'
 import { Card, CardTitle } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
 import { transfers as seed } from '@/data/privacy'
 import type { Transfer, TransferMechanism, TIA } from '@/data/privacy'
 import { regionByCode } from '@/data/fleet'
@@ -25,6 +27,7 @@ const isInRegion = (m: TransferMechanism) => m === 'In-region only' || m === 'Ai
 
 export default function Transfers() {
   const { scope, isAll } = useCustomerScope()
+  const { logAction } = useSession()
   const [rows, setRows] = useState<Transfer[]>(seed)
   const [sel, setSel] = useState<Transfer | null>(null)
 
@@ -35,6 +38,7 @@ export default function Transfers() {
   const underReview = scoped.filter((t) => t.status === 'Under review').length
 
   const approve = (id: string) => {
+    logAction({ action: 'transfer.approve', target: id, category: 'sovereignty' })
     setRows((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'Approved' } : t)))
     setSel((s) => (s && s.id === id ? { ...s, status: 'Approved' } : s))
   }
@@ -101,9 +105,9 @@ export default function Transfers() {
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setSel(null)}>Close</button>
               {sel.status !== 'Approved' && (
-                <button className="btn-primary" onClick={() => approve(sel.id)}>
+                <GatedButton cap="transfer.approve" className="btn-primary" onClick={() => approve(sel.id)}>
                   <ShieldCheck className="h-4 w-4" />Approve transfer
-                </button>
+                </GatedButton>
               )}
             </div>
           }

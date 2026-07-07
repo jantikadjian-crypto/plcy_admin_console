@@ -3,9 +3,10 @@ import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { ChevronsUpDown, Building2, X, Check } from 'lucide-react'
 import { navGroups } from '@/config/navigation'
-import { currentUser, effectiveRoleById } from '@/data/roles'
+import { currentUser, roleDefs } from '@/data/roles'
 import { customers } from '@/data/mock'
 import { useCustomerScope, ALL } from '@/context/CustomerScope'
+import { useSession } from '@/context/Session'
 
 /**
  * PLCY brand mark. Uses the logo asset at /plcy-logo.svg (or .png) when it is
@@ -67,6 +68,48 @@ function CustomerSwitcher() {
               >
                 <span className="flex-1 truncate">{name}</span>
                 {name === scope && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ProfileRoleSwitcher() {
+  const { actingRole, setActingRole } = useSession()
+  const [open, setOpen] = useState(false)
+  const current = roleDefs.find((r) => r.id === actingRole)
+  const previewing = actingRole !== currentUser.roleId
+  const initials = currentUser.name.split(' ').map((n) => n[0]).slice(0, 2).join('')
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-slate-100">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-500 text-xs font-semibold text-white">
+          {initials}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink-900">{currentUser.name}</p>
+          <p className="truncate text-xs text-ink-400">
+            {previewing ? <span className="text-orange-500">Viewing as {current?.name}</span> : current?.name ?? 'Member'}
+          </p>
+        </div>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-400" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full left-0 right-0 z-20 mb-1 rounded-xl border border-slate-200 bg-white p-1 shadow-cardhover">
+            <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">View as role</p>
+            {roleDefs.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => { setActingRole(r.id); setOpen(false) }}
+                className={clsx('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100', r.id === actingRole ? 'font-semibold text-brand-700' : 'text-ink-700')}
+              >
+                <span className="flex-1 truncate">{r.name}</span>
+                {r.id === actingRole && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
               </button>
             ))}
           </div>
@@ -144,23 +187,9 @@ export default function Sidebar({
           ))}
         </nav>
 
-        {/* User */}
+        {/* User + role switcher */}
         <div className="border-t border-slate-200 p-3">
-          <div className="flex items-center gap-3 rounded-xl p-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-500 text-xs font-semibold text-white">
-              {currentUser.name
-                .split(' ')
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join('')}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink-900">{currentUser.name}</p>
-              <p className="truncate text-xs text-ink-400">
-                {effectiveRoleById(currentUser.roleId)?.name ?? 'Member'}
-              </p>
-            </div>
-          </div>
+          <ProfileRoleSwitcher />
         </div>
       </aside>
     </>

@@ -26,6 +26,8 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
 
 /* ------------------------------------------------------------------ */
 /* Types & data                                                        */
@@ -257,6 +259,7 @@ type Tab = (typeof TABS)[number]
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 export default function Incidents() {
+  const { logAction } = useSession()
   const [tab, setTab] = useState<Tab>('Incidents')
   const [sevFilter, setSevFilter] = useState<'All' | Severity>('All')
   const [selected, setSelected] = useState<Incident | null>(null)
@@ -296,10 +299,10 @@ export default function Incidents() {
               <option value="Medium">Medium</option>
               <option value="Low">Low</option>
             </select>
-            <button className="btn-primary" onClick={() => setReporting(true)}>
+            <GatedButton cap="incident.manage" className="btn-primary" onClick={() => setReporting(true)}>
               <Plus className="h-4 w-4" />
               Report Incident
-            </button>
+            </GatedButton>
           </>
         }
       />
@@ -401,6 +404,7 @@ export default function Incidents() {
         onClose={() => setReporting(false)}
         nextId={`INC-2026-${String(items.length + 1).padStart(3, '0')}`}
         onCreate={(inc) => {
+          logAction({ action: 'incident.report', target: inc.id, category: 'incident' })
           addIncident(inc)
           setReporting(false)
           setTab('Incidents')

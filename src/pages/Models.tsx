@@ -24,6 +24,8 @@ import {
 import { models, policyPacks, customers, fmtCompact, fmtNum } from '@/data/mock'
 import type { AIModel } from '@/data/mock'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useSession } from '@/context/Session'
+import { GatedButton } from '@/components/GatedButton'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -57,6 +59,7 @@ const types = Array.from(new Set(models.map((m) => m.type)))
 
 export default function Models() {
   const { scope, isAll } = useCustomerScope()
+  const { logAction } = useSession()
   const [rows, setRows] = useState<AIModel[]>(models)
   const [sel, setSel] = useState<AIModel | null>(null)
   const [registering, setRegistering] = useState(false)
@@ -80,10 +83,10 @@ export default function Models() {
         title="AI Models"
         description={isAll ? 'Every model under PLCY governance across the customer fleet' : `Models under governance for ${scope}`}
         actions={
-          <button className="btn-primary" onClick={() => setRegistering(true)}>
+          <GatedButton cap="model.register" className="btn-primary" onClick={() => setRegistering(true)}>
             <Bot className="h-4 w-4" />
             Register model
-          </button>
+          </GatedButton>
         }
       />
 
@@ -194,6 +197,7 @@ export default function Models() {
         onClose={() => setRegistering(false)}
         defaultCustomer={isAll ? customers[0].name : scope}
         onCreate={(m) => {
+          logAction({ action: 'model.register', target: m.name, category: 'model' })
           setRows((prev) => [m, ...prev])
           setRegistering(false)
           setSel(m)

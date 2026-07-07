@@ -25,6 +25,8 @@ import {
 import { instances, policyPacks, customers, fmtNum } from '@/data/mock'
 import type { Instance } from '@/data/mock'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useSession } from '@/context/Session'
+import { GatedButton } from '@/components/GatedButton'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -48,6 +50,7 @@ const statusDot: Record<string, string> = {
 
 export default function Instances() {
   const { scope, isAll } = useCustomerScope()
+  const { logAction } = useSession()
   const [rows, setRows] = useState<Instance[]>(instances)
   const [sel, setSel] = useState<Instance | null>(null)
   const [provisioning, setProvisioning] = useState(false)
@@ -74,10 +77,10 @@ export default function Instances() {
         title="Instances"
         description={isAll ? 'Deployed PLCY enforcement instances across every customer environment' : `Deployed instances for ${scope}`}
         actions={
-          <button className="btn-primary" onClick={() => setProvisioning(true)}>
+          <GatedButton cap="provision.manage" className="btn-primary" onClick={() => setProvisioning(true)}>
             <Server className="h-4 w-4" />
             Provision instance
-          </button>
+          </GatedButton>
         }
       />
 
@@ -170,6 +173,7 @@ export default function Instances() {
         onClose={() => setProvisioning(false)}
         defaultCustomer={isAll ? customers[0].name : scope}
         onCreate={(inst) => {
+          logAction({ action: 'instance.provision', target: inst.name, category: 'provisioning' })
           setRows((prev) => [inst, ...prev])
           setProvisioning(false)
           setSel(inst)

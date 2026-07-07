@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
 import {
   effectiveRoles,
   saveRoles,
@@ -164,6 +166,7 @@ const integrations = [
 ]
 
 export default function Settings() {
+  const { logAction } = useSession()
   const [active, setActive] = useState<TabKey>('General')
   const [accent, setAccent] = useState('#1f47f5')
   const [toggles, setToggles] = useState<Record<string, boolean>>({
@@ -241,6 +244,7 @@ export default function Settings() {
 
   const saveChanges = () => {
     saveRoles(rbacRoles)
+    logAction({ action: 'settings.save', target: 'roles & permissions', category: 'settings' })
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2000)
   }
@@ -257,10 +261,10 @@ export default function Settings() {
                 <Check className="h-3.5 w-3.5" /> Saved
               </span>
             )}
-            <button className="btn-primary" onClick={saveChanges}>
+            <GatedButton cap="settings.modify" className="btn-primary" onClick={saveChanges}>
               <Save className="h-4 w-4" />
               Save changes
-            </button>
+            </GatedButton>
           </div>
         }
       />

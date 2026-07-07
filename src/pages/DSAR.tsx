@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { FilePlus2, Eye, FolderOpen, AlertTriangle, CircleCheck, Clock, ArrowRight } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
 import { dsarRequests } from '@/data/privacy'
 import type { DSAR as DSARRow, DSARType, DSARStatus } from '@/data/privacy'
 import { regionByCode } from '@/data/fleet'
@@ -37,12 +39,14 @@ function nextStatus(status: DSARStatus): DSARStatus | null {
 
 export default function DSAR() {
   const { scope, isAll } = useCustomerScope()
+  const { logAction } = useSession()
   const [rows, setRows] = useState<DSARRow[]>(dsarRequests)
   const [sel, setSel] = useState<DSARRow | null>(null)
 
   const scoped = isAll ? rows : rows.filter((d) => d.customer === scope)
 
-  const advance = (id: string) =>
+  const advance = (id: string) => {
+    logAction({ action: 'dsar.advance', target: id, category: 'dsar' })
     setRows((prev) =>
       prev.map((d) => {
         if (d.id !== id) return d
@@ -50,6 +54,7 @@ export default function DSAR() {
         return nx ? { ...d, status: nx } : d
       }),
     )
+  }
 
   const open = scoped.filter((d) => d.status !== 'Completed').length
   const overdue = scoped.filter((d) => d.status === 'Overdue').length
@@ -135,10 +140,10 @@ export default function DSAR() {
                 Close
               </button>
               {selNext && (
-                <button className="btn-primary" onClick={() => advance(selLive.id)}>
+                <GatedButton cap="dsar.manage" className="btn-primary" onClick={() => advance(selLive.id)}>
                   <ArrowRight className="h-4 w-4" />
                   {selLive.status === 'New' ? 'Start' : 'Mark complete'}
-                </button>
+                </GatedButton>
               )}
             </>
           }

@@ -26,6 +26,8 @@ import {
 import { deployments as seedDeployments, regionByCode } from '@/data/fleet'
 import type { Deployment, License } from '@/data/fleet'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useSession } from '@/context/Session'
+import { GatedButton } from '@/components/GatedButton'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -87,6 +89,7 @@ function farActive(l: License): boolean {
 
 export default function Licensing() {
   const { scope, isAll } = useCustomerScope()
+  const { logAction } = useSession()
   const [rows, setRows] = useState<Deployment[]>(seedDeployments)
   const [selId, setSelId] = useState<string | null>(null)
 
@@ -110,10 +113,10 @@ export default function Licensing() {
         title="Licensing"
         description={isAll ? 'Licenses & entitlements across the client fleet' : `Licensing for ${scope}`}
         actions={
-          <button className="btn-primary">
+          <GatedButton cap="license.manage" className="btn-primary">
             <KeyRound className="h-4 w-4" />
             Issue license
-          </button>
+          </GatedButton>
         }
       />
 
@@ -170,15 +173,19 @@ export default function Licensing() {
                   <Badge tone={statusTone(l.status)} dot>{l.status}</Badge>
                 </Td>
                 <Td>
-                  <button
+                  <GatedButton
+                    cap="license.manage"
                     className="btn-secondary px-2.5 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() => renew(d.id)}
+                    onClick={() => {
+                      logAction({ action: 'license.renew', target: d.customer, category: 'license' })
+                      renew(d.id)
+                    }}
                     disabled={farActive(l)}
                     title={farActive(l) ? 'License is active with a distant expiry' : 'Extend expiry by one year'}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     Renew
-                  </button>
+                  </GatedButton>
                 </Td>
                 <Td>
                   <button
@@ -206,14 +213,18 @@ export default function Licensing() {
           footer={
             <>
               <button className="btn-ghost" onClick={() => setSelId(null)}>Close</button>
-              <button
+              <GatedButton
+                cap="license.manage"
                 className="btn-primary disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => renew(sel.id)}
+                onClick={() => {
+                  logAction({ action: 'license.renew', target: sel.customer, category: 'license' })
+                  renew(sel.id)
+                }}
                 disabled={farActive(sel.license)}
               >
                 <RefreshCw className="h-4 w-4" />
                 Renew license
-              </button>
+              </GatedButton>
             </>
           }
         >

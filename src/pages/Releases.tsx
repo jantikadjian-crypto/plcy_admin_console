@@ -21,6 +21,8 @@ import {
 } from '@/data/fleet'
 import type { Deployment, RolloutStatus, Channel, Release } from '@/data/fleet'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useSession } from '@/context/Session'
+import { GatedButton } from '@/components/GatedButton'
 
 const tooltipStyle = { borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px -2px rgba(15,23,42,0.1)', fontSize: 12 }
 
@@ -46,6 +48,7 @@ function stepProgress(status: RolloutStatus): number {
 
 export default function Releases() {
   const { scope, isAll } = useCustomerScope()
+  const { logAction } = useSession()
   const [rows, setRows] = useState<Deployment[]>(seedDeployments)
   const [sel, setSel] = useState<Deployment | null>(null)
   const [relSel, setRelSel] = useState<Release | null>(null)
@@ -64,7 +67,7 @@ export default function Releases() {
       <PageHeader
         title="Releases"
         description={isAll ? 'Platform versions and staged rollout across the fleet' : `Rollout status for ${scope}`}
-        actions={<button className="btn-primary"><Rocket className="h-4 w-4" />New rollout</button>}
+        actions={<GatedButton cap="release.rollout" className="btn-primary"><Rocket className="h-4 w-4" />New rollout</GatedButton>}
       />
 
       {/* Stat row */}
@@ -135,29 +138,42 @@ export default function Releases() {
               <Td><Badge tone={statusTone[d.status]} dot>{d.status}</Badge></Td>
               <Td>
                 {d.status === 'Update available' && (
-                  <button
+                  <GatedButton
+                    cap="release.rollout"
                     className="btn-secondary px-2.5 py-1 text-xs"
-                    onClick={() => setStatus(d.id, 'Rolling out', LATEST_STABLE)}
+                    onClick={() => {
+                      logAction({ action: d.connectivity === 'Air-gapped' ? 'release.ship-bundle' : 'release.stage', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
+                      setStatus(d.id, 'Rolling out', LATEST_STABLE)
+                    }}
                     title={d.connectivity === 'Air-gapped' ? 'Requires a signed update bundle' : 'Stage staged rollout'}
                   >
                     <ArrowUpCircle className="h-3.5 w-3.5" />
                     {d.connectivity === 'Air-gapped' ? 'Ship bundle' : 'Stage update'}
-                  </button>
+                  </GatedButton>
                 )}
                 {d.status === 'Rolling out' && (
                   <div className="flex gap-1">
-                    <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => setStatus(d.id, 'Up to date', d.target)}>
+                    <GatedButton cap="release.rollout" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => {
+                      logAction({ action: 'release.complete', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
+                      setStatus(d.id, 'Up to date', d.target)
+                    }}>
                       <CircleCheck className="h-3.5 w-3.5" />Complete
-                    </button>
-                    <button className="btn-ghost px-2 py-1 text-xs text-rose-600" onClick={() => setStatus(d.id, 'Update available', d.version)}>
+                    </GatedButton>
+                    <GatedButton cap="release.rollout" className="btn-ghost px-2 py-1 text-xs text-rose-600" onClick={() => {
+                      logAction({ action: 'release.rollback', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
+                      setStatus(d.id, 'Update available', d.version)
+                    }}>
                       <RotateCcw className="h-3.5 w-3.5" />Roll back
-                    </button>
+                    </GatedButton>
                   </div>
                 )}
                 {d.status === 'Up to date' && (
-                  <button className="btn-ghost px-2 py-1 text-xs text-ink-500" onClick={() => setStatus(d.id, 'Rollback', d.version)}>
+                  <GatedButton cap="release.rollout" className="btn-ghost px-2 py-1 text-xs text-ink-500" onClick={() => {
+                    logAction({ action: 'release.rollback', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
+                    setStatus(d.id, 'Rollback', d.version)
+                  }}>
                     <RotateCcw className="h-3.5 w-3.5" />Roll back
-                  </button>
+                  </GatedButton>
                 )}
                 {(d.status === 'Offline' || d.status === 'Rollback') && <span className="text-xs text-ink-400">—</span>}
               </Td>

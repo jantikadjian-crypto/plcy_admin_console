@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { KeyRound, Eye, Clock3, Activity, ShieldAlert, Video, Check, X } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Avatar, Table, Tr, Td, Modal } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
 import { accessRequests } from '@/data/privacy'
 import type { AccessRequest, AccessScope, AccessStatus } from '@/data/privacy'
 import { regionByCode } from '@/data/fleet'
@@ -20,6 +22,7 @@ const statusTone: Record<AccessStatus, 'orange' | 'blue' | 'green' | 'slate' | '
 }
 
 export default function PrivilegedAccess() {
+  const { logAction } = useSession()
   const [rows, setRows] = useState<AccessRequest[]>(accessRequests)
   const [sel, setSel] = useState<AccessRequest | null>(null)
 
@@ -84,14 +87,28 @@ export default function PrivilegedAccess() {
               <Td>
                 {a.status === 'Pending approval' ? (
                   <div className="flex gap-1">
-                    <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => decide(a.id, 'Active')}>
+                    <GatedButton
+                      cap={a.scope === 'Break-glass root' ? 'access.breakglass' : 'access.approve'}
+                      className="btn-secondary px-2.5 py-1 text-xs"
+                      onClick={() => {
+                        logAction({ action: 'access.approve', target: a.engineer + ' → ' + a.customer, category: 'access' })
+                        decide(a.id, 'Active')
+                      }}
+                    >
                       <Check className="h-3.5 w-3.5" />
                       Approve
-                    </button>
-                    <button className="btn-ghost px-2 py-1 text-xs text-rose-600" onClick={() => decide(a.id, 'Denied')}>
+                    </GatedButton>
+                    <GatedButton
+                      cap="access.approve"
+                      className="btn-ghost px-2 py-1 text-xs text-rose-600"
+                      onClick={() => {
+                        logAction({ action: 'access.deny', target: a.engineer + ' → ' + a.customer, category: 'access', result: 'Denied' })
+                        decide(a.id, 'Denied')
+                      }}
+                    >
                       <X className="h-3.5 w-3.5" />
                       Deny
-                    </button>
+                    </GatedButton>
                   </div>
                 ) : (
                   <span className="text-xs text-ink-400">—</span>

@@ -26,6 +26,8 @@ import {
   Modal,
   EmptyState,
 } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
 import { customers, instances, models, fmtMoney, fmtCompact } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 
@@ -60,6 +62,7 @@ function complianceTone(score: number): 'green' | 'blue' | 'orange' | 'red' {
 const planOrder: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
 
 export default function Customers() {
+  const { logAction } = useSession()
   const [rows, setRows] = useState<Customer[]>(customers)
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
@@ -90,10 +93,10 @@ export default function Customers() {
         title="Customers"
         description="Manage every organization governed by the PLCY platform"
         actions={
-          <button className="btn-primary" onClick={() => setAdding(true)}>
+          <GatedButton cap="customer.manage" className="btn-primary" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
             Add customer
-          </button>
+          </GatedButton>
         }
       />
 
@@ -198,6 +201,7 @@ export default function Customers() {
         open={adding}
         onClose={() => setAdding(false)}
         onCreate={(c) => {
+          logAction({ action: 'customer.create', target: c.name, category: 'customer' })
           setRows((prev) => [c, ...prev])
           setAdding(false)
           setQuery('')

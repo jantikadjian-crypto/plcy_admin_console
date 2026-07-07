@@ -3,11 +3,13 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import { CustomerScopeProvider } from '@/context/CustomerScope'
+import { SessionProvider } from '@/context/Session'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
+    <SessionProvider>
     <CustomerScopeProvider>
       <div className="flex min-h-screen bg-slate-50">
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -21,5 +23,6 @@ export default function Layout() {
         </div>
       </div>
     </CustomerScopeProvider>
+    </SessionProvider>
   )
 }
