@@ -7,6 +7,32 @@ import { currentUser, effectiveRoleById } from '@/data/roles'
 import { customers } from '@/data/mock'
 import { useCustomerScope, ALL } from '@/context/CustomerScope'
 
+/**
+ * PLCY brand mark. Uses the logo asset at /plcy-logo.svg (or .png) when it is
+ * present in `public/`, and falls back to the styled wordmark otherwise so the
+ * header never looks broken.
+ */
+const LOGO_CANDIDATES = ['/plcy-logo.svg', '/plcy-logo.png']
+
+function BrandMark() {
+  const [idx, setIdx] = useState(0)
+  if (idx < LOGO_CANDIDATES.length) {
+    return (
+      <img
+        src={LOGO_CANDIDATES[idx]}
+        alt="PLCY"
+        className="h-9 w-auto max-w-[172px] object-contain object-left"
+        onError={() => setIdx((i) => i + 1)}
+      />
+    )
+  }
+  return (
+    <div className="text-[28px] font-extrabold leading-none tracking-tight text-[#1668c4]" aria-label="PLCY">
+      PLCY
+    </div>
+  )
+}
+
 function CustomerSwitcher() {
   const { scope, setScope } = useCustomerScope()
   const [open, setOpen] = useState(false)
@@ -76,14 +102,9 @@ export default function Sidebar({
         {/* Brand */}
         <div className="flex items-start justify-between gap-2 px-5 py-5">
           <div>
-            <div
-              className="text-[28px] font-extrabold leading-none tracking-tight text-[#1668c4]"
-              aria-label="PLCY"
-            >
-              PLCY
-            </div>
-            <p className="mt-1.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.14em] text-ink-400">
-              AI Governance &amp; Policy Enforcement
+            <BrandMark />
+            <p className="mt-1.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.16em] text-ink-400">
+              Admin Console
             </p>
           </div>
           <button className="btn-ghost -mr-2 p-1.5 lg:hidden" onClick={onClose} aria-label="Close menu">
