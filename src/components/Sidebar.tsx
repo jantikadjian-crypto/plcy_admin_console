@@ -1,17 +1,61 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { ChevronsUpDown, Building2, X } from 'lucide-react'
+import { ChevronsUpDown, Building2, X, Check } from 'lucide-react'
 import { navGroups, ShieldCheck } from '@/config/navigation'
 import { currentUser, effectiveRoleById } from '@/data/roles'
+import { customers } from '@/data/mock'
+import { useCustomerScope, ALL } from '@/context/CustomerScope'
+
+function CustomerSwitcher() {
+  const { scope, setScope } = useCustomerScope()
+  const [open, setOpen] = useState(false)
+  const options = [ALL, ...customers.map((c) => c.name)]
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="group flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100"
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-brand-600 ring-1 ring-slate-200">
+          <Building2 className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">Current Customer</p>
+          <p className="truncate text-sm font-semibold text-ink-900">{scope}</p>
+        </div>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-400" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-cardhover">
+            {options.map((name) => (
+              <button
+                key={name}
+                onClick={() => { setScope(name); setOpen(false) }}
+                className={clsx(
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100',
+                  name === scope ? 'font-semibold text-brand-700' : 'text-ink-700',
+                )}
+              >
+                <span className="flex-1 truncate">{name}</span>
+                {name === scope && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function Sidebar({
   open,
   onClose,
-  currentCustomer,
 }: {
   open: boolean
   onClose: () => void
-  currentCustomer: string
 }) {
   return (
     <>
@@ -49,18 +93,7 @@ export default function Sidebar({
 
         {/* Current customer switcher */}
         <div className="px-3">
-          <button className="group flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-brand-600 ring-1 ring-slate-200">
-              <Building2 className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">
-                Current Customer
-              </p>
-              <p className="truncate text-sm font-semibold text-ink-900">{currentCustomer}</p>
-            </div>
-            <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-400" />
-          </button>
+          <CustomerSwitcher />
         </div>
 
         {/* Navigation */}

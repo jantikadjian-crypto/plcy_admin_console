@@ -1,6 +1,7 @@
-import { ShieldAlert, Bot, ListChecks, CheckCircle2 } from 'lucide-react'
+import { useState } from 'react'
+import { ShieldAlert, Bot, ListChecks, CheckCircle2, Eye } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts'
-import { Card, CardTitle, StatCard, PageHeader, Badge, Table, Tr, Td, StatusBadge } from '@/components/ui'
+import { Card, CardTitle, StatCard, PageHeader, Badge, Table, Tr, Td, StatusBadge, Modal } from '@/components/ui'
 import { models } from '@/data/mock'
 
 const tooltipStyle = {
@@ -86,7 +87,11 @@ const extraRisks: RiskRow[] = [
 
 const riskRows: RiskRow[] = [...modelRisks, ...extraRisks]
 
+const scoreColor = (n: number) =>
+  n >= 15 ? 'text-rose-600' : n >= 10 ? 'text-orange-600' : n >= 5 ? 'text-amber-600' : 'text-emerald-600'
+
 export default function Risk() {
+  const [sel, setSel] = useState<RiskRow | null>(null)
   const openRisks = riskRows.filter((r) => r.status === 'Open').length
   const mitigated = riskRows.filter((r) => r.status === 'Mitigated').length
   const highRiskModels = models.filter((m) => m.risk === 'High').length
@@ -161,7 +166,7 @@ export default function Risk() {
 
       <Card className="mt-6">
         <CardTitle title="Risk Register" subtitle="Prioritized log of identified risks and mitigations" />
-        <Table columns={['Risk', 'Category', 'Likelihood', 'Impact', 'Score', 'Owner', 'Status', 'Mitigation']}>
+        <Table columns={['Risk', 'Category', 'Likelihood', 'Impact', 'Score', 'Owner', 'Status', 'Mitigation', '']}>
           {riskRows.map((r) => (
             <Tr key={r.risk}>
               <Td className="font-medium text-ink-900">{r.risk}</Td>
@@ -178,10 +183,96 @@ export default function Risk() {
                 <StatusBadge status={r.status} />
               </Td>
               <Td className="text-ink-500">{r.mitigation}</Td>
+              <Td>
+                <button
+                  className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600"
+                  aria-label={`View ${r.risk}`}
+                  onClick={() => setSel(r)}
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              </Td>
             </Tr>
           ))}
         </Table>
       </Card>
+
+      {sel && <RiskModal risk={sel} onClose={() => setSel(null)} />}
     </>
+  )
+}
+
+function RiskModal({ risk: r, onClose }: { risk: RiskRow; onClose: () => void }) {
+  const facts: { label: string; value: string }[] = [
+    { label: 'Category', value: r.category },
+    { label: 'Owner', value: r.owner },
+    { label: 'Likelihood', value: r.likelihood },
+    { label: 'Impact', value: r.impact },
+  ]
+
+  const history: { date: string; event: string }[] = [
+    { date: '2025-06-18', event: 'Identified' },
+    { date: '2025-06-24', event: 'Mitigation started' },
+    r.status === 'Mitigated'
+      ? { date: '2025-07-02', event: 'Controls verified' }
+      : { date: '2025-07-05', event: 'Under active review' },
+  ]
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={r.risk}
+      subtitle={`${r.category} · Owner ${r.owner}`}
+      headerRight={<StatusBadge status={r.status} />}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          <button className="btn-primary">Update risk</button>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex items-center gap-4 rounded-xl border border-slate-200 p-4">
+          <div>
+            <p className="text-xs font-medium text-ink-500">Risk score</p>
+            <p className={`text-3xl font-bold tabular-nums ${scoreColor(r.score)}`}>{r.score}</p>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Badge tone={levelTone[r.likelihood]}>{r.likelihood} likelihood</Badge>
+            <Badge tone={levelTone[r.impact]}>{r.impact} impact</Badge>
+          </div>
+        </div>
+
+        {/* Key facts */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {facts.map((f) => (
+            <div key={f.label} className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-medium text-ink-500">{f.label}</p>
+              <p className="mt-0.5 font-semibold text-ink-900">{f.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Mitigation */}
+        <section>
+          <h4 className="mb-2 text-sm font-semibold text-ink-900">Mitigation</h4>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">{r.mitigation}</div>
+        </section>
+
+        {/* Assessment history */}
+        <section>
+          <h4 className="mb-2 text-sm font-semibold text-ink-900">Assessment history</h4>
+          <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {history.map((h) => (
+              <div key={h.event} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-sm text-ink-700">{h.event}</span>
+                <span className="text-xs text-ink-500">{h.date}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </Modal>
   )
 }

@@ -1,4 +1,5 @@
-import { Activity, Users, ShieldOff, Archive, Search } from 'lucide-react'
+import { useState } from 'react'
+import { Activity, Users, ShieldOff, Archive, Search, Eye } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -18,8 +19,10 @@ import {
   Tr,
   Td,
   Avatar,
+  Modal,
 } from '@/components/ui'
 import { auditLog } from '@/data/mock'
+import type { AuditEntry } from '@/data/mock'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -60,6 +63,7 @@ const deniedCount = auditLog.filter((a) => a.result === 'Denied').length
 const eventsToday = eventsByHour.reduce((s, h) => s + h.events, 0)
 
 export default function AuditLog() {
+  const [sel, setSel] = useState<AuditEntry | null>(null)
   return (
     <>
       <PageHeader
@@ -124,7 +128,7 @@ export default function AuditLog() {
       {/* Table */}
       <Card className="mt-6">
         <CardTitle title="Recent Events" subtitle={`${auditLog.length} entries`} />
-        <Table columns={['Time', 'Actor', 'Action', 'Target', 'IP', 'Result']}>
+        <Table columns={['Time', 'Actor', 'Action', 'Target', 'IP', 'Result', '']}>
           {auditLog.map((e) => {
             const isSystem = systemActors.includes(e.actor)
             return (
@@ -149,11 +153,90 @@ export default function AuditLog() {
                 <Td>
                   <StatusBadge status={e.result} />
                 </Td>
+                <Td>
+                  <button
+                    className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600"
+                    aria-label={`View ${e.action}`}
+                    onClick={() => setSel(e)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                </Td>
               </Tr>
             )
           })}
         </Table>
       </Card>
+
+      {sel && <AuditModal entry={sel} onClose={() => setSel(null)} />}
     </>
+  )
+}
+
+function AuditModal({ entry: e, onClose }: { entry: AuditEntry; onClose: () => void }) {
+  const isSystem = systemActors.includes(e.actor)
+  const facts: { label: string; value: string; mono?: boolean }[] = [
+    { label: 'Actor', value: e.actor },
+    { label: 'Action', value: e.action, mono: true },
+    { label: 'Target', value: e.target },
+    { label: 'IP address', value: e.ip, mono: true },
+    { label: 'Time', value: e.time, mono: true },
+    { label: 'Result', value: e.result },
+  ]
+
+  const raw = {
+    request_id: `req_${e.id}_${e.time.replace(/[^0-9]/g, '').slice(-8)}`,
+    actor: e.actor,
+    action: e.action,
+    target: e.target,
+    ip: e.ip,
+    time: e.time,
+    result: e.result,
+    user_agent: isSystem ? 'plcy-internal/1.0' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) PLCY-Console/4.8.2',
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={<span className="font-mono text-base">{e.action}</span>}
+      subtitle={`${e.actor} · ${e.time}`}
+      headerRight={<StatusBadge status={e.result} />}
+      footer={<button className="btn-secondary" onClick={onClose}>Close</button>}
+    >
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Avatar
+            name={isSystem ? 'SY' : e.actor}
+            className={isSystem ? 'h-12 w-12 bg-slate-100 text-sm text-slate-500' : 'h-12 w-12 text-sm'}
+          />
+          <div>
+            <p className="font-semibold text-ink-900">{e.actor}</p>
+            <p className="text-sm text-ink-500">{e.target}</p>
+          </div>
+          <div className="ml-auto">
+            <StatusBadge status={e.result} />
+          </div>
+        </div>
+
+        {/* Key facts */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {facts.map((f) => (
+            <div key={f.label} className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-medium text-ink-500">{f.label}</p>
+              <p className={`mt-0.5 font-semibold text-ink-900 ${f.mono ? 'font-mono text-sm' : ''}`}>{f.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Raw event */}
+        <section>
+          <h4 className="mb-2 text-sm font-semibold text-ink-900">Raw event</h4>
+          <pre className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-900 p-3 font-mono text-[12px] text-slate-100">
+{JSON.stringify(raw, null, 2)}
+          </pre>
+        </section>
+      </div>
+    </Modal>
   )
 }

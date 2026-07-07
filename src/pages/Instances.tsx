@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Server, HeartPulse, Activity, Gauge, Eye } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -21,8 +22,9 @@ import {
   Td,
   Modal,
 } from '@/components/ui'
-import { instances, policyPacks, fmtNum } from '@/data/mock'
+import { instances, policyPacks, customers, fmtNum } from '@/data/mock'
 import type { Instance } from '@/data/mock'
+import { useCustomerScope } from '@/context/CustomerScope'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -37,23 +39,6 @@ const envTone: Record<Instance['environment'], 'blue' | 'orange' | 'slate'> = {
   Sandbox: 'slate',
 }
 
-const totalInstances = instances.length
-const healthy = instances.filter((i) => i.status === 'Healthy').length
-const liveInstances = instances.filter((i) => i.uptime > 0)
-const avgUptime =
-  liveInstances.reduce((s, i) => s + i.uptime, 0) / (liveInstances.length || 1)
-const totalRps = instances.reduce((s, i) => s + i.rps, 0)
-
-const rpsByInstance = [...instances]
-  .filter((i) => i.rps > 0)
-  .sort((a, b) => b.rps - a.rps)
-  .map((i) => ({ name: i.name.replace(/-prod.*$/, '').replace(/-.*$/, ''), rps: i.rps }))
-
-const statusCounts = (['Healthy', 'Degraded', 'Provisioning', 'Offline'] as const).map((s) => ({
-  status: s,
-  count: instances.filter((i) => i.status === s).length,
-}))
-
 const statusDot: Record<string, string> = {
   Healthy: 'bg-emerald-500',
   Degraded: 'bg-orange-500',
@@ -62,14 +47,34 @@ const statusDot: Record<string, string> = {
 }
 
 export default function Instances() {
+  const { scope, isAll } = useCustomerScope()
+  const [rows, setRows] = useState<Instance[]>(instances)
   const [sel, setSel] = useState<Instance | null>(null)
+  const [provisioning, setProvisioning] = useState(false)
+
+  const scoped = isAll ? rows : rows.filter((i) => i.customer === scope)
+
+  const totalInstances = scoped.length
+  const healthy = scoped.filter((i) => i.status === 'Healthy').length
+  const live = scoped.filter((i) => i.uptime > 0)
+  const avgUptime = live.reduce((s, i) => s + i.uptime, 0) / (live.length || 1)
+  const totalRps = scoped.reduce((s, i) => s + i.rps, 0)
+  const rpsByInstance = [...scoped]
+    .filter((i) => i.rps > 0)
+    .sort((a, b) => b.rps - a.rps)
+    .map((i) => ({ name: i.name.replace(/-prod.*$/, '').replace(/-.*$/, ''), rps: i.rps }))
+  const statusCounts = (['Healthy', 'Degraded', 'Provisioning', 'Offline'] as const).map((s) => ({
+    status: s,
+    count: scoped.filter((i) => i.status === s).length,
+  }))
+
   return (
     <>
       <PageHeader
         title="Instances"
-        description="Deployed PLCY enforcement instances across every customer environment"
+        description={isAll ? 'Deployed PLCY enforcement instances across every customer environment' : `Deployed instances for ${scope}`}
         actions={
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={() => setProvisioning(true)}>
             <Server className="h-4 w-4" />
             Provision instance
           </button>
@@ -78,7 +83,7 @@ export default function Instances() {
 
       {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total instances" value={totalInstances} icon={Server} tone="blue" footer="Across all regions" />
+        <StatCard label="Total instances" value={totalInstances} icon={Server} tone="blue" footer={isAll ? 'Across all regions' : scope} />
         <StatCard label="Healthy" value={healthy} icon={HeartPulse} tone="green" footer={`${totalInstances - healthy} need attention`} />
         <StatCard label="Avg uptime" value={`${avgUptime.toFixed(2)}%`} icon={Gauge} tone="purple" footer="Live instances (30d)" />
         <StatCard label="Total RPS" value={fmtNum(totalRps)} icon={Activity} tone="orange" footer="Requests per second" />
@@ -126,9 +131,9 @@ export default function Instances() {
 
       {/* Table */}
       <Card className="mt-6">
-        <CardTitle title="All Instances" subtitle={`${instances.length} deployments`} />
+        <CardTitle title="All Instances" subtitle={`${scoped.length} deployment${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
         <Table columns={['Name', 'Customer', 'Environment', 'Region', 'Version', 'Status', 'Uptime', 'RPS', 'Policy Packs', '']}>
-          {instances.map((i) => (
+          {scoped.map((i) => (
             <Tr key={i.id}>
               <Td>
                 <button className="text-left" onClick={() => setSel(i)}>
@@ -159,7 +164,106 @@ export default function Instances() {
       </Card>
 
       {sel && <InstanceModal instance={sel} onClose={() => setSel(null)} />}
+
+      <ProvisionModal
+        open={provisioning}
+        onClose={() => setProvisioning(false)}
+        defaultCustomer={isAll ? customers[0].name : scope}
+        onCreate={(inst) => {
+          setRows((prev) => [inst, ...prev])
+          setProvisioning(false)
+          setSel(inst)
+        }}
+      />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Provision instance form                                             */
+/* ------------------------------------------------------------------ */
+const REGIONS = ['us-east-1', 'us-west-2', 'eu-central-1', 'eu-west-1', 'ap-southeast-1']
+
+function ProvisionModal({
+  open,
+  onClose,
+  defaultCustomer,
+  onCreate,
+}: {
+  open: boolean
+  onClose: () => void
+  defaultCustomer: string
+  onCreate: (inst: Instance) => void
+}) {
+  const [customer, setCustomer] = useState(defaultCustomer)
+  const [environment, setEnvironment] = useState<Instance['environment']>('Production')
+  const [region, setRegion] = useState(REGIONS[0])
+  const [packs, setPacks] = useState(4)
+
+  const submit = () => {
+    const slug = customer.toLowerCase().replace(/[^a-z0-9]+/g, '')
+    const env = environment === 'Production' ? 'prod' : environment === 'Staging' ? 'staging' : 'sandbox'
+    onCreate({
+      id: `inst_${slug}_${env}`.slice(0, 24),
+      name: `${slug}-${env}-${region.split('-')[0]}`,
+      customer,
+      environment,
+      region,
+      version: 'v4.9.0-rc1',
+      status: 'Provisioning',
+      uptime: 0,
+      rps: 0,
+      policyPacks: packs,
+    })
+    setCustomer(defaultCustomer)
+    setEnvironment('Production')
+    setRegion(REGIONS[0])
+    setPacks(4)
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Provision instance"
+      subtitle="Deploy a new PLCY enforcement instance"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit}>Provision</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <InstField label="Customer" className="sm:col-span-2">
+          <select className="input" value={customer} onChange={(e) => setCustomer(e.target.value)}>
+            {customers.map((c) => <option key={c.id}>{c.name}</option>)}
+          </select>
+        </InstField>
+        <InstField label="Environment">
+          <select className="input" value={environment} onChange={(e) => setEnvironment(e.target.value as Instance['environment'])}>
+            {(['Production', 'Staging', 'Sandbox'] as Instance['environment'][]).map((e) => <option key={e}>{e}</option>)}
+          </select>
+        </InstField>
+        <InstField label="Region">
+          <select className="input" value={region} onChange={(e) => setRegion(e.target.value)}>
+            {REGIONS.map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </InstField>
+        <InstField label={`Policy packs · ${packs}`} className="sm:col-span-2">
+          <input type="range" min={0} max={8} value={packs} onChange={(e) => setPacks(Number(e.target.value))} className="w-full accent-brand-600" />
+        </InstField>
+      </div>
+    </Modal>
+  )
+}
+
+function InstField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-sm font-medium text-ink-700">{label}</label>
+      {children}
+    </div>
   )
 }
 

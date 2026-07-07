@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Bot, CheckCircle2, AlertTriangle, Activity, ShieldAlert, Eye } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -20,8 +21,9 @@ import {
   Td,
   Modal,
 } from '@/components/ui'
-import { models, policyPacks, fmtCompact, fmtNum } from '@/data/mock'
+import { models, policyPacks, customers, fmtCompact, fmtNum } from '@/data/mock'
 import type { AIModel } from '@/data/mock'
+import { useCustomerScope } from '@/context/CustomerScope'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -44,35 +46,41 @@ const riskTone: Record<AIModel['risk'], 'green' | 'orange' | 'red'> = {
   High: 'red',
 }
 
-const totalModels = models.length
-const activeModels = models.filter((m) => m.status === 'Active').length
-const highRisk = models.filter((m) => m.risk === 'High').length
-const totalRequests = models.reduce((s, m) => s + m.requests, 0)
-const blocked = models.filter((m) => m.status === 'Blocked')
-
 const riskColors: Record<AIModel['risk'], string> = {
   Low: '#10b981',
   Medium: '#f59e0b',
   High: '#ef4444',
 }
-const riskCounts = (['Low', 'Medium', 'High'] as const).map((r) => ({
-  name: `${r} Risk`,
-  value: models.filter((m) => m.risk === r).length,
-  color: riskColors[r],
-}))
 
 const providers = Array.from(new Set(models.map((m) => m.provider)))
 const types = Array.from(new Set(models.map((m) => m.type)))
 
 export default function Models() {
+  const { scope, isAll } = useCustomerScope()
+  const [rows, setRows] = useState<AIModel[]>(models)
   const [sel, setSel] = useState<AIModel | null>(null)
+  const [registering, setRegistering] = useState(false)
+
+  const scoped = isAll ? rows : rows.filter((m) => m.customer === scope)
+
+  const totalModels = scoped.length
+  const activeModels = scoped.filter((m) => m.status === 'Active').length
+  const highRisk = scoped.filter((m) => m.risk === 'High').length
+  const totalRequests = scoped.reduce((s, m) => s + m.requests, 0)
+  const blocked = scoped.filter((m) => m.status === 'Blocked')
+  const riskCounts = (['Low', 'Medium', 'High'] as const).map((r) => ({
+    name: `${r} Risk`,
+    value: scoped.filter((m) => m.risk === r).length,
+    color: riskColors[r],
+  }))
+
   return (
     <>
       <PageHeader
         title="AI Models"
-        description="Every model under PLCY governance across the customer fleet"
+        description={isAll ? 'Every model under PLCY governance across the customer fleet' : `Models under governance for ${scope}`}
         actions={
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={() => setRegistering(true)}>
             <Bot className="h-4 w-4" />
             Register model
           </button>
@@ -81,7 +89,7 @@ export default function Models() {
 
       {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total models" value={totalModels} icon={Bot} tone="blue" footer="Under governance" />
+        <StatCard label="Total models" value={totalModels} icon={Bot} tone="blue" footer={isAll ? 'Under governance' : scope} />
         <StatCard label="Active" value={activeModels} icon={CheckCircle2} tone="green" footer={`${totalModels - activeModels} not serving`} />
         <StatCard label="High risk" value={highRisk} icon={AlertTriangle} tone="red" footer="Require review" />
         <StatCard label="Total requests" value={fmtCompact(totalRequests)} icon={Activity} tone="purple" footer="Lifetime volume" />
@@ -126,7 +134,7 @@ export default function Models() {
             </select>
           </div>
           <Table columns={['Model', 'Provider', 'Type', 'Customer', 'Risk', 'Status', 'Requests', '']}>
-            {models.map((m) => (
+            {scoped.map((m) => (
               <Tr key={m.id}>
                 <Td>
                   <button className="text-left" onClick={() => setSel(m)}>
@@ -180,7 +188,103 @@ export default function Models() {
       </div>
 
       {sel && <ModelModal model={sel} onClose={() => setSel(null)} />}
+
+      <RegisterModelModal
+        open={registering}
+        onClose={() => setRegistering(false)}
+        defaultCustomer={isAll ? customers[0].name : scope}
+        onCreate={(m) => {
+          setRows((prev) => [m, ...prev])
+          setRegistering(false)
+          setSel(m)
+        }}
+      />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Register model form                                                 */
+/* ------------------------------------------------------------------ */
+function RegisterModelModal({
+  open,
+  onClose,
+  defaultCustomer,
+  onCreate,
+}: {
+  open: boolean
+  onClose: () => void
+  defaultCustomer: string
+  onCreate: (m: AIModel) => void
+}) {
+  const [name, setName] = useState('')
+  const [provider, setProvider] = useState('OpenAI')
+  const [type, setType] = useState<AIModel['type']>('LLM')
+  const [customer, setCustomer] = useState(defaultCustomer)
+  const [risk, setRisk] = useState<AIModel['risk']>('Low')
+
+  const submit = () => {
+    if (!name.trim()) return
+    onCreate({
+      id: `mdl_${Date.now().toString(36)}`,
+      name: name.trim(),
+      provider: provider.trim() || 'Unknown',
+      type,
+      customer,
+      status: 'Review',
+      risk,
+      requests: 0,
+      version: '1.0',
+    })
+    setName(''); setProvider('OpenAI'); setType('LLM'); setCustomer(defaultCustomer); setRisk('Low')
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Register model"
+      subtitle="Add a model to PLCY governance (starts in review)"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={!name.trim()}>Register</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <ModelField label="Model name" className="sm:col-span-2">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. GPT-4o mini" />
+        </ModelField>
+        <ModelField label="Provider">
+          <input className="input" value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="OpenAI, Anthropic, In-house…" />
+        </ModelField>
+        <ModelField label="Type">
+          <select className="input" value={type} onChange={(e) => setType(e.target.value as AIModel['type'])}>
+            {(['LLM', 'Vision', 'Embedding', 'Classifier', 'Speech'] as AIModel['type'][]).map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </ModelField>
+        <ModelField label="Customer">
+          <select className="input" value={customer} onChange={(e) => setCustomer(e.target.value)}>
+            {customers.map((c) => <option key={c.id}>{c.name}</option>)}
+          </select>
+        </ModelField>
+        <ModelField label="Initial risk tier">
+          <select className="input" value={risk} onChange={(e) => setRisk(e.target.value as AIModel['risk'])}>
+            {(['Low', 'Medium', 'High'] as AIModel['risk'][]).map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </ModelField>
+      </div>
+    </Modal>
+  )
+}
+
+function ModelField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-sm font-medium text-ink-700">{label}</label>
+      {children}
+    </div>
   )
 }
 
