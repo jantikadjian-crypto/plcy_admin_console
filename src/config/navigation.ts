@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  LayoutGrid,
   Users,
   Server,
   Bot,
@@ -47,7 +48,10 @@ export interface NavGroup {
 export const navGroups: NavGroup[] = [
   {
     title: 'Overview',
-    items: [{ label: 'Dashboard', to: '/', icon: LayoutDashboard }],
+    items: [
+      { label: 'Dashboard', to: '/', icon: LayoutDashboard },
+      { label: 'Fleet Overview', to: '/fleet', icon: LayoutGrid },
+    ],
   },
   {
     title: 'Customers',

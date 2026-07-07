@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
+import FleetOverview from './pages/FleetOverview'
 import Customers from './pages/Customers'
 import Instances from './pages/Instances'
 import Releases from './pages/Releases'
@@ -37,6 +38,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/fleet" element={<FleetOverview />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/instances" element={<Instances />} />
         <Route path="/releases" element={<Releases />} />
