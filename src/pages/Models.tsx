@@ -1,4 +1,5 @@
-import { Bot, CheckCircle2, AlertTriangle, Activity, ShieldAlert } from 'lucide-react'
+import { useState } from 'react'
+import { Bot, CheckCircle2, AlertTriangle, Activity, ShieldAlert, Eye } from 'lucide-react'
 import {
   ResponsiveContainer,
   PieChart,
@@ -17,8 +18,9 @@ import {
   Table,
   Tr,
   Td,
+  Modal,
 } from '@/components/ui'
-import { models, fmtCompact } from '@/data/mock'
+import { models, policyPacks, fmtCompact, fmtNum } from '@/data/mock'
 import type { AIModel } from '@/data/mock'
 
 const tooltipStyle = {
@@ -63,6 +65,7 @@ const providers = Array.from(new Set(models.map((m) => m.provider)))
 const types = Array.from(new Set(models.map((m) => m.type)))
 
 export default function Models() {
+  const [sel, setSel] = useState<AIModel | null>(null)
   return (
     <>
       <PageHeader
@@ -122,12 +125,14 @@ export default function Models() {
               ))}
             </select>
           </div>
-          <Table columns={['Model', 'Provider', 'Type', 'Customer', 'Risk', 'Status', 'Requests']}>
+          <Table columns={['Model', 'Provider', 'Type', 'Customer', 'Risk', 'Status', 'Requests', '']}>
             {models.map((m) => (
               <Tr key={m.id}>
                 <Td>
-                  <p className="font-semibold text-ink-900">{m.name}</p>
-                  <p className="text-xs text-ink-400">v{m.version}</p>
+                  <button className="text-left" onClick={() => setSel(m)}>
+                    <p className="font-semibold text-ink-900 hover:text-brand-600">{m.name}</p>
+                    <p className="text-xs text-ink-400">v{m.version}</p>
+                  </button>
                 </Td>
                 <Td>{m.provider}</Td>
                 <Td>
@@ -143,6 +148,11 @@ export default function Models() {
                   <StatusBadge status={m.status} />
                 </Td>
                 <Td className="font-medium text-ink-900">{fmtCompact(m.requests)}</Td>
+                <Td>
+                  <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label={`View ${m.name}`} onClick={() => setSel(m)}>
+                    <Eye className="h-4 w-4" />
+                  </button>
+                </Td>
               </Tr>
             ))}
           </Table>
@@ -168,6 +178,93 @@ export default function Models() {
           </p>
         </Card>
       </div>
+
+      {sel && <ModelModal model={sel} onClose={() => setSel(null)} />}
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Model detail drawer                                                 */
+/* ------------------------------------------------------------------ */
+function ModelModal({ model: m, onClose }: { model: AIModel; onClose: () => void }) {
+  const isBlocked = m.status === 'Blocked'
+  const guardrails = isBlocked ? [] : policyPacks.filter((p) => p.status === 'Published').slice(0, m.risk === 'High' ? 5 : m.risk === 'Medium' ? 3 : 2)
+
+  const facts: { label: string; value: string }[] = [
+    { label: 'Provider', value: m.provider },
+    { label: 'Type', value: m.type },
+    { label: 'Version', value: m.version },
+    { label: 'Requests (lifetime)', value: fmtNum(m.requests) },
+    { label: 'Customer', value: m.customer },
+    { label: 'Risk tier', value: m.risk },
+  ]
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={m.name}
+      subtitle={`${m.provider} · governed for ${m.customer}`}
+      headerRight={<StatusBadge status={m.status} />}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          {isBlocked ? (
+            <button className="btn-primary">Review request</button>
+          ) : (
+            <button className="btn-primary">Run evaluation</button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={typeTone[m.type]}>{m.type}</Badge>
+          <Badge tone={riskTone[m.risk]} dot>{m.risk} risk</Badge>
+          <Badge tone="purple">{m.customer}</Badge>
+        </div>
+
+        {isBlocked && (
+          <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+            <p className="text-sm text-rose-800">
+              This is an <strong>unapproved (shadow AI)</strong> model. It is denied at the gateway and cannot serve traffic until reviewed and registered.
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {facts.map((f) => (
+            <div key={f.label} className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-medium text-ink-500">{f.label}</p>
+              <p className="mt-0.5 font-semibold text-ink-900">{f.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-ink-400" />
+            <h4 className="text-sm font-semibold text-ink-900">Applied guardrails ({guardrails.length})</h4>
+          </div>
+          {guardrails.length === 0 ? (
+            <p className="text-sm text-ink-400">No guardrails applied — model is blocked at the gateway.</p>
+          ) : (
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              {guardrails.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-ink-900">{p.name}</p>
+                    <p className="text-xs text-ink-500">{p.category} · {p.rules} rules</p>
+                  </div>
+                  <Badge tone="green" dot>Enforced</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </Modal>
   )
 }

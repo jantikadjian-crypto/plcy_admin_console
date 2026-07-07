@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck, Server, Bot } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -25,7 +26,7 @@ import {
   Modal,
   EmptyState,
 } from '@/components/ui'
-import { customers, instances, models, totals, fmtMoney, fmtCompact } from '@/data/mock'
+import { customers, instances, models, fmtMoney, fmtCompact } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 
 const tooltipStyle = {
@@ -57,23 +58,31 @@ function complianceTone(score: number): 'green' | 'blue' | 'orange' | 'red' {
 }
 
 const planOrder: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
-const mrrByPlan = planOrder.map((plan) => ({
-  plan,
-  mrr: customers.filter((c) => c.plan === plan).reduce((s, c) => s + c.mrr, 0),
-  count: customers.filter((c) => c.plan === plan).length,
-}))
 
 export default function Customers() {
+  const [rows, setRows] = useState<Customer[]>(customers)
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
   const [selected, setSelected] = useState<Customer | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const q = query.trim().toLowerCase()
-  const filtered = customers.filter((c) => {
+  const filtered = rows.filter((c) => {
     const matchesQuery = !q || [c.name, c.domain, c.csm, c.region].some((f) => f.toLowerCase().includes(q))
     const matchesPlan = plan === 'All' || c.plan === plan
     return matchesQuery && matchesPlan
   })
+
+  // Live aggregates derived from current rows.
+  const totalCust = rows.length
+  const activeCust = rows.filter((c) => c.status === 'Active').length
+  const mrrSum = rows.reduce((s, c) => s + c.mrr, 0)
+  const avgComp = Math.round(rows.reduce((s, c) => s + c.complianceScore, 0) / (rows.length || 1))
+  const mrrByPlan = planOrder.map((p) => ({
+    plan: p,
+    mrr: rows.filter((c) => c.plan === p).reduce((s, c) => s + c.mrr, 0),
+    count: rows.filter((c) => c.plan === p).length,
+  }))
 
   return (
     <>
@@ -81,7 +90,7 @@ export default function Customers() {
         title="Customers"
         description="Manage every organization governed by the PLCY platform"
         actions={
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
             Add customer
           </button>
@@ -90,10 +99,10 @@ export default function Customers() {
 
       {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total customers" value={totals.customers} icon={Users} tone="blue" footer="Across all plans" />
-        <StatCard label="Active" value={totals.activeCustomers} icon={UserCheck} tone="green" footer={`${totals.customers - totals.activeCustomers} inactive`} />
-        <StatCard label="Platform MRR" value={fmtMoney(totals.mrr)} icon={DollarSign} tone="purple" footer="Recurring monthly" />
-        <StatCard label="Avg compliance" value={`${totals.avgCompliance}%`} icon={ShieldCheck} tone="orange" footer="Fleet-wide score" />
+        <StatCard label="Total customers" value={totalCust} icon={Users} tone="blue" footer="Across all plans" />
+        <StatCard label="Active" value={activeCust} icon={UserCheck} tone="green" footer={`${totalCust - activeCust} inactive`} />
+        <StatCard label="Platform MRR" value={fmtMoney(mrrSum)} icon={DollarSign} tone="purple" footer="Recurring monthly" />
+        <StatCard label="Avg compliance" value={`${avgComp}%`} icon={ShieldCheck} tone="orange" footer="Fleet-wide score" />
       </div>
 
       {/* Search / filter bar */}
@@ -141,7 +150,7 @@ export default function Customers() {
       <Card className="mt-6">
         <CardTitle
           title="All Customers"
-          subtitle={`${filtered.length} of ${customers.length} organizations`}
+          subtitle={`${filtered.length} of ${rows.length} organizations`}
         />
         {filtered.length === 0 ? (
           <EmptyState icon={Search} title="No customers match" description="Try a different search term or plan filter." />
@@ -184,7 +193,122 @@ export default function Customers() {
       </Card>
 
       {selected && <CustomerModal customer={selected} onClose={() => setSelected(null)} />}
+
+      <AddCustomerModal
+        open={adding}
+        onClose={() => setAdding(false)}
+        onCreate={(c) => {
+          setRows((prev) => [c, ...prev])
+          setAdding(false)
+          setQuery('')
+          setPlan('All')
+          setSelected(c)
+        }}
+      />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Add customer form                                                   */
+/* ------------------------------------------------------------------ */
+const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
+const REGIONS = ['US-East', 'US-West', 'EU-Central', 'EU-West', 'APAC']
+
+function AddCustomerModal({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (c: Customer) => void }) {
+  const [name, setName] = useState('')
+  const [domain, setDomain] = useState('')
+  const [customerPlan, setCustomerPlan] = useState<Customer['plan']>('Business')
+  const [status, setStatus] = useState<Customer['status']>('Active')
+  const [seats, setSeats] = useState(25)
+  const [mrr, setMrr] = useState(5000)
+  const [region, setRegion] = useState(REGIONS[0])
+  const [csm, setCsm] = useState(CSMS[0])
+
+  const reset = () => {
+    setName(''); setDomain(''); setCustomerPlan('Business'); setStatus('Active')
+    setSeats(25); setMrr(5000); setRegion(REGIONS[0]); setCsm(CSMS[0])
+  }
+
+  const submit = () => {
+    if (!name.trim()) return
+    const now = new Date()
+    const since = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    onCreate({
+      id: `cus_${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 20)}`,
+      name: name.trim(),
+      domain: domain.trim() || `${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')}.com`,
+      plan: customerPlan,
+      status,
+      seats,
+      instances: 0,
+      models: 0,
+      mrr: status === 'Trial' ? 0 : mrr,
+      complianceScore: 70,
+      region,
+      csm,
+      since,
+    })
+    reset()
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add customer"
+      subtitle="Onboard a new organization to the PLCY platform"
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={!name.trim()}>Create customer</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CustField label="Organization name" className="sm:col-span-2">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Aurora Systems" />
+        </CustField>
+        <CustField label="Domain">
+          <input className="input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="aurora.com" />
+        </CustField>
+        <CustField label="Plan">
+          <select className="input" value={customerPlan} onChange={(e) => setCustomerPlan(e.target.value as Customer['plan'])}>
+            {planOrder.map((p) => <option key={p}>{p}</option>)}
+          </select>
+        </CustField>
+        <CustField label="Status">
+          <select className="input" value={status} onChange={(e) => setStatus(e.target.value as Customer['status'])}>
+            {(['Active', 'Trial', 'Suspended', 'Churned'] as Customer['status'][]).map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </CustField>
+        <CustField label="Seats">
+          <input type="number" min={1} className="input" value={seats} onChange={(e) => setSeats(Number(e.target.value))} />
+        </CustField>
+        <CustField label="MRR (USD)">
+          <input type="number" min={0} step={500} className="input" value={mrr} onChange={(e) => setMrr(Number(e.target.value))} disabled={status === 'Trial'} />
+        </CustField>
+        <CustField label="Region">
+          <select className="input" value={region} onChange={(e) => setRegion(e.target.value)}>
+            {REGIONS.map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </CustField>
+        <CustField label="Assigned CSM" className="sm:col-span-2">
+          <select className="input" value={csm} onChange={(e) => setCsm(e.target.value)}>
+            {CSMS.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </CustField>
+      </div>
+    </Modal>
+  )
+}
+
+function CustField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-sm font-medium text-ink-700">{label}</label>
+      {children}
+    </div>
   )
 }
 

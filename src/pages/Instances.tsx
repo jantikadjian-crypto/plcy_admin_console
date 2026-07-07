@@ -1,4 +1,5 @@
-import { Server, HeartPulse, Activity, Gauge } from 'lucide-react'
+import { useState } from 'react'
+import { Server, HeartPulse, Activity, Gauge, Eye } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -18,8 +19,9 @@ import {
   Table,
   Tr,
   Td,
+  Modal,
 } from '@/components/ui'
-import { instances, fmtNum } from '@/data/mock'
+import { instances, policyPacks, fmtNum } from '@/data/mock'
 import type { Instance } from '@/data/mock'
 
 const tooltipStyle = {
@@ -60,6 +62,7 @@ const statusDot: Record<string, string> = {
 }
 
 export default function Instances() {
+  const [sel, setSel] = useState<Instance | null>(null)
   return (
     <>
       <PageHeader
@@ -124,12 +127,14 @@ export default function Instances() {
       {/* Table */}
       <Card className="mt-6">
         <CardTitle title="All Instances" subtitle={`${instances.length} deployments`} />
-        <Table columns={['Name', 'Customer', 'Environment', 'Region', 'Version', 'Status', 'Uptime', 'RPS', 'Policy Packs']}>
+        <Table columns={['Name', 'Customer', 'Environment', 'Region', 'Version', 'Status', 'Uptime', 'RPS', 'Policy Packs', '']}>
           {instances.map((i) => (
             <Tr key={i.id}>
               <Td>
-                <p className="font-mono text-sm font-medium text-ink-900">{i.name}</p>
-                <p className="font-mono text-xs text-ink-400">{i.id}</p>
+                <button className="text-left" onClick={() => setSel(i)}>
+                  <p className="font-mono text-sm font-medium text-ink-900 hover:text-brand-600">{i.name}</p>
+                  <p className="font-mono text-xs text-ink-400">{i.id}</p>
+                </button>
               </Td>
               <Td>{i.customer}</Td>
               <Td>
@@ -143,10 +148,88 @@ export default function Instances() {
               <Td>{i.uptime > 0 ? `${i.uptime.toFixed(2)}%` : '—'}</Td>
               <Td>{i.rps > 0 ? fmtNum(i.rps) : '—'}</Td>
               <Td>{i.policyPacks}</Td>
+              <Td>
+                <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label={`View ${i.name}`} onClick={() => setSel(i)}>
+                  <Eye className="h-4 w-4" />
+                </button>
+              </Td>
             </Tr>
           ))}
         </Table>
       </Card>
+
+      {sel && <InstanceModal instance={sel} onClose={() => setSel(null)} />}
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Instance detail drawer                                              */
+/* ------------------------------------------------------------------ */
+function InstanceModal({ instance: i, onClose }: { instance: Instance; onClose: () => void }) {
+  // Derived, deterministic metrics for display.
+  const p95 = i.rps > 0 ? Math.round(40 + i.rps / 30) : 0
+  const errorRate = i.status === 'Healthy' ? '0.02%' : i.status === 'Degraded' ? '1.4%' : '—'
+  const appliedPacks = policyPacks.filter((p) => p.status === 'Published').slice(0, i.policyPacks)
+
+  const metrics: { label: string; value: string }[] = [
+    { label: 'Uptime (30d)', value: i.uptime > 0 ? `${i.uptime.toFixed(2)}%` : '—' },
+    { label: 'Throughput', value: i.rps > 0 ? `${fmtNum(i.rps)} rps` : '—' },
+    { label: 'p95 latency', value: p95 > 0 ? `${p95} ms` : '—' },
+    { label: 'Error rate', value: errorRate },
+    { label: 'Region', value: i.region },
+    { label: 'Version', value: i.version },
+  ]
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={<span className="font-mono">{i.name}</span>}
+      subtitle={`${i.customer} · ${i.id}`}
+      headerRight={<StatusBadge status={i.status} />}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          <button className="btn-primary">Open console</button>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex flex-wrap gap-2">
+          <Badge tone={envTone[i.environment]}>{i.environment}</Badge>
+          <Badge tone="slate">{i.region}</Badge>
+          <Badge tone="blue">{i.version}</Badge>
+          <Badge tone="purple">{i.customer}</Badge>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {metrics.map((m) => (
+            <div key={m.label} className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-medium text-ink-500">{m.label}</p>
+              <p className="mt-0.5 font-semibold text-ink-900">{m.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <Server className="h-4 w-4 text-ink-400" />
+            <h4 className="text-sm font-semibold text-ink-900">Enforced policy packs ({i.policyPacks})</h4>
+          </div>
+          <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            {appliedPacks.map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-ink-900">{p.name}</p>
+                  <p className="text-xs text-ink-500">{p.category} · {p.version}</p>
+                </div>
+                <Badge tone="green" dot>Active</Badge>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </Modal>
   )
 }
