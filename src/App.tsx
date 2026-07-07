@@ -9,6 +9,7 @@ import Bundles from './pages/Bundles'
 import Clusters from './pages/Clusters'
 import Licensing from './pages/Licensing'
 import Regions from './pages/Regions'
+import Routing from './pages/Routing'
 import Transfers from './pages/Transfers'
 import Subprocessors from './pages/Subprocessors'
 import DSAR from './pages/DSAR'
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/clusters" element={<Clusters />} />
         <Route path="/licensing" element={<Licensing />} />
         <Route path="/regions" element={<Regions />} />
+        <Route path="/routing" element={<Routing />} />
         <Route path="/transfers" element={<Transfers />} />
         <Route path="/subprocessors" element={<Subprocessors />} />
         <Route path="/dsar" element={<DSAR />} />

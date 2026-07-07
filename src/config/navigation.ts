@@ -31,6 +31,7 @@ import {
   ServerCog,
   DatabaseBackup,
   PackageCheck,
+  Route,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -77,6 +78,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Regions', to: '/regions', icon: Globe },
       { label: 'Data Transfers', to: '/transfers', icon: ArrowLeftRight },
       { label: 'Sub-processors', to: '/subprocessors', icon: Network },
+      { label: 'Model Routing', to: '/routing', icon: Route },
       { label: 'Data Requests', to: '/dsar', icon: Inbox },
     ],
   },
