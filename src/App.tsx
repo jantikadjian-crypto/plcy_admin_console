@@ -8,6 +8,10 @@ import Bundles from './pages/Bundles'
 import Clusters from './pages/Clusters'
 import Licensing from './pages/Licensing'
 import Regions from './pages/Regions'
+import Transfers from './pages/Transfers'
+import Subprocessors from './pages/Subprocessors'
+import DSAR from './pages/DSAR'
+import PrivilegedAccess from './pages/PrivilegedAccess'
 import Models from './pages/Models'
 import ModelRegistry from './pages/ModelRegistry'
 import DataClassification from './pages/DataClassification'
@@ -37,6 +41,10 @@ export default function App() {
         <Route path="/clusters" element={<Clusters />} />
         <Route path="/licensing" element={<Licensing />} />
         <Route path="/regions" element={<Regions />} />
+        <Route path="/transfers" element={<Transfers />} />
+        <Route path="/subprocessors" element={<Subprocessors />} />
+        <Route path="/dsar" element={<DSAR />} />
+        <Route path="/privileged-access" element={<PrivilegedAccess />} />
         <Route path="/models" element={<Models />} />
         <Route path="/model-registry" element={<ModelRegistry />} />
         <Route path="/data-classification" element={<DataClassification />} />

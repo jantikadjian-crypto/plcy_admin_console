@@ -23,6 +23,10 @@ import {
   Cpu,
   BadgeCheck,
   Globe,
+  ArrowLeftRight,
+  Network,
+  Inbox,
+  Fingerprint,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -60,7 +64,12 @@ export const navGroups: NavGroup[] = [
   },
   {
     title: 'Sovereignty',
-    items: [{ label: 'Regions', to: '/regions', icon: Globe }],
+    items: [
+      { label: 'Regions', to: '/regions', icon: Globe },
+      { label: 'Data Transfers', to: '/transfers', icon: ArrowLeftRight },
+      { label: 'Sub-processors', to: '/subprocessors', icon: Network },
+      { label: 'Data Requests', to: '/dsar', icon: Inbox },
+    ],
   },
   {
     title: 'Governance',
@@ -92,6 +101,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Audit Log', to: '/audit-log', icon: ScrollText },
       { label: 'Admin Security', to: '/admin-security', icon: Lock },
+      { label: 'Privileged Access', to: '/privileged-access', icon: Fingerprint },
       { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
       { label: 'Super Admin', to: '/super-admin', icon: Crown },
       { label: 'Settings', to: '/settings', icon: Settings },
