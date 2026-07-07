@@ -27,6 +27,9 @@ import {
   Network,
   Inbox,
   Fingerprint,
+  ServerCog,
+  DatabaseBackup,
+  PackageCheck,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -56,9 +59,11 @@ export const navGroups: NavGroup[] = [
   {
     title: 'Fleet',
     items: [
+      { label: 'Provisioning', to: '/provisioning', icon: ServerCog },
       { label: 'Releases', to: '/releases', icon: Rocket },
       { label: 'Update Bundles', to: '/bundles', icon: Boxes },
       { label: 'Cluster Health', to: '/clusters', icon: Cpu },
+      { label: 'Backups & DR', to: '/backups', icon: DatabaseBackup },
       { label: 'Licensing', to: '/licensing', icon: BadgeCheck },
     ],
   },
@@ -102,6 +107,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Audit Log', to: '/audit-log', icon: ScrollText },
       { label: 'Admin Security', to: '/admin-security', icon: Lock },
       { label: 'Privileged Access', to: '/privileged-access', icon: Fingerprint },
+      { label: 'Supply Chain', to: '/supply-chain', icon: PackageCheck },
       { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
       { label: 'Super Admin', to: '/super-admin', icon: Crown },
       { label: 'Settings', to: '/settings', icon: Settings },

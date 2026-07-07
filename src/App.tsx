@@ -12,6 +12,9 @@ import Transfers from './pages/Transfers'
 import Subprocessors from './pages/Subprocessors'
 import DSAR from './pages/DSAR'
 import PrivilegedAccess from './pages/PrivilegedAccess'
+import Provisioning from './pages/Provisioning'
+import Backups from './pages/Backups'
+import SupplyChain from './pages/SupplyChain'
 import Models from './pages/Models'
 import ModelRegistry from './pages/ModelRegistry'
 import DataClassification from './pages/DataClassification'
@@ -45,6 +48,9 @@ export default function App() {
         <Route path="/subprocessors" element={<Subprocessors />} />
         <Route path="/dsar" element={<DSAR />} />
         <Route path="/privileged-access" element={<PrivilegedAccess />} />
+        <Route path="/provisioning" element={<Provisioning />} />
+        <Route path="/backups" element={<Backups />} />
+        <Route path="/supply-chain" element={<SupplyChain />} />
         <Route path="/models" element={<Models />} />
         <Route path="/model-registry" element={<ModelRegistry />} />
         <Route path="/data-classification" element={<DataClassification />} />
