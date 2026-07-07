@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
   Settings as SettingsIcon,
@@ -7,19 +7,17 @@ import {
   CreditCard,
   Plug,
   Shield,
-  ShieldCheck,
   Save,
   Check,
-  Crown,
-  UserCog,
-  FlaskConical,
-  Eye,
   KeyRound,
   CheckCircle2,
   XCircle,
+  Plus,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
+import { roleDefs, roleIconTone, assignedCount, BASE_CAPS } from '@/data/roles'
+import type { RoleTone } from '@/data/roles'
 
 type TabKey =
   | 'General'
@@ -41,105 +39,91 @@ const tabs: { key: TabKey; icon: LucideIcon }[] = [
 ]
 
 /* ------------------------------------------------------------------ */
-/* Role-based access control                                           */
+/* Role-based access control (editable)                                */
 /* ------------------------------------------------------------------ */
-type Tone = 'purple' | 'blue' | 'green' | 'orange' | 'slate'
-
-interface Cap {
+interface EditCap {
   label: string
   granted: boolean
 }
 
-interface Role {
+interface EditRole {
+  id: string
   name: string
   desc: string
   icon: LucideIcon
-  tone: Tone
-  caps: Cap[]
+  tone: RoleTone
+  assigned: number
+  caps: EditCap[]
 }
 
-// The seven baseline capabilities are shown for every role (granted or not);
-// role-specific capabilities are appended and always granted.
-const base = (flags: boolean[]): Cap[] =>
-  ['User Enrollment', 'Define Admin Accounts', 'Full Read/Write', 'Policy Management', 'Model Deployment', 'Access All Clients', 'Modify Settings'].map(
-    (label, i) => ({ label, granted: flags[i] }),
-  )
+// Seed editable role state from the shared role definitions.
+const buildRoles = (): EditRole[] =>
+  roleDefs.map((r) => ({
+    id: r.id,
+    name: r.name,
+    desc: r.desc,
+    icon: r.icon,
+    tone: r.tone,
+    assigned: assignedCount(r.id),
+    caps: [
+      ...BASE_CAPS.map((label, i) => ({ label, granted: r.baseFlags[i] })),
+      ...r.extra.map((label) => ({ label, granted: true })),
+    ],
+  }))
 
-const extra = (labels: string[]): Cap[] => labels.map((label) => ({ label, granted: true }))
-
-const roles: Role[] = [
-  {
-    name: 'Superuser',
-    desc: 'Complete system control and multi-tenant administration',
-    icon: Crown,
-    tone: 'purple',
-    caps: base([true, true, true, true, true, true, true]),
-  },
-  {
-    name: 'Platform Admin',
-    desc: 'Initial onboarding and infrastructure updates',
-    icon: UserCog,
-    tone: 'blue',
-    caps: base([true, false, true, true, true, false, true]),
-  },
-  {
-    name: 'Compliance Officer',
-    desc: 'Regulatory reporting and drift monitoring',
-    icon: ShieldCheck,
-    tone: 'green',
-    caps: [...base([false, false, false, false, false, false, false]), ...extra(['Audit Logs', 'Policy Review', 'Factsheets'])],
-  },
-  {
-    name: 'Model Validator',
-    desc: 'Verifying model safety before client rollout',
-    icon: FlaskConical,
-    tone: 'orange',
-    caps: [...base([false, false, false, false, false, false, false]), ...extra(['Sandbox Access', 'Testing', 'Bias Evaluation'])],
-  },
-  {
-    name: 'Read Only',
-    desc: 'View-only access to dashboards, reports, and audit trails',
-    icon: Eye,
-    tone: 'slate',
-    caps: [...base([false, false, false, false, false, false, false]), ...extra(['View Dashboards', 'View Reports'])],
-  },
-]
-
-const roleTone: Record<Tone, string> = {
-  purple: 'bg-violet-50 text-violet-600',
-  blue: 'bg-blue-50 text-blue-600',
-  green: 'bg-emerald-50 text-emerald-600',
-  orange: 'bg-orange-50 text-orange-600',
-  slate: 'bg-slate-100 text-slate-500',
-}
-
-function RoleCard({ role }: { role: Role }) {
+function RoleCard({
+  role,
+  onToggle,
+  onRename,
+  onRenameCommit,
+}: {
+  role: EditRole
+  onToggle: (roleId: string, label: string) => void
+  onRename: (roleId: string, name: string) => void
+  onRenameCommit: (roleId: string) => void
+}) {
   const Icon = role.icon
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${roleTone[role.tone]}`}>
+        <div className="flex min-w-0 items-start gap-3">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${roleIconTone[role.tone]}`}>
             <Icon className="h-5 w-5" />
           </div>
-          <div>
-            <p className="font-semibold text-ink-900">{role.name}</p>
-            <p className="text-sm text-ink-500">{role.desc}</p>
+          <div className="min-w-0">
+            <input
+              value={role.name}
+              onChange={(e) => onRename(role.id, e.target.value)}
+              onBlur={() => onRenameCommit(role.id)}
+              aria-label="Role name"
+              className="-mx-1 w-full max-w-xs rounded-md bg-transparent px-1 text-[15px] font-semibold text-ink-900 hover:bg-slate-100 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/25"
+            />
+            <p className="mt-0.5 text-sm text-ink-500">{role.desc}</p>
           </div>
         </div>
-        <Badge tone={role.tone}>{role.name}</Badge>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="hidden text-xs font-medium text-ink-500 sm:inline">
+            {role.assigned} {role.assigned === 1 ? 'user' : 'users'}
+          </span>
+          <Badge tone={role.tone}>{role.name || 'Untitled'}</Badge>
+        </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
         {role.caps.map((c) => (
-          <div key={c.label} className="flex items-center gap-2">
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => onToggle(role.id, c.label)}
+            className="-mx-1 flex items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-slate-50"
+          >
             {c.granted ? (
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
             ) : (
               <XCircle className="h-4 w-4 shrink-0 text-slate-300" />
             )}
             <span className={`text-sm ${c.granted ? 'text-ink-700' : 'text-slate-400'}`}>{c.label}</span>
-          </div>
+          </button>
         ))}
       </div>
     </Card>
@@ -199,6 +183,55 @@ export default function Settings() {
   })
 
   const flip = (k: string) => setToggles((p) => ({ ...p, [k]: !p[k] }))
+
+  // Editable RBAC state + change log
+  const [rbacRoles, setRbacRoles] = useState<EditRole[]>(buildRoles)
+  const [audit, setAudit] = useState<{ id: number; actor: string; text: string; time: string }[]>([])
+  const auditId = useRef(0)
+
+  const logChange = (text: string) => {
+    auditId.current += 1
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    setAudit((prev) => [{ id: auditId.current, actor: 'jack@plcy.app', text, time }, ...prev].slice(0, 8))
+  }
+
+  const toggleCap = (roleId: string, label: string) => {
+    const role = rbacRoles.find((r) => r.id === roleId)
+    const nowGranted = !role?.caps.find((c) => c.label === label)?.granted
+    setRbacRoles((prev) =>
+      prev.map((r) =>
+        r.id === roleId
+          ? { ...r, caps: r.caps.map((c) => (c.label === label ? { ...c, granted: !c.granted } : c)) }
+          : r,
+      ),
+    )
+    if (role) logChange(`${nowGranted ? 'Granted' : 'Revoked'} “${label}” ${nowGranted ? 'to' : 'from'} ${role.name}`)
+  }
+
+  const renameRole = (roleId: string, name: string) =>
+    setRbacRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, name } : r)))
+
+  const commitRename = (roleId: string) => {
+    const role = rbacRoles.find((r) => r.id === roleId)
+    if (role) logChange(`Renamed a role to “${role.name || 'Untitled'}”`)
+  }
+
+  const addRole = () => {
+    const n = rbacRoles.filter((r) => r.id.startsWith('custom-')).length + 1
+    setRbacRoles((prev) => [
+      ...prev,
+      {
+        id: `custom-${n}`,
+        name: 'New Role',
+        desc: 'Describe this role’s responsibilities',
+        icon: KeyRound,
+        tone: 'slate',
+        assigned: 0,
+        caps: BASE_CAPS.map((label) => ({ label, granted: false })),
+      },
+    ])
+    logChange('Created a new role')
+  }
 
   return (
     <>
@@ -393,15 +426,51 @@ export default function Settings() {
 
           {active === 'Roles & Permissions' && (
             <div>
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold text-ink-900">Role-Based Access Control</h3>
-                <p className="mt-0.5 text-sm text-ink-500">Access is strictly segmented by role profile</p>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-ink-900">Role-Based Access Control</h3>
+                  <p className="mt-0.5 text-sm text-ink-500">
+                    Access is strictly segmented by role profile · click any capability to toggle it
+                  </p>
+                </div>
+                <button className="btn-secondary shrink-0" onClick={addRole}>
+                  <Plus className="h-4 w-4" />
+                  Add role
+                </button>
               </div>
+
               <div className="grid grid-cols-1 gap-4">
-                {roles.map((role) => (
-                  <RoleCard key={role.name} role={role} />
+                {rbacRoles.map((role) => (
+                  <RoleCard
+                    key={role.id}
+                    role={role}
+                    onToggle={toggleCap}
+                    onRename={renameRole}
+                    onRenameCommit={commitRename}
+                  />
                 ))}
               </div>
+
+              <Card className="mt-6">
+                <CardTitle title="Permission Change Log" subtitle="Recent role and access modifications" />
+                {audit.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-ink-400">
+                    No changes yet — toggle a capability, rename a role, or add one to see it logged here.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {audit.map((a) => (
+                      <li key={a.id} className="flex items-center gap-3 py-2.5">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        <p className="min-w-0 flex-1 text-sm text-ink-700">{a.text}</p>
+                        <span className="shrink-0 text-xs text-ink-400">
+                          {a.actor} · {a.time}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
             </div>
           )}
 

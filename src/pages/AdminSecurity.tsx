@@ -18,25 +18,7 @@ import {
   Td,
   Avatar,
 } from '@/components/ui'
-
-interface AdminUser {
-  name: string
-  email: string
-  role: string
-  roleTone: 'purple' | 'blue' | 'green' | 'slate'
-  mfa: boolean
-  lastActive: string
-  status: string
-}
-
-const admins: AdminUser[] = [
-  { name: 'Jack Reed', email: 'jack@plcy.app', role: 'Owner', roleTone: 'purple', mfa: true, lastActive: '2 min ago', status: 'Active' },
-  { name: 'Dana Cole', email: 'dana.cole@plcy.app', role: 'Admin', roleTone: 'blue', mfa: true, lastActive: '18 min ago', status: 'Active' },
-  { name: 'Marcus Ihde', email: 'marcus.ihde@plcy.app', role: 'Admin', roleTone: 'blue', mfa: true, lastActive: '1 hour ago', status: 'Active' },
-  { name: 'Priya Nair', email: 'priya.nair@plcy.app', role: 'Security', roleTone: 'green', mfa: true, lastActive: '3 hours ago', status: 'Active' },
-  { name: 'Sofia Alvarez', email: 'sofia.alvarez@plcy.app', role: 'Support', roleTone: 'slate', mfa: false, lastActive: '2 days ago', status: 'Active' },
-  { name: 'Tom Becker', email: 'tom.becker@plcy.app', role: 'Billing', roleTone: 'slate', mfa: false, lastActive: '11 days ago', status: 'Suspended' },
-]
+import { admins, roleById } from '@/data/roles'
 
 interface ApiKey {
   name: string
@@ -120,7 +102,10 @@ export default function AdminSecurity() {
                 </div>
               </Td>
               <Td>
-                <Badge tone={u.roleTone}>{u.role}</Badge>
+                {(() => {
+                  const role = roleById(u.roleId)
+                  return <Badge tone={role?.tone ?? 'slate'}>{role?.name ?? 'Unassigned'}</Badge>
+                })()}
               </Td>
               <Td>
                 {u.mfa ? (
