@@ -18,7 +18,7 @@ import {
   Td,
   Avatar,
 } from '@/components/ui'
-import { admins, roleById } from '@/data/roles'
+import { admins, effectiveRoleById } from '@/data/roles'
 
 interface ApiKey {
   name: string
@@ -103,7 +103,7 @@ export default function AdminSecurity() {
               </Td>
               <Td>
                 {(() => {
-                  const role = roleById(u.roleId)
+                  const role = effectiveRoleById(u.roleId)
                   return <Badge tone={role?.tone ?? 'slate'}>{role?.name ?? 'Unassigned'}</Badge>
                 })()}
               </Td>

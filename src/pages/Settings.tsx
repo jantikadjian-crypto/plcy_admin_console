@@ -13,11 +13,23 @@ import {
   CheckCircle2,
   XCircle,
   Plus,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
-import { roleDefs, roleIconTone, assignedCount, BASE_CAPS } from '@/data/roles'
-import type { RoleTone } from '@/data/roles'
+import {
+  effectiveRoles,
+  saveRoles,
+  resetRoles,
+  buildStoredFromDefs,
+  assignedCount,
+  roleIconTone,
+  iconFor,
+  BASE_CAPS,
+  currentUser,
+} from '@/data/roles'
+import type { StoredRole } from '@/data/roles'
 
 type TabKey =
   | 'General'
@@ -39,50 +51,23 @@ const tabs: { key: TabKey; icon: LucideIcon }[] = [
 ]
 
 /* ------------------------------------------------------------------ */
-/* Role-based access control (editable)                                */
+/* Role-based access control (editable, persisted)                     */
 /* ------------------------------------------------------------------ */
-interface EditCap {
-  label: string
-  granted: boolean
-}
-
-interface EditRole {
-  id: string
-  name: string
-  desc: string
-  icon: LucideIcon
-  tone: RoleTone
-  assigned: number
-  caps: EditCap[]
-}
-
-// Seed editable role state from the shared role definitions.
-const buildRoles = (): EditRole[] =>
-  roleDefs.map((r) => ({
-    id: r.id,
-    name: r.name,
-    desc: r.desc,
-    icon: r.icon,
-    tone: r.tone,
-    assigned: assignedCount(r.id),
-    caps: [
-      ...BASE_CAPS.map((label, i) => ({ label, granted: r.baseFlags[i] })),
-      ...r.extra.map((label) => ({ label, granted: true })),
-    ],
-  }))
-
 function RoleCard({
   role,
   onToggle,
   onRename,
   onRenameCommit,
+  onDelete,
 }: {
-  role: EditRole
+  role: StoredRole
   onToggle: (roleId: string, label: string) => void
   onRename: (roleId: string, name: string) => void
   onRenameCommit: (roleId: string) => void
+  onDelete: (roleId: string) => void
 }) {
-  const Icon = role.icon
+  const Icon = iconFor(role.iconKey)
+  const assigned = assignedCount(role.id)
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">
@@ -103,9 +88,18 @@ function RoleCard({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden text-xs font-medium text-ink-500 sm:inline">
-            {role.assigned} {role.assigned === 1 ? 'user' : 'users'}
+            {assigned} {assigned === 1 ? 'user' : 'users'}
           </span>
           <Badge tone={role.tone}>{role.name || 'Untitled'}</Badge>
+          <button
+            type="button"
+            onClick={() => onDelete(role.id)}
+            aria-label={`Delete ${role.name || 'role'}`}
+            title="Delete role"
+            className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -184,15 +178,16 @@ export default function Settings() {
 
   const flip = (k: string) => setToggles((p) => ({ ...p, [k]: !p[k] }))
 
-  // Editable RBAC state + change log
-  const [rbacRoles, setRbacRoles] = useState<EditRole[]>(buildRoles)
+  // Editable + persisted RBAC state, with a change log
+  const [rbacRoles, setRbacRoles] = useState<StoredRole[]>(() => effectiveRoles())
   const [audit, setAudit] = useState<{ id: number; actor: string; text: string; time: string }[]>([])
+  const [saved, setSaved] = useState(false)
   const auditId = useRef(0)
 
   const logChange = (text: string) => {
     auditId.current += 1
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    setAudit((prev) => [{ id: auditId.current, actor: 'jack@plcy.app', text, time }, ...prev].slice(0, 8))
+    setAudit((prev) => [{ id: auditId.current, actor: currentUser.email, text, time }, ...prev].slice(0, 8))
   }
 
   const toggleCap = (roleId: string, label: string) => {
@@ -224,13 +219,30 @@ export default function Settings() {
         id: `custom-${n}`,
         name: 'New Role',
         desc: 'Describe this role’s responsibilities',
-        icon: KeyRound,
+        iconKey: 'key',
         tone: 'slate',
-        assigned: 0,
         caps: BASE_CAPS.map((label) => ({ label, granted: false })),
       },
     ])
     logChange('Created a new role')
+  }
+
+  const deleteRole = (roleId: string) => {
+    const role = rbacRoles.find((r) => r.id === roleId)
+    setRbacRoles((prev) => prev.filter((r) => r.id !== roleId))
+    if (role) logChange(`Deleted role “${role.name || 'Untitled'}”`)
+  }
+
+  const resetToDefaults = () => {
+    resetRoles()
+    setRbacRoles(buildStoredFromDefs())
+    logChange('Reset roles to defaults')
+  }
+
+  const saveChanges = () => {
+    saveRoles(rbacRoles)
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 2000)
   }
 
   return (
@@ -239,10 +251,17 @@ export default function Settings() {
         title="Settings"
         description="Configure your PLCY organization and platform preferences"
         actions={
-          <button className="btn-primary">
-            <Save className="h-4 w-4" />
-            Save changes
-          </button>
+          <div className="flex items-center gap-2">
+            {saved && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                <Check className="h-3.5 w-3.5" /> Saved
+              </span>
+            )}
+            <button className="btn-primary" onClick={saveChanges}>
+              <Save className="h-4 w-4" />
+              Save changes
+            </button>
+          </div>
         }
       />
 
@@ -433,10 +452,16 @@ export default function Settings() {
                     Access is strictly segmented by role profile · click any capability to toggle it
                   </p>
                 </div>
-                <button className="btn-secondary shrink-0" onClick={addRole}>
-                  <Plus className="h-4 w-4" />
-                  Add role
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button className="btn-ghost" onClick={resetToDefaults} title="Revert to default roles">
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </button>
+                  <button className="btn-secondary" onClick={addRole}>
+                    <Plus className="h-4 w-4" />
+                    Add role
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
@@ -447,6 +472,7 @@ export default function Settings() {
                     onToggle={toggleCap}
                     onRename={renameRole}
                     onRenameCommit={commitRename}
+                    onDelete={deleteRole}
                   />
                 ))}
               </div>

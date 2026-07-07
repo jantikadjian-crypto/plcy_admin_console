@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { ChevronsUpDown, Building2, X } from 'lucide-react'
 import { navGroups, ShieldCheck } from '@/config/navigation'
+import { currentUser, effectiveRoleById } from '@/data/roles'
 
 export default function Sidebar({
   open,
@@ -93,11 +94,17 @@ export default function Sidebar({
         <div className="border-t border-slate-200 p-3">
           <div className="flex items-center gap-3 rounded-xl p-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-500 text-xs font-semibold text-white">
-              JC
+              {currentUser.name
+                .split(' ')
+                .map((n) => n[0])
+                .slice(0, 2)
+                .join('')}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink-900">Jack Chen</p>
-              <p className="truncate text-xs text-ink-400">Platform Admin</p>
+              <p className="truncate text-sm font-semibold text-ink-900">{currentUser.name}</p>
+              <p className="truncate text-xs text-ink-400">
+                {effectiveRoleById(currentUser.roleId)?.name ?? 'Member'}
+              </p>
             </div>
           </div>
         </div>
