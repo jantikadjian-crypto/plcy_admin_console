@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { ChevronsUpDown, Building2, X, Check } from 'lucide-react'
-import { navGroups, ShieldCheck } from '@/config/navigation'
+import { navGroups } from '@/config/navigation'
 import { currentUser, effectiveRoleById } from '@/data/roles'
 import { customers } from '@/data/mock'
 import { useCustomerScope, ALL } from '@/context/CustomerScope'
@@ -74,17 +74,17 @@ export default function Sidebar({
         )}
       >
         {/* Brand */}
-        <div className="flex items-center justify-between gap-2 px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
-              <ShieldCheck className="h-5 w-5" />
+        <div className="flex items-start justify-between gap-2 px-5 py-5">
+          <div>
+            <div
+              className="text-[28px] font-extrabold leading-none tracking-tight text-[#1668c4]"
+              aria-label="PLCY"
+            >
+              PLCY
             </div>
-            <div>
-              <p className="text-sm font-extrabold leading-tight tracking-tight text-ink-900">
-                PLCY
-              </p>
-              <p className="text-[11px] font-medium leading-tight text-ink-400">Admin Console</p>
-            </div>
+            <p className="mt-1.5 text-[9px] font-semibold uppercase leading-tight tracking-[0.14em] text-ink-400">
+              AI Governance &amp; Policy Enforcement
+            </p>
           </div>
           <button className="btn-ghost -mr-2 p-1.5 lg:hidden" onClick={onClose} aria-label="Close menu">
             <X className="h-5 w-5" />
