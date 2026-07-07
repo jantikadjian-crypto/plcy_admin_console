@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -24,7 +25,7 @@ import {
   CircleAlert,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 
 /* ------------------------------------------------------------------ */
 /* Types & data                                                        */
@@ -59,7 +60,7 @@ interface Incident {
   remediation: string[]
 }
 
-const incidents: Incident[] = [
+const seedIncidents: Incident[] = [
   {
     id: 'INC-2026-001',
     title: 'Unauthorized PII Exposure in Customer Support Model',
@@ -259,6 +260,8 @@ export default function Incidents() {
   const [tab, setTab] = useState<Tab>('Incidents')
   const [sevFilter, setSevFilter] = useState<'All' | Severity>('All')
   const [selected, setSelected] = useState<Incident | null>(null)
+  const [reporting, setReporting] = useState(false)
+  const [items, setItems] = useState<Incident[]>(seedIncidents)
 
   useEffect(() => {
     if (!selected) return
@@ -267,10 +270,12 @@ export default function Incidents() {
     return () => window.removeEventListener('keydown', onKey)
   }, [selected])
 
-  const open = incidents.filter((i) => i.status !== 'Resolved')
-  const critical = incidents.filter((i) => i.severity === 'Critical' && i.status !== 'Resolved')
+  const addIncident = (inc: Incident) => setItems((prev) => [inc, ...prev])
+
+  const open = items.filter((i) => i.status !== 'Resolved')
+  const critical = items.filter((i) => i.severity === 'Critical' && i.status !== 'Resolved')
   const usersAffected = open.reduce((s, i) => s + i.usersAffected, 0)
-  const visible = sevFilter === 'All' ? incidents : incidents.filter((i) => i.severity === sevFilter)
+  const visible = sevFilter === 'All' ? items : items.filter((i) => i.severity === sevFilter)
 
   return (
     <>
@@ -291,7 +296,7 @@ export default function Incidents() {
               <option value="Medium">Medium</option>
               <option value="Low">Low</option>
             </select>
-            <button className="btn-primary">
+            <button className="btn-primary" onClick={() => setReporting(true)}>
               <Plus className="h-4 w-4" />
               Report Incident
             </button>
@@ -389,7 +394,140 @@ export default function Incidents() {
 
       {/* Detail modal */}
       {selected && <IncidentModal incident={selected} onClose={() => setSelected(null)} />}
+
+      {/* Report incident form */}
+      <ReportIncidentModal
+        open={reporting}
+        onClose={() => setReporting(false)}
+        nextId={`INC-2026-${String(items.length + 1).padStart(3, '0')}`}
+        onCreate={(inc) => {
+          addIncident(inc)
+          setReporting(false)
+          setTab('Incidents')
+          setSelected(inc)
+        }}
+      />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Report incident form modal                                          */
+/* ------------------------------------------------------------------ */
+const CUSTOMERS = ['Meridian Bank', 'Helix Health', 'Northwind Retail', 'Vertex Capital', 'Pinecrest Insurance', 'Atlas Logistics', 'Lumen Media']
+const ASSIGNEES = ['dana.cole@plcy.app', 'marcus.ihde@plcy.app', 'priya.nair@plcy.app', 'jack@plcy.app']
+
+function ReportIncidentModal({
+  open,
+  onClose,
+  nextId,
+  onCreate,
+}: {
+  open: boolean
+  onClose: () => void
+  nextId: string
+  onCreate: (inc: Incident) => void
+}) {
+  const [title, setTitle] = useState('')
+  const [desc, setDesc] = useState('')
+  const [severity, setSeverity] = useState<Severity>('High')
+  const [customer, setCustomer] = useState(CUSTOMERS[0])
+  const [app, setApp] = useState('')
+  const [model, setModel] = useState('GPT-4 Turbo')
+  const [assignedTo, setAssignedTo] = useState(ASSIGNEES[0])
+  const [riskScore, setRiskScore] = useState(70)
+  const [usersAffected, setUsersAffected] = useState(0)
+
+  const reset = () => {
+    setTitle(''); setDesc(''); setSeverity('High'); setCustomer(CUSTOMERS[0])
+    setApp(''); setModel('GPT-4 Turbo'); setAssignedTo(ASSIGNEES[0]); setRiskScore(70); setUsersAffected(0)
+  }
+
+  const submit = () => {
+    if (!title.trim()) return
+    const now = new Date()
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    onCreate({
+      id: nextId,
+      title: title.trim(),
+      desc: desc.trim() || 'No description provided.',
+      severity,
+      status: 'Open',
+      app: app.trim() || 'Unassigned app',
+      model,
+      customer,
+      riskScore,
+      assignedTo,
+      reported: stamp,
+      usersAffected,
+      requestsImpacted: 0,
+      dataExposure: severity === 'Critical',
+      timeline: [{ phase: 'Detection', time: stamp, text: 'Incident reported manually.', by: assignedTo }],
+      rootCause: 'Under investigation.',
+      remediation: ['Pending triage'],
+    })
+    reset()
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Report Incident"
+      subtitle="Log a new AI governance incident"
+      headerRight={<span className="font-mono text-sm text-ink-500">{nextId}</span>}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={!title.trim()}>Create incident</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Title" className="sm:col-span-2">
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short summary of what happened" />
+        </Field>
+        <Field label="Description" className="sm:col-span-2">
+          <textarea className="input min-h-[72px]" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What was detected and where" />
+        </Field>
+        <Field label="Severity">
+          <select className="input" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
+            {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="Customer">
+          <select className="input" value={customer} onChange={(e) => setCustomer(e.target.value)}>
+            {CUSTOMERS.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Application">
+          <input className="input" value={app} onChange={(e) => setApp(e.target.value)} placeholder="e.g. Customer Support" />
+        </Field>
+        <Field label="Model">
+          <input className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. GPT-4 Turbo" />
+        </Field>
+        <Field label="Assigned to">
+          <select className="input" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+            {ASSIGNEES.map((a) => <option key={a}>{a}</option>)}
+          </select>
+        </Field>
+        <Field label={`Risk score · ${riskScore}`}>
+          <input type="range" min={0} max={100} value={riskScore} onChange={(e) => setRiskScore(Number(e.target.value))} className="w-full accent-brand-600" />
+        </Field>
+        <Field label="Users affected">
+          <input type="number" min={0} className="input" value={usersAffected} onChange={(e) => setUsersAffected(Number(e.target.value))} />
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
+function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-sm font-medium text-ink-700">{label}</label>
+      {children}
+    </div>
   )
 }
 
@@ -516,12 +654,14 @@ const violations = [
 ]
 
 const actionTone: Record<string, 'red' | 'orange' | 'yellow'> = { Blocked: 'red', Redacted: 'orange', Flagged: 'yellow' }
+type Violation = (typeof violations)[number]
 
 function PolicyViolations() {
+  const [sel, setSel] = useState<Violation | null>(null)
   return (
     <Card>
       <CardTitle title="Policy Violations" subtitle="Enforcement events across all customers in the last 24 hours" />
-      <Table columns={['Time', 'Policy Pack', 'Rule', 'Model', 'Customer', 'Action', 'Severity']}>
+      <Table columns={['Time', 'Policy Pack', 'Rule', 'Model', 'Customer', 'Action', 'Severity', '']}>
         {violations.map((v, idx) => (
           <Tr key={idx}>
             <Td className="whitespace-nowrap text-xs text-ink-500">{v.time}</Td>
@@ -531,10 +671,51 @@ function PolicyViolations() {
             <Td className="text-ink-700">{v.customer}</Td>
             <Td><Badge tone={actionTone[v.action]}>{v.action}</Badge></Td>
             <Td><SeverityBadge severity={v.severity} /></Td>
+            <Td>
+              <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label="View violation" onClick={() => setSel(v)}>
+                <Eye className="h-4 w-4" />
+              </button>
+            </Td>
           </Tr>
         ))}
       </Table>
+
+      {sel && (
+        <Modal open onClose={() => setSel(null)} title="Policy Violation" subtitle={`${sel.pack} · ${sel.time}`} headerRight={<Badge tone={actionTone[sel.action]}>{sel.action}</Badge>}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <SeverityBadge severity={sel.severity} />
+              <Badge tone="slate">{sel.model}</Badge>
+              <Badge tone="purple">{sel.customer}</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <KV label="Policy pack" value={sel.pack} />
+              <KV label="Rule" value={sel.rule} mono />
+              <KV label="Model" value={sel.model} />
+              <KV label="Enforcement action" value={sel.action} />
+            </div>
+            <div>
+              <p className="mb-1.5 text-sm font-semibold text-ink-900">Matched content</p>
+              <pre className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-900 p-3 font-mono text-[12px] text-slate-100">{`{
+  "rule": "${sel.rule}",
+  "match": "${sel.pack.toLowerCase().includes('pii') ? 'jane.doe@meridian.com' : sel.pack.toLowerCase().includes('injection') ? 'ignore previous instructions and…' : 'flagged content span'}",
+  "action": "${sel.action.toLowerCase()}",
+  "confidence": 0.94
+}`}</pre>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Card>
+  )
+}
+
+function KV({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <p className="text-xs font-medium text-ink-500">{label}</p>
+      <p className={`mt-0.5 font-semibold text-ink-900 ${mono ? 'font-mono text-sm' : ''}`}>{value}</p>
+    </div>
   )
 }
 
@@ -546,7 +727,18 @@ const riskRows = [
   { model: 'Llama 3.1 70B', customer: 'Northwind Retail', score: 52, trend: '+1', band: 'Medium' },
 ]
 
+type RiskRow = (typeof riskRows)[number]
+const bandTone = (band: string) => (band === 'Critical' ? 'red' : band === 'High' ? 'orange' : band === 'Medium' ? 'yellow' : 'green') as 'red' | 'orange' | 'yellow' | 'green'
+const riskFactors = [
+  { factor: 'Policy violations (30d)', weight: 'High' },
+  { factor: 'Fairness / bias drift', weight: 'Medium' },
+  { factor: 'Open incidents', weight: 'High' },
+  { factor: 'Data sensitivity', weight: 'Medium' },
+  { factor: 'Model transparency', weight: 'Low' },
+]
+
 function RiskScores() {
+  const [sel, setSel] = useState<RiskRow | null>(null)
   return (
     <Card>
       <CardTitle
@@ -554,7 +746,7 @@ function RiskScores() {
         subtitle="Composite risk across policy, drift, and incident signals"
         action={<Badge tone="slate"><Gauge className="h-3 w-3" /> 0–100 scale</Badge>}
       />
-      <Table columns={['Model', 'Customer', 'Risk Score', 'Band', '7-day Δ']}>
+      <Table columns={['Model', 'Customer', 'Risk Score', 'Band', '7-day Δ', '']}>
         {riskRows.map((r) => (
           <Tr key={r.model}>
             <Td className="font-semibold text-ink-900">{r.model}</Td>
@@ -570,11 +762,44 @@ function RiskScores() {
                 <span className={`text-sm font-bold tabular-nums ${riskColor(r.score)}`}>{r.score}</span>
               </div>
             </Td>
-            <Td><Badge tone={r.band === 'Critical' ? 'red' : r.band === 'High' ? 'orange' : r.band === 'Medium' ? 'yellow' : 'green'}>{r.band}</Badge></Td>
+            <Td><Badge tone={bandTone(r.band)}>{r.band}</Badge></Td>
             <Td className={r.trend.startsWith('+') ? 'text-rose-600' : 'text-emerald-600'}>{r.trend}</Td>
+            <Td>
+              <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label="View risk breakdown" onClick={() => setSel(r)}>
+                <Eye className="h-4 w-4" />
+              </button>
+            </Td>
           </Tr>
         ))}
       </Table>
+
+      {sel && (
+        <Modal open onClose={() => setSel(null)} title={sel.model} subtitle={`Risk breakdown · ${sel.customer}`} headerRight={<Badge tone={bandTone(sel.band)}>{sel.band}</Badge>}>
+          <div className="space-y-5">
+            <div className="flex items-center gap-4 rounded-xl border border-slate-200 p-4">
+              <div>
+                <p className="text-xs font-medium text-ink-500">Composite risk score</p>
+                <p className={`text-3xl font-bold tabular-nums ${riskColor(sel.score)}`}>{sel.score}</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-xs font-medium text-ink-500">7-day change</p>
+                <p className={`text-lg font-semibold ${sel.trend.startsWith('+') ? 'text-rose-600' : 'text-emerald-600'}`}>{sel.trend}</p>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-semibold text-ink-900">Contributing factors</p>
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                {riskFactors.map((f) => (
+                  <div key={f.factor} className="flex items-center justify-between px-3 py-2.5">
+                    <span className="text-sm text-ink-700">{f.factor}</span>
+                    <Badge tone={f.weight === 'High' ? 'red' : f.weight === 'Medium' ? 'orange' : 'slate'}>{f.weight}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Card>
   )
 }
@@ -586,37 +811,74 @@ const workflows = [
   { name: 'Postmortem — INC-2026-003', icon: TriangleAlert, stage: 'Complete', owner: 'priya.nair@plcy.app', progress: 100, tone: 'green' as const },
 ]
 
+type Workflow = (typeof workflows)[number]
+const workflowSteps = ['Detection & intake', 'Triage & severity', 'Investigation', 'Remediation', 'Review & sign-off']
+
 function GovernanceWorkflows() {
+  const [sel, setSel] = useState<Workflow | null>(null)
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       {workflows.map((w) => {
         const Icon = w.icon
         return (
-          <Card key={w.name}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-ink-600">
-                  <Icon className="h-5 w-5" />
+          <button key={w.name} className="text-left" onClick={() => setSel(w)}>
+            <Card className="transition-shadow hover:shadow-cardhover">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-ink-600">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-ink-900">{w.name}</p>
+                    <p className="text-xs text-ink-500">Owner · {w.owner}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-ink-900">{w.name}</p>
-                  <p className="text-xs text-ink-500">Owner · {w.owner}</p>
+                <Badge tone={w.tone} dot>{w.stage}</Badge>
+              </div>
+              <div className="mt-4">
+                <div className="mb-1 flex justify-between text-xs text-ink-500">
+                  <span>Progress</span>
+                  <span className="font-medium text-ink-700">{w.progress}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${w.progress === 100 ? 'bg-emerald-500' : 'bg-brand-500'}`} style={{ width: `${w.progress}%` }} />
                 </div>
               </div>
-              <Badge tone={w.tone} dot>{w.stage}</Badge>
-            </div>
-            <div className="mt-4">
-              <div className="mb-1 flex justify-between text-xs text-ink-500">
-                <span>Progress</span>
-                <span className="font-medium text-ink-700">{w.progress}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div className={`h-full rounded-full ${w.progress === 100 ? 'bg-emerald-500' : 'bg-brand-500'}`} style={{ width: `${w.progress}%` }} />
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </button>
         )
       })}
+
+      {sel && (
+        <Modal open onClose={() => setSel(null)} title={sel.name} subtitle={`Owner · ${sel.owner}`} headerRight={<Badge tone={sel.tone} dot>{sel.stage}</Badge>}>
+          <div className="space-y-5">
+            <div>
+              <div className="mb-1 flex justify-between text-xs text-ink-500">
+                <span>Overall progress</span>
+                <span className="font-medium text-ink-700">{sel.progress}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div className={`h-full rounded-full ${sel.progress === 100 ? 'bg-emerald-500' : 'bg-brand-500'}`} style={{ width: `${sel.progress}%` }} />
+              </div>
+            </div>
+            <ol className="space-y-3">
+              {workflowSteps.map((step, idx) => {
+                const done = (idx + 1) / workflowSteps.length <= sel.progress / 100
+                const current = !done && idx / workflowSteps.length < sel.progress / 100
+                return (
+                  <li key={step} className="flex items-center gap-3">
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${done ? 'bg-emerald-500 text-white' : current ? 'bg-brand-100 text-brand-700 ring-2 ring-brand-500' : 'bg-slate-100 text-slate-400'}`}>
+                      {done ? '✓' : idx + 1}
+                    </span>
+                    <span className={`text-sm ${done || current ? 'text-ink-900' : 'text-ink-400'}`}>{step}</span>
+                    {current && <Badge tone="blue">In progress</Badge>}
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -635,7 +897,10 @@ const noticeTone: Record<string, 'green' | 'orange' | 'red' | 'slate'> = {
   'Not required': 'slate',
 }
 
+type RegNotice = (typeof regNotices)[number]
+
 function RegulatoryNotifications() {
+  const [sel, setSel] = useState<RegNotice | null>(null)
   return (
     <Card>
       <CardTitle
@@ -643,7 +908,7 @@ function RegulatoryNotifications() {
         subtitle="Reporting obligations triggered by incidents"
         action={<Badge tone="slate"><Landmark className="h-3 w-3" /> Compliance</Badge>}
       />
-      <Table columns={['Regulator', 'Incident', 'Requirement', 'Deadline', 'Status']}>
+      <Table columns={['Regulator', 'Incident', 'Requirement', 'Deadline', 'Status', '']}>
         {regNotices.map((n, idx) => (
           <Tr key={idx}>
             <Td className="font-semibold text-ink-900">{n.regulator}</Td>
@@ -651,9 +916,48 @@ function RegulatoryNotifications() {
             <Td className="text-ink-700">{n.requirement}</Td>
             <Td className="whitespace-nowrap text-xs text-ink-500">{n.deadline}</Td>
             <Td><Badge tone={noticeTone[n.status]} dot>{n.status}</Badge></Td>
+            <Td>
+              <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label="View notification" onClick={() => setSel(n)}>
+                <Eye className="h-4 w-4" />
+              </button>
+            </Td>
           </Tr>
         ))}
       </Table>
+
+      {sel && (
+        <Modal
+          open
+          onClose={() => setSel(null)}
+          title={sel.regulator}
+          subtitle={`Obligation for ${sel.incident}`}
+          headerRight={<Badge tone={noticeTone[sel.status]} dot>{sel.status}</Badge>}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setSel(null)}>Close</button>
+              <button className="btn-primary" disabled={sel.status === 'Filed' || sel.status === 'Not required'}>
+                {sel.status === 'Filed' ? 'Filed' : 'Mark as filed'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <KV label="Regulator" value={sel.regulator} />
+              <KV label="Linked incident" value={sel.incident} mono />
+              <KV label="Requirement" value={sel.requirement} />
+              <KV label="Deadline" value={sel.deadline} />
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              {sel.status === 'Filed'
+                ? 'This notification has been filed with the regulator. Evidence is attached to the incident record.'
+                : sel.status === 'Not required'
+                ? 'Assessment concluded this obligation does not apply to the linked incident.'
+                : `This obligation is pending. Prepare and file the "${sel.requirement}" before the deadline.`}
+            </div>
+          </div>
+        </Modal>
+      )}
     </Card>
   )
 }

@@ -1,4 +1,5 @@
-import { Search, Filter, Plus, Eye, MoreHorizontal, Users, UserCheck, DollarSign, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
+import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck, Server, Bot } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -21,8 +22,10 @@ import {
   Td,
   Progress,
   Avatar,
+  Modal,
+  EmptyState,
 } from '@/components/ui'
-import { customers, totals, fmtMoney } from '@/data/mock'
+import { customers, instances, models, totals, fmtMoney, fmtCompact } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 
 const tooltipStyle = {
@@ -61,22 +64,27 @@ const mrrByPlan = planOrder.map((plan) => ({
 }))
 
 export default function Customers() {
+  const [query, setQuery] = useState('')
+  const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
+  const [selected, setSelected] = useState<Customer | null>(null)
+
+  const q = query.trim().toLowerCase()
+  const filtered = customers.filter((c) => {
+    const matchesQuery = !q || [c.name, c.domain, c.csm, c.region].some((f) => f.toLowerCase().includes(q))
+    const matchesPlan = plan === 'All' || c.plan === plan
+    return matchesQuery && matchesPlan
+  })
+
   return (
     <>
       <PageHeader
         title="Customers"
         description="Manage every organization governed by the PLCY platform"
         actions={
-          <>
-            <button className="btn-secondary">
-              <Filter className="h-4 w-4" />
-              Filter
-            </button>
-            <button className="btn-primary">
-              <Plus className="h-4 w-4" />
-              Add customer
-            </button>
-          </>
+          <button className="btn-primary">
+            <Plus className="h-4 w-4" />
+            Add customer
+          </button>
         }
       />
 
@@ -93,12 +101,19 @@ export default function Customers() {
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <input className="input pl-9" placeholder="Search customers by name, domain, or CSM…" />
+            <input
+              className="input pl-9"
+              placeholder="Search customers by name, domain, CSM, or region…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </div>
-          <button className="btn-secondary">
-            <Filter className="h-4 w-4" />
-            Filter
-          </button>
+          <select className="input w-auto" value={plan} onChange={(e) => setPlan(e.target.value as 'All' | Customer['plan'])} aria-label="Filter by plan">
+            <option value="All">All plans</option>
+            {planOrder.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
         </div>
       </Card>
 
@@ -124,51 +139,159 @@ export default function Customers() {
 
       {/* Table */}
       <Card className="mt-6">
-        <CardTitle title="All Customers" subtitle={`${customers.length} organizations`} />
-        <Table columns={['Customer', 'Plan', 'Status', 'Seats', 'Instances', 'MRR', 'Compliance', 'CSM', '']}>
-          {customers.map((c) => (
-            <Tr key={c.id}>
-              <Td>
-                <div className="flex items-center gap-3">
-                  <Avatar name={c.name} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-ink-900">{c.name}</p>
-                    <p className="text-xs text-ink-500">{c.domain}</p>
+        <CardTitle
+          title="All Customers"
+          subtitle={`${filtered.length} of ${customers.length} organizations`}
+        />
+        {filtered.length === 0 ? (
+          <EmptyState icon={Search} title="No customers match" description="Try a different search term or plan filter." />
+        ) : (
+          <Table columns={['Customer', 'Plan', 'Status', 'Seats', 'Instances', 'MRR', 'Compliance', 'CSM', '']}>
+            {filtered.map((c) => (
+              <Tr key={c.id}>
+                <Td>
+                  <button className="flex items-center gap-3 text-left" onClick={() => setSelected(c)}>
+                    <Avatar name={c.name} />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink-900 hover:text-brand-600">{c.name}</p>
+                      <p className="text-xs text-ink-500">{c.domain}</p>
+                    </div>
+                  </button>
+                </Td>
+                <Td><Badge tone={planTone[c.plan]}>{c.plan}</Badge></Td>
+                <Td><StatusBadge status={c.status} /></Td>
+                <Td>{c.seats}</Td>
+                <Td>{c.instances}</Td>
+                <Td className="font-medium text-ink-900">{fmtMoney(c.mrr)}</Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <div className="w-20">
+                      <Progress value={c.complianceScore} tone={complianceTone(c.complianceScore)} />
+                    </div>
+                    <span className="text-xs font-medium text-ink-700">{c.complianceScore}%</span>
                   </div>
-                </div>
-              </Td>
-              <Td>
-                <Badge tone={planTone[c.plan]}>{c.plan}</Badge>
-              </Td>
-              <Td>
-                <StatusBadge status={c.status} />
-              </Td>
-              <Td>{c.seats}</Td>
-              <Td>{c.instances}</Td>
-              <Td className="font-medium text-ink-900">{fmtMoney(c.mrr)}</Td>
-              <Td>
-                <div className="flex items-center gap-2">
-                  <div className="w-20">
-                    <Progress value={c.complianceScore} tone={complianceTone(c.complianceScore)} />
-                  </div>
-                  <span className="text-xs font-medium text-ink-700">{c.complianceScore}%</span>
-                </div>
-              </Td>
-              <Td>{c.csm}</Td>
-              <Td className="text-right">
-                <div className="flex items-center justify-end gap-1">
-                  <button className="btn-ghost px-2" aria-label="View customer">
+                </Td>
+                <Td>{c.csm}</Td>
+                <Td className="text-right">
+                  <button className="btn-ghost px-2" aria-label={`View ${c.name}`} onClick={() => setSelected(c)}>
                     <Eye className="h-4 w-4" />
                   </button>
-                  <button className="btn-ghost px-2" aria-label="More actions">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
-                </div>
-              </Td>
-            </Tr>
-          ))}
-        </Table>
+                </Td>
+              </Tr>
+            ))}
+          </Table>
+        )}
       </Card>
+
+      {selected && <CustomerModal customer={selected} onClose={() => setSelected(null)} />}
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Customer detail modal                                               */
+/* ------------------------------------------------------------------ */
+function CustomerModal({ customer: c, onClose }: { customer: Customer; onClose: () => void }) {
+  const custInstances = instances.filter((i) => i.customer === c.name)
+  const custModels = models.filter((m) => m.customer === c.name)
+
+  const stats: { label: string; value: string }[] = [
+    { label: 'Plan', value: c.plan },
+    { label: 'MRR', value: fmtMoney(c.mrr) },
+    { label: 'Seats', value: String(c.seats) },
+    { label: 'Region', value: c.region },
+    { label: 'CSM', value: c.csm },
+    { label: 'Customer since', value: c.since },
+  ]
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={c.name}
+      subtitle={c.domain}
+      headerRight={<Badge tone={planTone[c.plan]}>{c.plan}</Badge>}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          <button className="btn-primary">Open account</button>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Avatar name={c.name} className="h-12 w-12 text-sm" />
+          <div>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={c.status} />
+              <span className="text-sm text-ink-500">{c.region}</span>
+            </div>
+            <p className="mt-1 text-sm text-ink-600">Managed by {c.csm}</p>
+          </div>
+          <div className="ml-auto text-right">
+            <p className="text-xs font-medium text-ink-500">Compliance</p>
+            <p className={`text-2xl font-bold tabular-nums ${c.complianceScore >= 90 ? 'text-emerald-600' : c.complianceScore >= 80 ? 'text-blue-600' : c.complianceScore >= 70 ? 'text-orange-600' : 'text-rose-600'}`}>
+              {c.complianceScore}%
+            </p>
+          </div>
+        </div>
+
+        {/* Key facts */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-medium text-ink-500">{s.label}</p>
+              <p className="mt-0.5 font-semibold text-ink-900">{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Instances */}
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <Server className="h-4 w-4 text-ink-400" />
+            <h4 className="text-sm font-semibold text-ink-900">Instances ({custInstances.length})</h4>
+          </div>
+          {custInstances.length === 0 ? (
+            <p className="text-sm text-ink-400">No deployed instances.</p>
+          ) : (
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              {custInstances.map((i) => (
+                <div key={i.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-sm text-ink-900">{i.name}</p>
+                    <p className="text-xs text-ink-500">{i.environment} · {i.region} · {i.version}</p>
+                  </div>
+                  <StatusBadge status={i.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Models */}
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <Bot className="h-4 w-4 text-ink-400" />
+            <h4 className="text-sm font-semibold text-ink-900">Governed models ({custModels.length})</h4>
+          </div>
+          {custModels.length === 0 ? (
+            <p className="text-sm text-ink-400">No models under governance.</p>
+          ) : (
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              {custModels.map((m) => (
+                <div key={m.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-ink-900">{m.name}</p>
+                    <p className="text-xs text-ink-500">{m.provider} · {m.type} · {fmtCompact(m.requests)} req</p>
+                  </div>
+                  <Badge tone={m.risk === 'High' ? 'red' : m.risk === 'Medium' ? 'orange' : 'green'}>{m.risk} risk</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </Modal>
   )
 }

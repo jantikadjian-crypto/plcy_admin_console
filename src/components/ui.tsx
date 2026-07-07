@@ -1,5 +1,7 @@
 import { clsx } from 'clsx'
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -268,6 +270,64 @@ export function EmptyState({
       </div>
       <p className="font-semibold text-ink-700">{title}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-ink-500">{description}</p>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Modal                                                               */
+/* ------------------------------------------------------------------ */
+export function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  headerRight,
+  footer,
+  children,
+  maxWidth = 'max-w-2xl',
+}: {
+  open: boolean
+  onClose: () => void
+  title: ReactNode
+  subtitle?: ReactNode
+  headerRight?: ReactNode
+  footer?: ReactNode
+  children: ReactNode
+  maxWidth?: string
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 backdrop-blur-sm sm:p-8"
+      onClick={onClose}
+    >
+      <div
+        className={clsx('my-4 w-full rounded-2xl bg-white shadow-xl ring-1 ring-slate-200', maxWidth)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-ink-900">{title}</h2>
+              {headerRight}
+            </div>
+            {subtitle && <p className="mt-0.5 text-sm text-ink-500">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-ink-400 hover:bg-slate-100" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-6">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-slate-100 p-4">{footer}</div>}
+      </div>
     </div>
   )
 }
