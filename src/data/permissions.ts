@@ -1,7 +1,20 @@
 /**
- * Capability-based permission model. Each RBAC role (from roles.ts) maps to a
- * set of action capabilities; the UI gates actions on these.
+ * Bridge between the console's coarse UI action gates and the real production
+ * access model (`AccessMap` in access.ts).
+ *
+ * Each page guards an action with a `Capability` (e.g. `license.manage`). Rather
+ * than maintain a second, parallel permission table, every capability maps to a
+ * concrete `EAccessFeature`, and the check resolves through the same `AccessMap`
+ * production uses. Change a role's access to a feature and the console's gating
+ * follows automatically.
  */
+import {
+  EAccessRole,
+  EAccessFeature,
+  hasAccess,
+  featureLabel,
+  effectiveAccessMap,
+} from './access'
 
 export type Capability =
   | 'customer.manage'
@@ -17,44 +30,41 @@ export type Capability =
   | 'incident.manage'
   | 'settings.modify'
 
+/** Each console action gate resolves to a real production feature. */
+export const CAP_TO_FEATURE: Record<Capability, EAccessFeature> = {
+  'customer.manage': EAccessFeature.InstanceManage,
+  'provision.manage': EAccessFeature.InstanceManageInfrastructure,
+  'release.rollout': EAccessFeature.ReleaseList,
+  'license.manage': EAccessFeature.SubscriptionManage,
+  'access.approve': EAccessFeature.UserManageRoles,
+  'access.breakglass': EAccessFeature.UserRestoreFull, // Superuser-only
+  'dsar.manage': EAccessFeature.UserArchive,
+  'transfer.approve': EAccessFeature.InstanceManageInfrastructure,
+  'policy.manage': EAccessFeature.InstanceManagePackage,
+  'model.register': EAccessFeature.PackageList,
+  'incident.manage': EAccessFeature.ClusterMonitor,
+  'settings.modify': EAccessFeature.UserManageRoles,
+}
+
 export interface CapabilityMeta {
   key: Capability
   label: string
+  feature: EAccessFeature
 }
 
-export const CAPABILITIES: CapabilityMeta[] = [
-  { key: 'customer.manage', label: 'Manage customers' },
-  { key: 'provision.manage', label: 'Provision environments' },
-  { key: 'release.rollout', label: 'Roll out releases' },
-  { key: 'license.manage', label: 'Manage licenses' },
-  { key: 'access.approve', label: 'Approve access requests' },
-  { key: 'access.breakglass', label: 'Approve break-glass root' },
-  { key: 'dsar.manage', label: 'Handle data-subject requests' },
-  { key: 'transfer.approve', label: 'Approve data transfers' },
-  { key: 'policy.manage', label: 'Manage policies' },
-  { key: 'model.register', label: 'Register models' },
-  { key: 'incident.manage', label: 'Manage incidents' },
-  { key: 'settings.modify', label: 'Modify settings' },
-]
+export const CAPABILITIES: CapabilityMeta[] = (Object.keys(CAP_TO_FEATURE) as Capability[]).map((key) => ({
+  key,
+  label: featureLabel(CAP_TO_FEATURE[key]),
+  feature: CAP_TO_FEATURE[key],
+}))
 
-/** '*' grants every capability. */
-const roleCaps: Record<string, Capability[] | ['*']> = {
-  superuser: ['*'],
-  'platform-admin': ['customer.manage', 'provision.manage', 'release.rollout', 'license.manage', 'model.register', 'incident.manage', 'settings.modify', 'access.approve', 'policy.manage'],
-  'compliance-officer': ['dsar.manage', 'transfer.approve', 'incident.manage'],
-  'model-validator': ['model.register'],
-  'read-only': [],
-}
-
+/** Can a role perform a console action? Resolves through the effective access map. */
 export function roleCan(roleId: string, cap: Capability): boolean {
-  const caps = roleCaps[roleId] ?? []
-  return caps[0] === '*' || (caps as Capability[]).includes(cap)
+  const role = roleId as EAccessRole
+  return hasAccess(role, CAP_TO_FEATURE[cap], effectiveAccessMap())
 }
 
-/** All capabilities a role holds (for display). */
+/** All console capabilities a role holds (for display). */
 export function roleCapabilities(roleId: string): Capability[] {
-  const caps = roleCaps[roleId]
-  if (!caps) return []
-  if (caps[0] === '*') return CAPABILITIES.map((c) => c.key)
-  return caps as Capability[]
+  return (Object.keys(CAP_TO_FEATURE) as Capability[]).filter((cap) => roleCan(roleId, cap))
 }

@@ -10,28 +10,29 @@ import {
   Save,
   Check,
   KeyRound,
-  CheckCircle2,
-  XCircle,
-  Plus,
-  Trash2,
   RotateCcw,
+  Lock,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import {
-  effectiveRoles,
-  saveRoles,
-  resetRoles,
-  buildStoredFromDefs,
+  roleDefs,
   assignedCount,
   roleIconTone,
   iconFor,
-  BASE_CAPS,
   currentUser,
 } from '@/data/roles'
-import type { StoredRole } from '@/data/roles'
+import {
+  EAccessRole,
+  EAccessFeature,
+  FEATURE_DOMAINS,
+  featureLabel,
+  effectiveAccessMap,
+  saveAccessMap,
+  resetAccessMap,
+} from '@/data/access'
 
 type TabKey =
   | 'General'
@@ -52,77 +53,136 @@ const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'Security', icon: Shield },
 ]
 
-/* ------------------------------------------------------------------ */
-/* Role-based access control (editable, persisted)                     */
-/* ------------------------------------------------------------------ */
-function RoleCard({
-  role,
-  onToggle,
-  onRename,
-  onRenameCommit,
-  onDelete,
-}: {
-  role: StoredRole
-  onToggle: (roleId: string, label: string) => void
-  onRename: (roleId: string, name: string) => void
-  onRenameCommit: (roleId: string) => void
-  onDelete: (roleId: string) => void
-}) {
-  const Icon = iconFor(role.iconKey)
-  const assigned = assignedCount(role.id)
-  return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${roleIconTone[role.tone]}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <input
-              value={role.name}
-              onChange={(e) => onRename(role.id, e.target.value)}
-              onBlur={() => onRenameCommit(role.id)}
-              aria-label="Role name"
-              className="-mx-1 w-full max-w-xs rounded-md bg-transparent px-1 text-[15px] font-semibold text-ink-900 hover:bg-slate-100 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/25"
-            />
-            <p className="mt-0.5 text-sm text-ink-500">{role.desc}</p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="hidden text-xs font-medium text-ink-500 sm:inline">
-            {assigned} {assigned === 1 ? 'user' : 'users'}
-          </span>
-          <Badge tone={role.tone}>{role.name || 'Untitled'}</Badge>
-          <button
-            type="button"
-            onClick={() => onDelete(role.id)}
-            aria-label={`Delete ${role.name || 'role'}`}
-            title="Delete role"
-            className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+type AccessMap = Record<EAccessFeature, EAccessRole[]>
 
-      <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-        {role.caps.map((c) => (
-          <button
-            key={c.label}
-            type="button"
-            onClick={() => onToggle(role.id, c.label)}
-            className="-mx-1 flex items-center gap-2 rounded-md px-1 py-1 text-left transition-colors hover:bg-slate-50"
-          >
-            {c.granted ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-            ) : (
-              <XCircle className="h-4 w-4 shrink-0 text-slate-300" />
-            )}
-            <span className={`text-sm ${c.granted ? 'text-ink-700' : 'text-slate-400'}`}>{c.label}</span>
-          </button>
-        ))}
-      </div>
-    </Card>
+/* ------------------------------------------------------------------ */
+/* Role legend                                                          */
+/* ------------------------------------------------------------------ */
+function RoleLegend() {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {roleDefs.map((r) => {
+        const Icon = iconFor(r.iconKey)
+        const assigned = assignedCount(r.id)
+        return (
+          <div key={r.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${roleIconTone[r.tone]}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-semibold text-ink-900">{r.name}</p>
+                <span className="shrink-0 text-xs text-ink-400">{assigned} {assigned === 1 ? 'user' : 'users'}</span>
+              </div>
+              <p className="mt-0.5 text-xs leading-snug text-ink-500">{r.desc}</p>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Access matrix — one card per domain, features × roles               */
+/* ------------------------------------------------------------------ */
+function Cell({
+  granted,
+  locked,
+  tone,
+  onClick,
+}: {
+  granted: boolean
+  locked?: boolean
+  tone: string
+  onClick?: () => void
+}) {
+  if (locked) {
+    return (
+      <span
+        title="Superuser has every permission"
+        className="mx-auto flex h-6 w-6 items-center justify-center rounded-md bg-violet-50 text-violet-500"
+      >
+        <Lock className="h-3.5 w-3.5" />
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={granted}
+      className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+        granted ? tone : 'bg-slate-50 text-transparent hover:bg-slate-100'
+      }`}
+    >
+      <Check className="h-3.5 w-3.5" />
+    </button>
+  )
+}
+
+const cellTone: Record<string, string> = {
+  purple: 'bg-violet-100 text-violet-600',
+  blue: 'bg-blue-100 text-blue-600',
+  green: 'bg-emerald-100 text-emerald-600',
+  orange: 'bg-orange-100 text-orange-600',
+  red: 'bg-rose-100 text-rose-600',
+  yellow: 'bg-amber-100 text-amber-600',
+  slate: 'bg-slate-200 text-slate-600',
+}
+
+function AccessMatrix({
+  map,
+  onToggle,
+}: {
+  map: AccessMap
+  onToggle: (feature: EAccessFeature, role: EAccessRole) => void
+}) {
+  return (
+    <div className="space-y-6">
+      {FEATURE_DOMAINS.map((domain) => (
+        <Card key={domain.title}>
+          <CardTitle title={domain.title} subtitle={`${domain.features.length} features`} />
+          <div className="-mx-1 overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="py-2 pl-1 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
+                    Feature
+                  </th>
+                  {roleDefs.map((r) => (
+                    <th key={r.id} className="px-1 pb-2 text-center align-bottom">
+                      <span className="block text-[11px] font-semibold leading-tight text-ink-600">{r.name}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {domain.features.map((f) => (
+                  <tr key={f} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
+                    <td className="py-1.5 pl-1 pr-3 font-medium text-ink-700">{featureLabel(f)}</td>
+                    {roleDefs.map((r) => {
+                      const isSuper = r.id === EAccessRole.Superuser
+                      const granted = isSuper || map[f].includes(r.id)
+                      return (
+                        <td key={r.id} className="px-1 py-1.5 text-center">
+                          <Cell
+                            granted={granted}
+                            locked={isSuper}
+                            tone={cellTone[r.tone] ?? cellTone.slate}
+                            onClick={() => onToggle(f, r.id)}
+                          />
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ))}
+    </div>
   )
 }
 
@@ -181,69 +241,37 @@ export default function Settings() {
 
   const flip = (k: string) => setToggles((p) => ({ ...p, [k]: !p[k] }))
 
-  // Editable + persisted RBAC state, with a change log
-  const [rbacRoles, setRbacRoles] = useState<StoredRole[]>(() => effectiveRoles())
-  const [audit, setAudit] = useState<{ id: number; actor: string; text: string; time: string }[]>([])
+  // Editable + persisted access matrix, with a change log
+  const [accessMap, setAccessMap] = useState<AccessMap>(() => effectiveAccessMap())
+  const [changes, setChanges] = useState<{ id: number; actor: string; text: string; time: string }[]>([])
   const [saved, setSaved] = useState(false)
-  const auditId = useRef(0)
+  const changeId = useRef(0)
 
   const logChange = (text: string) => {
-    auditId.current += 1
+    changeId.current += 1
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    setAudit((prev) => [{ id: auditId.current, actor: currentUser.email, text, time }, ...prev].slice(0, 8))
+    setChanges((prev) => [{ id: changeId.current, actor: currentUser.email, text, time }, ...prev].slice(0, 8))
   }
 
-  const toggleCap = (roleId: string, label: string) => {
-    const role = rbacRoles.find((r) => r.id === roleId)
-    const nowGranted = !role?.caps.find((c) => c.label === label)?.granted
-    setRbacRoles((prev) =>
-      prev.map((r) =>
-        r.id === roleId
-          ? { ...r, caps: r.caps.map((c) => (c.label === label ? { ...c, granted: !c.granted } : c)) }
-          : r,
-      ),
-    )
-    if (role) logChange(`${nowGranted ? 'Granted' : 'Revoked'} “${label}” ${nowGranted ? 'to' : 'from'} ${role.name}`)
-  }
-
-  const renameRole = (roleId: string, name: string) =>
-    setRbacRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, name } : r)))
-
-  const commitRename = (roleId: string) => {
-    const role = rbacRoles.find((r) => r.id === roleId)
-    if (role) logChange(`Renamed a role to “${role.name || 'Untitled'}”`)
-  }
-
-  const addRole = () => {
-    const n = rbacRoles.filter((r) => r.id.startsWith('custom-')).length + 1
-    setRbacRoles((prev) => [
+  const toggleAccess = (feature: EAccessFeature, role: EAccessRole) => {
+    if (role === EAccessRole.Superuser) return // Superuser always has everything
+    const roleName = roleDefs.find((r) => r.id === role)?.name ?? role
+    const has = accessMap[feature].includes(role)
+    setAccessMap((prev) => ({
       ...prev,
-      {
-        id: `custom-${n}`,
-        name: 'New Role',
-        desc: 'Describe this role’s responsibilities',
-        iconKey: 'key',
-        tone: 'slate',
-        caps: BASE_CAPS.map((label) => ({ label, granted: false })),
-      },
-    ])
-    logChange('Created a new role')
-  }
-
-  const deleteRole = (roleId: string) => {
-    const role = rbacRoles.find((r) => r.id === roleId)
-    setRbacRoles((prev) => prev.filter((r) => r.id !== roleId))
-    if (role) logChange(`Deleted role “${role.name || 'Untitled'}”`)
+      [feature]: has ? prev[feature].filter((x) => x !== role) : [...prev[feature], role],
+    }))
+    logChange(`${has ? 'Revoked' : 'Granted'} “${featureLabel(feature)}” ${has ? 'from' : 'to'} ${roleName}`)
   }
 
   const resetToDefaults = () => {
-    resetRoles()
-    setRbacRoles(buildStoredFromDefs())
-    logChange('Reset roles to defaults')
+    resetAccessMap()
+    setAccessMap(effectiveAccessMap())
+    logChange('Reset access map to production defaults')
   }
 
   const saveChanges = () => {
-    saveRoles(rbacRoles)
+    saveAccessMap(accessMap)
     logAction({ action: 'settings.save', target: 'roles & permissions', category: 'settings' })
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2000)
@@ -291,7 +319,7 @@ export default function Settings() {
         </nav>
 
         {/* Section content */}
-        <div>
+        <div className="min-w-0">
           {active === 'General' && (
             <Card>
               <CardTitle title="General" subtitle="Organization profile and defaults" />
@@ -453,43 +481,33 @@ export default function Settings() {
                 <div>
                   <h3 className="text-lg font-semibold text-ink-900">Role-Based Access Control</h3>
                   <p className="mt-0.5 text-sm text-ink-500">
-                    Access is strictly segmented by role profile · click any capability to toggle it
+                    The production access map · Superuser holds every permission · click any cell to grant or revoke
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button className="btn-ghost" onClick={resetToDefaults} title="Revert to default roles">
+                  <button className="btn-ghost" onClick={resetToDefaults} title="Revert to production defaults">
                     <RotateCcw className="h-4 w-4" />
                     Reset
-                  </button>
-                  <button className="btn-secondary" onClick={addRole}>
-                    <Plus className="h-4 w-4" />
-                    Add role
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
-                {rbacRoles.map((role) => (
-                  <RoleCard
-                    key={role.id}
-                    role={role}
-                    onToggle={toggleCap}
-                    onRename={renameRole}
-                    onRenameCommit={commitRename}
-                    onDelete={deleteRole}
-                  />
-                ))}
-              </div>
+              <Card className="mb-6">
+                <CardTitle title="Roles" subtitle="Who each role is, and how many staff hold it" />
+                <RoleLegend />
+              </Card>
+
+              <AccessMatrix map={accessMap} onToggle={toggleAccess} />
 
               <Card className="mt-6">
-                <CardTitle title="Permission Change Log" subtitle="Recent role and access modifications" />
-                {audit.length === 0 ? (
+                <CardTitle title="Permission Change Log" subtitle="Recent access modifications" />
+                {changes.length === 0 ? (
                   <p className="py-6 text-center text-sm text-ink-400">
-                    No changes yet — toggle a capability, rename a role, or add one to see it logged here.
+                    No changes yet — click a cell in the matrix above to grant or revoke a permission.
                   </p>
                 ) : (
                   <ul className="divide-y divide-slate-100">
-                    {audit.map((a) => (
+                    {changes.map((a) => (
                       <li key={a.id} className="flex items-center gap-3 py-2.5">
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
                         <p className="min-w-0 flex-1 text-sm text-ink-700">{a.text}</p>
