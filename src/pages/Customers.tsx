@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useCreateIntent } from '@/hooks/useCreateIntent'
-import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck, Server, Bot } from 'lucide-react'
+import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -29,7 +30,7 @@ import {
 } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
-import { customers, instances, models, fmtMoney, fmtCompact } from '@/data/mock'
+import { customers, fmtMoney } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 
 const tooltipStyle = {
@@ -64,12 +65,13 @@ const planOrder: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Tria
 
 export default function Customers() {
   const { logAction } = useSession()
+  const navigate = useNavigate()
   const [rows, setRows] = useState<Customer[]>(customers)
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
-  const [selected, setSelected] = useState<Customer | null>(null)
   const [adding, setAdding] = useState(false)
   useCreateIntent(() => setAdding(true))
+  const openCustomer = (c: Customer) => navigate(`/customers/${c.id}`)
 
   const q = query.trim().toLowerCase()
   const filtered = rows.filter((c) => {
@@ -164,7 +166,7 @@ export default function Customers() {
             {filtered.map((c) => (
               <Tr key={c.id}>
                 <Td>
-                  <button className="flex items-center gap-3 text-left" onClick={() => setSelected(c)}>
+                  <button className="flex items-center gap-3 text-left" onClick={() => openCustomer(c)}>
                     <Avatar name={c.name} />
                     <div className="min-w-0">
                       <p className="font-semibold text-ink-900 hover:text-brand-600">{c.name}</p>
@@ -187,7 +189,7 @@ export default function Customers() {
                 </Td>
                 <Td>{c.csm}</Td>
                 <Td className="text-right">
-                  <button className="btn-ghost px-2" aria-label={`View ${c.name}`} onClick={() => setSelected(c)}>
+                  <button className="btn-ghost px-2" aria-label={`View ${c.name}`} onClick={() => openCustomer(c)}>
                     <Eye className="h-4 w-4" />
                   </button>
                 </Td>
@@ -196,8 +198,6 @@ export default function Customers() {
           </Table>
         )}
       </Card>
-
-      {selected && <CustomerModal customer={selected} onClose={() => setSelected(null)} />}
 
       <AddCustomerModal
         open={adding}
@@ -208,7 +208,7 @@ export default function Customers() {
           setAdding(false)
           setQuery('')
           setPlan('All')
-          setSelected(c)
+          navigate(`/customers/${c.id}`)
         }}
       />
     </>
@@ -318,110 +318,3 @@ function CustField({ label, children, className }: { label: string; children: Re
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Customer detail modal                                               */
-/* ------------------------------------------------------------------ */
-function CustomerModal({ customer: c, onClose }: { customer: Customer; onClose: () => void }) {
-  const custInstances = instances.filter((i) => i.customer === c.name)
-  const custModels = models.filter((m) => m.customer === c.name)
-
-  const stats: { label: string; value: string }[] = [
-    { label: 'Plan', value: c.plan },
-    { label: 'MRR', value: fmtMoney(c.mrr) },
-    { label: 'Seats', value: String(c.seats) },
-    { label: 'Region', value: c.region },
-    { label: 'CSM', value: c.csm },
-    { label: 'Customer since', value: c.since },
-  ]
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={c.name}
-      subtitle={c.domain}
-      headerRight={<Badge tone={planTone[c.plan]}>{c.plan}</Badge>}
-      footer={
-        <>
-          <button className="btn-secondary" onClick={onClose}>Close</button>
-          <button className="btn-primary">Open account</button>
-        </>
-      }
-    >
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Avatar name={c.name} className="h-12 w-12 text-sm" />
-          <div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={c.status} />
-              <span className="text-sm text-ink-500">{c.region}</span>
-            </div>
-            <p className="mt-1 text-sm text-ink-600">Managed by {c.csm}</p>
-          </div>
-          <div className="ml-auto text-right">
-            <p className="text-xs font-medium text-ink-500">Compliance</p>
-            <p className={`text-2xl font-bold tabular-nums ${c.complianceScore >= 90 ? 'text-emerald-600' : c.complianceScore >= 80 ? 'text-blue-600' : c.complianceScore >= 70 ? 'text-orange-600' : 'text-rose-600'}`}>
-              {c.complianceScore}%
-            </p>
-          </div>
-        </div>
-
-        {/* Key facts */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-xl border border-slate-200 p-3">
-              <p className="text-xs font-medium text-ink-500">{s.label}</p>
-              <p className="mt-0.5 font-semibold text-ink-900">{s.value}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Instances */}
-        <section>
-          <div className="mb-2 flex items-center gap-2">
-            <Server className="h-4 w-4 text-ink-400" />
-            <h4 className="text-sm font-semibold text-ink-900">Instances ({custInstances.length})</h4>
-          </div>
-          {custInstances.length === 0 ? (
-            <p className="text-sm text-ink-400">No deployed instances.</p>
-          ) : (
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-              {custInstances.map((i) => (
-                <div key={i.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate font-mono text-sm text-ink-900">{i.name}</p>
-                    <p className="text-xs text-ink-500">{i.environment} · {i.region} · {i.version}</p>
-                  </div>
-                  <StatusBadge status={i.status} />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Models */}
-        <section>
-          <div className="mb-2 flex items-center gap-2">
-            <Bot className="h-4 w-4 text-ink-400" />
-            <h4 className="text-sm font-semibold text-ink-900">Governed models ({custModels.length})</h4>
-          </div>
-          {custModels.length === 0 ? (
-            <p className="text-sm text-ink-400">No models under governance.</p>
-          ) : (
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-              {custModels.map((m) => (
-                <div key={m.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-ink-900">{m.name}</p>
-                    <p className="text-xs text-ink-500">{m.provider} · {m.type} · {fmtCompact(m.requests)} req</p>
-                  </div>
-                  <Badge tone={m.risk === 'High' ? 'red' : m.risk === 'Medium' ? 'orange' : 'green'}>{m.risk} risk</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </Modal>
-  )
-}

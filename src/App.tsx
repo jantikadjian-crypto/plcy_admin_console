@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import FleetOverview from './pages/FleetOverview'
 import Customers from './pages/Customers'
+import CustomerDetail from './pages/CustomerDetail'
 import Instances from './pages/Instances'
 import Releases from './pages/Releases'
 import Bundles from './pages/Bundles'
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/fleet" element={<FleetOverview />} />
         <Route path="/customers" element={<Customers />} />
+        <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/instances" element={<Instances />} />
         <Route path="/releases" element={<Releases />} />
         <Route path="/bundles" element={<Bundles />} />

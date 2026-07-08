@@ -88,7 +88,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
 
   const index = useMemo<Result[]>(
     () => [
-      ...customers.map((c) => ({ kind: 'Customer', icon: Users, label: c.name, sub: c.domain, to: '/customers', customer: c.name })),
+      ...customers.map((c) => ({ kind: 'Customer', icon: Users, label: c.name, sub: c.domain, to: `/customers/${c.id}`, customer: c.name })),
       ...models.map((m) => ({ kind: 'Model', icon: Bot, label: m.name, sub: `${m.provider} · ${m.customer}`, to: '/models' })),
       ...policyPacks.map((p) => ({ kind: 'Policy Pack', icon: Package, label: p.name, sub: p.category, to: '/policy-packs' })),
       ...instances.map((i) => ({ kind: 'Instance', icon: Server, label: i.name, sub: i.customer, to: '/instances' })),
