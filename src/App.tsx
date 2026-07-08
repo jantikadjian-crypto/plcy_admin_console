@@ -16,6 +16,7 @@ import DSAR from './pages/DSAR'
 import PrivilegedAccess from './pages/PrivilegedAccess'
 import Notifications from './pages/Notifications'
 import Provisioning from './pages/Provisioning'
+import BulkOps from './pages/BulkOps'
 import Backups from './pages/Backups'
 import SupplyChain from './pages/SupplyChain'
 import Models from './pages/Models'
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/privileged-access" element={<PrivilegedAccess />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/provisioning" element={<Provisioning />} />
+        <Route path="/bulk-ops" element={<BulkOps />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/supply-chain" element={<SupplyChain />} />
         <Route path="/models" element={<Models />} />

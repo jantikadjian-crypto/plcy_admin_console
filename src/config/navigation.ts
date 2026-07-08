@@ -33,6 +33,7 @@ import {
   PackageCheck,
   Route,
   BellRing,
+  Layers,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -66,6 +67,7 @@ export const navGroups: NavGroup[] = [
     title: 'Fleet',
     items: [
       { label: 'Provisioning', to: '/provisioning', icon: ServerCog },
+      { label: 'Bulk Operations', to: '/bulk-ops', icon: Layers },
       { label: 'Releases', to: '/releases', icon: Rocket },
       { label: 'Update Bundles', to: '/bundles', icon: Boxes },
       { label: 'Cluster Health', to: '/clusters', icon: Cpu },
