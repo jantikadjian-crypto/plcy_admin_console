@@ -82,6 +82,7 @@ export const navGroups: NavGroup[] = [
     title: 'Sovereignty',
     items: [
       { label: 'Regions', to: '/regions', icon: Globe },
+      { label: 'Residency Controls', to: '/residency', icon: ShieldCheck },
       { label: 'Data Transfers', to: '/transfers', icon: ArrowLeftRight },
       { label: 'Sub-processors', to: '/subprocessors', icon: Network },
       { label: 'Model Routing', to: '/routing', icon: Route },

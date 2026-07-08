@@ -11,6 +11,7 @@ import Clusters from './pages/Clusters'
 import ClusterDetail from './pages/ClusterDetail'
 import Licensing from './pages/Licensing'
 import Regions from './pages/Regions'
+import Residency from './pages/Residency'
 import Routing from './pages/Routing'
 import Transfers from './pages/Transfers'
 import Subprocessors from './pages/Subprocessors'
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/clusters/:id" element={<ClusterDetail />} />
         <Route path="/licensing" element={<Licensing />} />
         <Route path="/regions" element={<Regions />} />
+        <Route path="/residency" element={<Residency />} />
         <Route path="/routing" element={<Routing />} />
         <Route path="/transfers" element={<Transfers />} />
         <Route path="/subprocessors" element={<Subprocessors />} />
