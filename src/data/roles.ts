@@ -115,7 +115,7 @@ export interface AdminUser {
 }
 
 export const admins: AdminUser[] = [
-  { name: 'Jack Reed', email: 'jack@plcy.app', roleId: EAccessRole.Superuser, mfa: true, lastActive: '2 min ago', status: 'Active' },
+  { name: 'Jack Antikadjian', email: 'jack@plcy.app', roleId: EAccessRole.Superuser, mfa: true, lastActive: '2 min ago', status: 'Active' },
   { name: 'Dana Cole', email: 'dana.cole@plcy.app', roleId: EAccessRole.CSAdmin, mfa: true, lastActive: '18 min ago', status: 'Active' },
   { name: 'Priya Nair', email: 'priya.nair@plcy.app', roleId: EAccessRole.CSUser, mfa: true, lastActive: '3 hours ago', status: 'Active' },
   { name: 'Nora Fields', email: 'nora.fields@plcy.app', roleId: EAccessRole.Billing, mfa: true, lastActive: '40 min ago', status: 'Active' },
