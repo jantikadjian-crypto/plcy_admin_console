@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import { CustomerScopeProvider } from '@/context/CustomerScope'
 import { CustomersProvider } from '@/context/Customers'
+import { EmployeesProvider } from '@/context/Employees'
 import { SessionProvider } from '@/context/Session'
 
 /** Reset scroll to the top of the page on every route change. */
@@ -21,6 +22,7 @@ export default function Layout() {
   return (
     <SessionProvider>
     <CustomersProvider>
+    <EmployeesProvider>
     <CustomerScopeProvider>
       <ScrollToTop />
       <div className="flex min-h-screen bg-slate-50">
@@ -35,6 +37,7 @@ export default function Layout() {
         </div>
       </div>
     </CustomerScopeProvider>
+    </EmployeesProvider>
     </CustomersProvider>
     </SessionProvider>
   )

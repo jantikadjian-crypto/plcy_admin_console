@@ -36,6 +36,7 @@ import {
   Layers,
   Gauge,
   Receipt,
+  UserCog,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -118,6 +119,7 @@ export const navGroups: NavGroup[] = [
   {
     title: 'Platform',
     items: [
+      { label: 'Team', to: '/team', icon: UserCog },
       { label: 'Audit Log', to: '/audit-log', icon: ScrollText },
       { label: 'Admin Security', to: '/admin-security', icon: Lock },
       { label: 'Privileged Access', to: '/privileged-access', icon: Fingerprint },
