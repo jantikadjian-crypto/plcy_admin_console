@@ -34,6 +34,8 @@ import {
   Route,
   BellRing,
   Layers,
+  Gauge,
+  Receipt,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -61,6 +63,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Customers', to: '/customers', icon: Users },
       { label: 'Instances', to: '/instances', icon: Server },
+      { label: 'Billing & Usage', to: '/billing', icon: Receipt },
     ],
   },
   {
@@ -107,6 +110,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Observability', to: '/observability', icon: Activity },
       { label: 'Compliance Reporting', to: '/compliance', icon: FileBarChart },
       { label: 'Incident Management', to: '/incidents', icon: AlertOctagon },
+      { label: 'SLA & Maintenance', to: '/sla', icon: Gauge },
       { label: 'Risk Assessment', to: '/risk', icon: TriangleAlert },
     ],
   },
