@@ -26,6 +26,7 @@ import Sla from './pages/Sla'
 import Billing from './pages/Billing'
 import Backups from './pages/Backups'
 import SupplyChain from './pages/SupplyChain'
+import Registry from './pages/Registry'
 import Models from './pages/Models'
 import ModelRegistry from './pages/ModelRegistry'
 import DataClassification from './pages/DataClassification'
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="/billing" element={<Billing />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/supply-chain" element={<SupplyChain />} />
+        <Route path="/registry" element={<Registry />} />
         <Route path="/models" element={<Models />} />
         <Route path="/model-registry" element={<ModelRegistry />} />
         <Route path="/data-classification" element={<DataClassification />} />
