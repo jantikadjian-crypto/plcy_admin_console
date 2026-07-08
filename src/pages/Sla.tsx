@@ -79,12 +79,27 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/** Deterministic breach ledger for a customer's accrued credits. */
+function breachLedger(t: SlaTarget): { date: string; duration: string; credit: number }[] {
+  if (t.breachesMtd === 0) return []
+  const dates = ['2026-07-02', '2026-07-05', '2026-07-06', '2026-07-07']
+  const durations = ['1 h 12 m', '24 m', '3 h 40 m', '52 m']
+  const per = Math.round(t.creditsOwed / t.breachesMtd)
+  return Array.from({ length: t.breachesMtd }, (_, i) => ({
+    date: dates[i % dates.length],
+    duration: durations[i % durations.length],
+    credit: i === t.breachesMtd - 1 ? t.creditsOwed - per * (t.breachesMtd - 1) : per,
+  }))
+}
+
 export default function Sla() {
   const { can, logAction } = useSession()
   const { scope, isAll } = useCustomerScope()
 
   const [windows, setWindows] = useState<MaintenanceWindow[]>(maintenanceWindows)
   const [open, setOpen] = useState(false)
+  const [detailCustomer, setDetailCustomer] = useState<SlaTarget | null>(null)
+  const [detailWindow, setDetailWindow] = useState<MaintenanceWindow | null>(null)
   const counter = useRef(0)
 
   const canNotify = can('settings.modify')
@@ -207,12 +222,12 @@ export default function Sla() {
 
       {/* SLA attainment */}
       <Card className="mt-6">
-        <CardTitle title="SLA Attainment" subtitle="Uptime vs. contractual target, month-to-date" />
+        <CardTitle title="SLA Attainment" subtitle="Uptime vs. contractual target, month-to-date · click a customer to drill down" />
         <Table
           columns={['Customer', 'Tier', 'Target', 'Attainment', 'Response / Restore', 'Breaches', 'Credits', 'Status']}
         >
           {slaRows.map((t: SlaTarget) => (
-            <Tr key={t.customer}>
+            <Tr key={t.customer} onClick={() => setDetailCustomer(t)}>
               <Td className="font-semibold text-ink-900">{t.customer}</Td>
               <Td>
                 <Badge tone={tierTone[t.tier]}>{t.tier}</Badge>
@@ -243,12 +258,12 @@ export default function Sla() {
 
       {/* Maintenance windows */}
       <Card className="mt-6">
-        <CardTitle title="Maintenance Windows" subtitle="Planned changes across the fleet" />
+        <CardTitle title="Maintenance Windows" subtitle="Planned changes across the fleet · click a window for details" />
         <Table
           columns={['Window', 'Customer', 'When', 'Type', 'Impact', 'Notice', 'Notified', 'Status']}
         >
           {windowRows.map((w) => (
-            <Tr key={w.id}>
+            <Tr key={w.id} onClick={() => setDetailWindow(w)}>
               <Td>
                 <div className="font-semibold text-ink-900">{w.title}</div>
                 <div className="font-mono text-[11px] text-ink-400">{w.region}</div>
@@ -273,7 +288,10 @@ export default function Sla() {
               <Td className="whitespace-nowrap text-ink-700">{w.noticeDays}d</Td>
               <Td>
                 <button
-                  onClick={() => toggleNotified(w.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleNotified(w.id)
+                  }}
                   disabled={!canNotify}
                   aria-pressed={w.notified}
                   title={canNotify ? 'Toggle customer notification' : 'Your role does not permit this action'}
@@ -387,6 +405,143 @@ export default function Sla() {
           </Field>
         </div>
       </Modal>
+
+      {/* SLA customer drill-down */}
+      {detailCustomer && (
+        <Modal
+          open
+          onClose={() => setDetailCustomer(null)}
+          title={detailCustomer.customer}
+          subtitle={`${detailCustomer.tier} tier · ${detailCustomer.region}`}
+          headerRight={<Badge tone={slaStatusTone[detailCustomer.status]} dot>{detailCustomer.status}</Badge>}
+          footer={<button className="btn-secondary" onClick={() => setDetailCustomer(null)}>Close</button>}
+        >
+          <div className="space-y-5">
+            {/* Uptime */}
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <span className="text-sm font-medium text-ink-700">Uptime, month-to-date</span>
+                <span className="font-mono text-sm">
+                  <span className="font-bold text-ink-900">{fmtUptime(detailCustomer.uptimeMtd)}</span>
+                  <span className="mx-1.5 text-ink-400">/ target</span>
+                  <span className="text-ink-600">{fmtUptime(detailCustomer.uptimeTarget)}</span>
+                </span>
+              </div>
+              <Progress value={attainmentBar(detailCustomer.uptimeTarget, detailCustomer.uptimeMtd)} tone={progressTone[detailCustomer.status]} />
+            </div>
+
+            {/* Commitments */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { k: 'Response', v: detailCustomer.responseTarget },
+                { k: 'Restore', v: detailCustomer.restoreTarget },
+                { k: 'Breaches (MTD)', v: String(detailCustomer.breachesMtd) },
+              ].map((m) => (
+                <div key={m.k} className="rounded-xl border border-slate-200 p-3">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">{m.k}</p>
+                  <p className="mt-0.5 text-sm font-semibold text-ink-900">{m.v}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Credit ledger */}
+            <div>
+              <p className="mb-2 text-sm font-semibold text-ink-900">Service credit ledger</p>
+              {detailCustomer.breachesMtd === 0 ? (
+                <p className="rounded-xl border border-slate-200 px-4 py-6 text-center text-sm text-ink-400">
+                  No SLA breaches this month — no credits owed.
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  {breachLedger(detailCustomer).map((e, i) => (
+                    <div key={i} className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 last:border-0">
+                      <div>
+                        <p className="font-mono text-xs text-ink-700">{e.date}</p>
+                        <p className="text-xs text-ink-500">Downtime {e.duration}</p>
+                      </div>
+                      <span className="font-mono text-sm text-rose-600">${e.credit.toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between bg-slate-50 px-4 py-2.5">
+                    <span className="text-sm font-semibold text-ink-900">Credits owed</span>
+                    <span className="font-mono text-sm font-bold text-rose-600">${detailCustomer.creditsOwed.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Maintenance windows for this customer */}
+            <div>
+              <p className="mb-2 text-sm font-semibold text-ink-900">Maintenance windows</p>
+              {(() => {
+                const list = windows.filter((w) => w.customer === detailCustomer.customer || w.customer === 'All')
+                return list.length === 0 ? (
+                  <p className="rounded-xl border border-slate-200 px-4 py-6 text-center text-sm text-ink-400">None scheduled.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-slate-200">
+                    {list.map((w) => (
+                      <button
+                        key={w.id}
+                        onClick={() => { setDetailCustomer(null); setDetailWindow(w) }}
+                        className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-slate-50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-ink-800">{w.title}</p>
+                          <p className="font-mono text-xs text-ink-500">{w.start}</p>
+                        </div>
+                        <Badge tone={windowStatusTone[w.status]} dot>{w.status}</Badge>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Maintenance window drill-down */}
+      {detailWindow && (
+        <Modal
+          open
+          onClose={() => setDetailWindow(null)}
+          title={detailWindow.title}
+          subtitle={`${detailWindow.customer === 'All' ? 'Fleet-wide' : detailWindow.customer} · ${detailWindow.region}`}
+          headerRight={<Badge tone={windowStatusTone[detailWindow.status]} dot>{detailWindow.status}</Badge>}
+          footer={<button className="btn-secondary" onClick={() => setDetailWindow(null)}>Close</button>}
+        >
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[
+                { k: 'When', v: detailWindow.start },
+                { k: 'Duration', v: detailWindow.duration },
+                { k: 'Type', v: detailWindow.type },
+                { k: 'Impact', v: detailWindow.impact },
+                { k: 'Notice', v: `${detailWindow.noticeDays} days` },
+                { k: 'Customers notified', v: detailWindow.notified ? 'Yes' : 'No' },
+              ].map((m) => (
+                <div key={m.k} className="rounded-xl border border-slate-200 p-3">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">{m.k}</p>
+                  <p className="mt-0.5 text-sm font-semibold text-ink-900">{m.v}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-ink-600">
+              <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
+              <span>
+                {detailWindow.impact === 'No downtime'
+                  ? 'A rolling change with no expected downtime.'
+                  : detailWindow.impact === 'Read-only'
+                    ? 'The environment is read-only for the duration of the window.'
+                    : 'A brief interruption is expected during the window.'}
+                {' '}
+                {detailWindow.customer === 'All' ? 'Applies fleet-wide in ' : 'Applies to '}
+                {detailWindow.customer === 'All' ? detailWindow.region : detailWindow.customer}.
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }

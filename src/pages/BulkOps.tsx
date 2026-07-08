@@ -16,9 +16,10 @@ import {
   Undo2,
   Lock,
   ShieldCheck,
+  ChevronRight,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Progress } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Progress, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
@@ -157,6 +158,34 @@ const runStateTone: Record<RunState, 'slate' | 'blue' | 'green' | 'red'> = {
   failed: 'red',
 }
 
+type NodeState = 'done' | 'running' | 'failed' | 'queued'
+const nodeDot: Record<NodeState, string> = {
+  done: 'bg-emerald-500',
+  running: 'bg-blue-500 animate-pulse',
+  failed: 'bg-rose-500',
+  queued: 'bg-slate-300',
+}
+
+/** Derive per-node status from a target's overall state + progress. */
+function nodeStates(t: RunTarget, count: number): NodeState[] {
+  const done = t.state === 'done' || t.state === 'failed' ? count : t.state === 'queued' ? 0 : Math.floor((t.progress / 100) * count)
+  return Array.from({ length: count }, (_, i): NodeState => {
+    if (t.state === 'failed' && i === count - 1) return 'failed'
+    if (i < done) return 'done'
+    if (t.state === 'running' && i === done) return 'running'
+    return 'queued'
+  })
+}
+
+/** Synthesized execution log for a target. */
+function logLines(t: RunTarget, verb: string): string[] {
+  const base = [`Connecting to ${t.customer} control plane…`, `${verb} started`]
+  if (t.state === 'queued') return ['Queued — awaiting a rollout slot']
+  if (t.state === 'running') return [...base, `Draining node ${Math.max(1, Math.floor(t.progress / 20))}…`]
+  if (t.state === 'done') return [...base, 'All nodes healthy', `${verb} complete`]
+  return [...base, 'Node health check failed — bundle signature unverified', 'Rollout halted on this target']
+}
+
 export default function BulkOps() {
   const { can, logAction } = useSession()
   const { scope, isAll } = useCustomerScope()
@@ -173,6 +202,7 @@ export default function BulkOps() {
   const [guardrail, setGuardrail] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [run, setRun] = useState<Run | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
 
   const eligible = useMemo(() => scoped.filter((d) => action.eligible(d)), [scoped, action])
 
@@ -363,7 +393,14 @@ export default function BulkOps() {
 
           <div className="space-y-2">
             {run.targets.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+              <div
+                key={t.id}
+                onClick={() => setDetailId(t.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && setDetailId(t.id)}
+                className="group flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 transition-colors hover:border-brand-300 hover:bg-slate-50/60"
+              >
                 <div className="w-40 shrink-0 truncate text-sm font-medium text-ink-900">{t.customer}</div>
                 <div className="flex-1">
                   <Progress
@@ -371,7 +408,7 @@ export default function BulkOps() {
                     tone={t.state === 'failed' ? 'red' : t.state === 'done' ? 'green' : 'blue'}
                   />
                 </div>
-                <div className="w-24 shrink-0 text-right">
+                <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
                   {t.state === 'done' ? (
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
                       <CheckCircle2 className="h-3.5 w-3.5" /> Done
@@ -383,12 +420,76 @@ export default function BulkOps() {
                   ) : (
                     <Badge tone={runStateTone[t.state]}>{t.state === 'running' ? `${Math.round(t.progress)}%` : 'Queued'}</Badge>
                   )}
+                  <ChevronRight className="h-4 w-4 text-ink-300 transition-colors group-hover:text-brand-500" />
                 </div>
               </div>
             ))}
           </div>
         </Card>
       )}
+
+      {/* Per-target drill-down */}
+      {run && detailId && (() => {
+        const t = run.targets.find((x) => x.id === detailId)
+        if (!t) return null
+        const dep = deployments.find((d) => d.id === t.id)
+        const nodeCount = dep?.nodes || 4
+        const nodes = nodeStates(t, nodeCount)
+        const doneNodes = nodes.filter((n) => n === 'done').length
+        return (
+          <Modal
+            open
+            onClose={() => setDetailId(null)}
+            title={t.customer}
+            subtitle={`${run.verb} · ${dep?.regionCode ?? '—'}`}
+            headerRight={
+              <Badge tone={runStateTone[t.state]} dot>
+                {t.state === 'running' ? `${Math.round(t.progress)}%` : t.state[0].toUpperCase() + t.state.slice(1)}
+              </Badge>
+            }
+            footer={<button className="btn-secondary" onClick={() => setDetailId(null)}>Close</button>}
+          >
+            <div className="space-y-5">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between text-sm">
+                  <span className="font-medium text-ink-700">Overall</span>
+                  <span className="font-semibold text-ink-900">{Math.round(t.progress)}%</span>
+                </div>
+                <Progress value={t.progress} tone={t.state === 'failed' ? 'red' : t.state === 'done' ? 'green' : 'blue'} />
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <p className="text-sm font-semibold text-ink-900">Nodes</p>
+                  <span className="text-xs text-ink-500">{doneNodes}/{nodeCount} updated</span>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {nodes.map((n, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                      <span className="font-mono text-xs text-ink-700">{dep?.regionCode ?? 'node'}-{String(i + 1).padStart(2, '0')}</span>
+                      <span className="flex items-center gap-1.5 text-xs capitalize text-ink-600">
+                        <span className={`h-2 w-2 rounded-full ${nodeDot[n]}`} />
+                        {n}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-semibold text-ink-900">Log</p>
+                <div className="space-y-1 rounded-xl bg-ink-900/95 p-3 font-mono text-xs text-slate-200">
+                  {logLines(t, run.verb).map((l, i) => (
+                    <div key={i} className={l.includes('failed') || l.includes('halted') ? 'text-rose-300' : ''}>
+                      <span className="text-slate-500">$ </span>{l}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Targets */}
