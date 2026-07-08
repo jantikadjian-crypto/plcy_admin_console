@@ -191,8 +191,23 @@ export function Table({
   )
 }
 
-export function Tr({ children }: { children: ReactNode }) {
-  return <tr className="transition-colors hover:bg-slate-50/70">{children}</tr>
+export function Tr({
+  children,
+  onClick,
+  className,
+}: {
+  children: ReactNode
+  onClick?: () => void
+  className?: string
+}) {
+  return (
+    <tr
+      onClick={onClick}
+      className={clsx('transition-colors hover:bg-slate-50/70', onClick && 'cursor-pointer', className)}
+    >
+      {children}
+    </tr>
+  )
 }
 
 export function Td({ children, className }: { children: ReactNode; className?: string }) {
