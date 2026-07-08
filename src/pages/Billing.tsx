@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Receipt,
   FilePlus,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -17,6 +18,7 @@ import { useCreateIntent } from '@/hooks/useCreateIntent'
 import {
   customerBilling,
   billingByCustomer,
+  paymentByCustomer,
   invoices as seedInvoices,
   billingTotals,
 } from '@/data/billing'
@@ -258,6 +260,15 @@ export default function Billing() {
                   <Badge tone={statusToneMap[c.status]} dot>{c.status}</Badge>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
+                  {(() => {
+                    const pm = paymentByCustomer(c.customer).find((p) => p.isDefault)
+                    return pm ? (
+                      <span className="hidden items-center gap-1 text-xs text-ink-500 sm:inline-flex">
+                        <CreditCard className="h-3.5 w-3.5" />
+                        {pm.last4 ? `•••• ${pm.last4}` : pm.type}
+                      </span>
+                    ) : null
+                  })()}
                   {c.overage > 0 && (
                     <span className="font-medium text-orange-600">+{money(c.overage)} overage</span>
                   )}

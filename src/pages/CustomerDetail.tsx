@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -22,6 +22,12 @@ import {
   Pencil,
   Save,
   X,
+  CreditCard,
+  Landmark,
+  Banknote,
+  FileText,
+  Plus,
+  Star,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -36,12 +42,16 @@ import {
   Progress,
   Avatar,
   EmptyState,
+  Modal,
 } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useCustomers } from '@/context/Customers'
 import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum } from '@/data/mock'
 import type { Customer } from '@/data/mock'
+import { billingByCustomer, invoices, paymentByCustomer } from '@/data/billing'
+import type { PaymentMethod, PaymentType, PaymentStatus } from '@/data/billing'
 
 const PLANS: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
 const STATUSES: Customer['status'][] = ['Active', 'Trial', 'Suspended', 'Churned']
@@ -49,7 +59,6 @@ const REGIONS = ['US-East', 'US-West', 'EU-Central', 'EU-West', 'APAC']
 const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
 import { deploymentByCustomer } from '@/data/fleet'
 import { slaByCustomer, maintenanceWindows } from '@/data/sla'
-import { billingByCustomer, invoices } from '@/data/billing'
 import { transfers, dsarRequests, accessRequests } from '@/data/privacy'
 
 const planTone: Record<Customer['plan'], 'purple' | 'blue' | 'green' | 'slate'> = {
@@ -109,6 +118,8 @@ export default function CustomerDetail() {
   const [tab, setTab] = useState<Tab>('overview')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Customer>>({})
+  const [addedPayments, setAddedPayments] = useState<PaymentMethod[]>([])
+  const [payOpen, setPayOpen] = useState(false)
 
   const customer = get(id ?? '')
 
@@ -449,6 +460,33 @@ export default function CustomerDetail() {
         {/* -------------------- Billing -------------------- */}
         {tab === 'billing' && (
           <div className="space-y-6">
+            <Card>
+              <CardTitle
+                title="Payment Methods"
+                subtitle="How this customer pays — masked to the last 4"
+                action={
+                  canEdit ? (
+                    <GatedButton cap="license.manage" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => setPayOpen(true)}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Add card
+                    </GatedButton>
+                  ) : undefined
+                }
+              />
+              {(() => {
+                const methods = [...paymentByCustomer(name), ...addedPayments]
+                return methods.length === 0 ? (
+                  <EmptyState icon={CreditCard} title="No payment method" description="No payment method on file for this customer." />
+                ) : (
+                  <div className="space-y-2">
+                    {methods.map((m) => (
+                      <PaymentRow key={m.id} m={m} />
+                    ))}
+                  </div>
+                )
+              })()}
+            </Card>
+
             {billing && (
               <Card>
                 <CardTitle title="Usage this cycle" subtitle="Metered consumption against plan-included volumes" action={billing.overage > 0 ? <Badge tone="orange">+{money(billing.overage)} overage</Badge> : undefined} />
@@ -624,7 +662,129 @@ export default function CustomerDetail() {
           </div>
         )}
       </div>
+
+      <AddCardModal
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        onAdd={(pm) => {
+          setAddedPayments((prev) => [...prev, pm])
+          logAction({ action: 'payment.method.add', target: `${pm.brand} •••• ${pm.last4} · ${name}`, category: 'billing' })
+          setPayOpen(false)
+        }}
+      />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Payment methods                                                     */
+/* ------------------------------------------------------------------ */
+const payIcon: Record<PaymentType, LucideIcon> = {
+  Card: CreditCard,
+  Bank: Landmark,
+  Wire: Banknote,
+  Invoice: FileText,
+}
+const payStatusTone: Record<PaymentStatus, 'green' | 'orange' | 'red'> = {
+  Active: 'green',
+  Expiring: 'orange',
+  Expired: 'red',
+}
+
+function PaymentRow({ m }: { m: PaymentMethod }) {
+  const Icon = payIcon[m.type]
+  const masked = m.last4 ? `•••• ${m.last4}` : m.type
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-ink-600">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-ink-900">{m.brand}</p>
+          {m.last4 && <span className="font-mono text-sm text-ink-600">{masked}</span>}
+          {m.isDefault && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">
+              <Star className="h-3 w-3" /> Default
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-ink-500">
+          {m.exp ? `Expires ${m.exp}` : m.type}
+          {m.detail ? ` · ${m.detail}` : ''}
+        </p>
+      </div>
+      <Badge tone={payStatusTone[m.status]} dot>{m.status}</Badge>
+    </div>
+  )
+}
+
+const CARD_BRANDS = ['Visa', 'Mastercard', 'Amex', 'Discover']
+
+function AddCardModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (pm: PaymentMethod) => void }) {
+  const [brand, setBrand] = useState('Visa')
+  const [last4, setLast4] = useState('')
+  const [exp, setExp] = useState('')
+  const [makeDefault, setMakeDefault] = useState(false)
+  const counter = useRef(0)
+
+  const valid = /^\d{4}$/.test(last4) && /^\d{2}\/\d{2}$/.test(exp)
+
+  const submit = () => {
+    if (!valid) return
+    counter.current += 1
+    onAdd({
+      id: `pm_new_${counter.current}`,
+      type: 'Card',
+      brand,
+      last4,
+      exp,
+      isDefault: makeDefault,
+      status: 'Active',
+    })
+    setBrand('Visa'); setLast4(''); setExp(''); setMakeDefault(false)
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add payment card"
+      subtitle="Only the last 4 digits are stored"
+      maxWidth="max-w-md"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={!valid}>
+            <Plus className="h-4 w-4" />
+            Add card
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">Card network</label>
+          <select className="input" value={brand} onChange={(e) => setBrand(e.target.value)}>
+            {CARD_BRANDS.map((b) => <option key={b}>{b}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">Last 4 digits</label>
+            <input className="input" inputMode="numeric" maxLength={4} value={last4} onChange={(e) => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="4242" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">Expiry (MM/YY)</label>
+            <input className="input" value={exp} onChange={(e) => setExp(e.target.value)} placeholder="08/27" />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-ink-700">
+          <input type="checkbox" checked={makeDefault} onChange={(e) => setMakeDefault(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+          Set as default payment method
+        </label>
+      </div>
+    </Modal>
   )
 }
 

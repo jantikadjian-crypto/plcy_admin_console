@@ -122,6 +122,64 @@ export const customerBilling: CustomerBilling[] = [
 
 export const billingByCustomer = (customer: string) => customerBilling.find((b) => b.customer === customer)
 
+/* ------------------------------------------------------------------ */
+/* Payment methods (masked — last 4 only)                              */
+/* ------------------------------------------------------------------ */
+export type PaymentType = 'Card' | 'Bank' | 'Wire' | 'Invoice'
+export type PaymentStatus = 'Active' | 'Expiring' | 'Expired'
+
+export interface PaymentMethod {
+  id: string
+  type: PaymentType
+  /** Card network (Visa/Mastercard/Amex) or bank name. */
+  brand: string
+  /** Last 4 of the card or account number. */
+  last4?: string
+  /** Card expiry MM/YY. */
+  exp?: string
+  /** Bank account type / billing terms. */
+  detail?: string
+  isDefault: boolean
+  status: PaymentStatus
+}
+
+/** Masked payment methods on file, keyed by customer. */
+export const paymentMethods: Record<string, PaymentMethod[]> = {
+  'Meridian Bank': [
+    { id: 'pm_mrd_1', type: 'Bank', brand: 'JPMorgan Chase', last4: '6521', detail: 'ACH · Checking', isDefault: true, status: 'Active' },
+    { id: 'pm_mrd_2', type: 'Card', brand: 'Visa', last4: '4242', exp: '08/27', detail: 'Backup', isDefault: false, status: 'Active' },
+  ],
+  'Helix Health': [
+    { id: 'pm_hlx_1', type: 'Wire', brand: 'Wire transfer', detail: 'Net 30 · annual', isDefault: true, status: 'Active' },
+  ],
+  'Vertex Capital': [
+    { id: 'pm_vtx_1', type: 'Bank', brand: 'Citibank', last4: '9014', detail: 'ACH · Checking', isDefault: true, status: 'Active' },
+  ],
+  'Pinecrest Insurance': [
+    { id: 'pm_pin_1', type: 'Card', brand: 'Mastercard', last4: '5309', exp: '03/28', isDefault: true, status: 'Active' },
+  ],
+  'Northwind Retail': [
+    { id: 'pm_nw_1', type: 'Card', brand: 'Visa', last4: '1188', exp: '07/26', isDefault: true, status: 'Expiring' },
+  ],
+  'Atlas Logistics': [
+    { id: 'pm_atl_1', type: 'Card', brand: 'Amex', last4: '2003', exp: '11/27', isDefault: true, status: 'Active' },
+  ],
+  'Lumen Media': [
+    { id: 'pm_lum_1', type: 'Card', brand: 'Visa', last4: '7788', exp: '05/28', isDefault: true, status: 'Active' },
+  ],
+  'Ferro Manufacturing': [
+    { id: 'pm_fer_1', type: 'Invoice', brand: 'Invoice', detail: 'Net 45 · PO required', isDefault: true, status: 'Active' },
+  ],
+  'Saffron Foods': [
+    { id: 'pm_saf_1', type: 'Card', brand: 'Visa', last4: '0002', exp: '09/26', detail: 'Trial', isDefault: true, status: 'Active' },
+  ],
+  'Orbit Telecom': [
+    { id: 'pm_orb_1', type: 'Card', brand: 'Mastercard', last4: '4417', exp: '06/26', isDefault: true, status: 'Expired' },
+  ],
+}
+
+export const paymentByCustomer = (customer: string): PaymentMethod[] => paymentMethods[customer] ?? []
+
 export type InvoiceStatus = 'Paid' | 'Open' | 'Past due' | 'Draft'
 
 export interface Invoice {
