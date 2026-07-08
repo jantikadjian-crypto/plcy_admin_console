@@ -22,6 +22,7 @@ export interface Customer {
   region: string
   csm: string
   since: string
+  notes?: string
 }
 
 export const customers: Customer[] = [

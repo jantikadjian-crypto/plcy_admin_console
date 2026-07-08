@@ -19,6 +19,9 @@ import {
   AlertOctagon,
   Building2,
   CheckCircle2,
+  Pencil,
+  Save,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -36,8 +39,14 @@ import {
 } from '@/components/ui'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
-import { customers, instances, models, incidents, fmtMoney, fmtCompact, fmtNum } from '@/data/mock'
+import { useCustomers } from '@/context/Customers'
+import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum } from '@/data/mock'
 import type { Customer } from '@/data/mock'
+
+const PLANS: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
+const STATUSES: Customer['status'][] = ['Active', 'Trial', 'Suspended', 'Churned']
+const REGIONS = ['US-East', 'US-West', 'EU-Central', 'EU-West', 'APAC']
+const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
 import { deploymentByCustomer } from '@/data/fleet'
 import { slaByCustomer, maintenanceWindows } from '@/data/sla'
 import { billingByCustomer, invoices } from '@/data/billing'
@@ -94,11 +103,14 @@ type Tab = 'overview' | 'deployment' | 'models' | 'sla' | 'billing' | 'complianc
 export default function CustomerDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { audit } = useSession()
+  const { audit, can, logAction } = useSession()
   const { setScope } = useCustomerScope()
+  const { get, update } = useCustomers()
   const [tab, setTab] = useState<Tab>('overview')
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<Partial<Customer>>({})
 
-  const customer = customers.find((c) => c.id === id)
+  const customer = get(id ?? '')
 
   if (!customer) {
     return (
@@ -138,6 +150,30 @@ export default function CustomerDetail() {
   const openIncidents = custIncidents.filter((i) => i.status !== 'Resolved').length
   const openDsar = custDsar.filter((d) => d.status !== 'Completed').length
 
+  const canEdit = can('customer.manage')
+  const setField = (patch: Partial<Customer>) => setDraft((d) => ({ ...d, ...patch }))
+  const startEdit = () => {
+    setDraft({
+      name: c.name,
+      domain: c.domain,
+      plan: c.plan,
+      status: c.status,
+      region: c.region,
+      csm: c.csm,
+      seats: c.seats,
+      mrr: c.mrr,
+      notes: c.notes ?? '',
+    })
+    setTab('overview')
+    setEditing(true)
+  }
+  const cancelEdit = () => setEditing(false)
+  const saveEdit = () => {
+    update(c.id, draft)
+    logAction({ action: 'customer.update', target: c.name, category: 'customer' })
+    setEditing(false)
+  }
+
   const tabs: { key: Tab; label: string; icon: LucideIcon; count?: number }[] = [
     { key: 'overview', label: 'Overview', icon: Gauge },
     { key: 'deployment', label: 'Deployment', icon: Server, count: custInstances.length },
@@ -170,10 +206,33 @@ export default function CustomerDetail() {
             </p>
           </div>
         </div>
-        <button className="btn-secondary self-start" onClick={() => { setScope(name); navigate('/instances') }}>
-          <Building2 className="h-4 w-4" />
-          Set as current customer
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {editing ? (
+            <>
+              <button className="btn-secondary" onClick={cancelEdit}>
+                <X className="h-4 w-4" />
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={saveEdit}>
+                <Save className="h-4 w-4" />
+                Save changes
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn-secondary" onClick={() => { setScope(name); navigate('/instances') }}>
+                <Building2 className="h-4 w-4" />
+                Set as current customer
+              </button>
+              {canEdit && (
+                <button className="btn-primary" onClick={startEdit}>
+                  <Pencil className="h-4 w-4" />
+                  Edit profile
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Stat row */}
@@ -213,6 +272,26 @@ export default function CustomerDetail() {
         {/* -------------------- Overview -------------------- */}
         {tab === 'overview' && (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card className="lg:col-span-2">
+              <CardTitle
+                title="Profile"
+                subtitle="Account record — editable"
+                action={
+                  !editing && canEdit ? (
+                    <button className="btn-ghost px-2 py-1 text-xs" onClick={startEdit}>
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                  ) : undefined
+                }
+              />
+              {editing ? (
+                <ProfileForm draft={draft} setField={setField} />
+              ) : (
+                <ProfileView c={c} />
+              )}
+            </Card>
+
             <Card>
               <CardTitle title="Deployment" subtitle="Single-tenant environment" />
               {dep ? (
@@ -567,6 +646,92 @@ function MiniStat({ icon: Icon, label, value, tone }: { icon: LucideIcon; label:
       <Icon className="h-5 w-5 text-ink-400" />
       <p className={`mt-2 text-2xl font-bold ${tone ?? 'text-ink-900'}`}>{value}</p>
       <p className="text-xs text-ink-500">{label}</p>
+    </div>
+  )
+}
+
+function ProfileView({ c }: { c: Customer }) {
+  const facts: { label: string; value: React.ReactNode }[] = [
+    { label: 'Domain', value: c.domain },
+    { label: 'Plan', value: c.plan },
+    { label: 'Status', value: c.status },
+    { label: 'Region', value: c.region },
+    { label: 'Assigned CSM', value: c.csm },
+    { label: 'Seats', value: fmtNum(c.seats) },
+    { label: 'MRR', value: fmtMoney(c.mrr) },
+    { label: 'Customer since', value: c.since },
+  ]
+  return (
+    <div className="space-y-4">
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {facts.map((f) => (
+          <Fact key={f.label} label={f.label} value={f.value} />
+        ))}
+      </dl>
+      <div>
+        <p className="text-xs font-medium text-ink-500">Notes</p>
+        <p className="mt-0.5 whitespace-pre-wrap text-sm text-ink-700">
+          {c.notes?.trim() ? c.notes : <span className="text-ink-400">No notes.</span>}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-ink-600">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function ProfileForm({ draft, setField }: { draft: Partial<Customer>; setField: (p: Partial<Customer>) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <EditField label="Organization name">
+        <input className="input" value={draft.name ?? ''} onChange={(e) => setField({ name: e.target.value })} />
+      </EditField>
+      <EditField label="Domain">
+        <input className="input" value={draft.domain ?? ''} onChange={(e) => setField({ domain: e.target.value })} />
+      </EditField>
+      <EditField label="Plan">
+        <select className="input" value={draft.plan} onChange={(e) => setField({ plan: e.target.value as Customer['plan'] })}>
+          {PLANS.map((p) => <option key={p}>{p}</option>)}
+        </select>
+      </EditField>
+      <EditField label="Status">
+        <select className="input" value={draft.status} onChange={(e) => setField({ status: e.target.value as Customer['status'] })}>
+          {STATUSES.map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </EditField>
+      <EditField label="Region">
+        <select className="input" value={draft.region} onChange={(e) => setField({ region: e.target.value })}>
+          {[...new Set([draft.region ?? '', ...REGIONS])].filter(Boolean).map((r) => <option key={r}>{r}</option>)}
+        </select>
+      </EditField>
+      <EditField label="Assigned CSM">
+        <select className="input" value={draft.csm} onChange={(e) => setField({ csm: e.target.value })}>
+          {[...new Set([draft.csm ?? '', ...CSMS])].filter(Boolean).map((m) => <option key={m}>{m}</option>)}
+        </select>
+      </EditField>
+      <EditField label="Seats">
+        <input type="number" min={0} className="input" value={draft.seats ?? 0} onChange={(e) => setField({ seats: Number(e.target.value) })} />
+      </EditField>
+      <EditField label="MRR (USD)">
+        <input type="number" min={0} step={500} className="input" value={draft.mrr ?? 0} onChange={(e) => setField({ mrr: Number(e.target.value) })} />
+      </EditField>
+      <div className="sm:col-span-2 lg:col-span-4">
+        <EditField label="Notes">
+          <textarea
+            className="input min-h-[80px]"
+            value={draft.notes ?? ''}
+            onChange={(e) => setField({ notes: e.target.value })}
+            placeholder="Account context, renewal notes, key contacts…"
+          />
+        </EditField>
+      </div>
     </div>
   )
 }

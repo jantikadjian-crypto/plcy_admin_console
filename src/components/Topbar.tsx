@@ -19,10 +19,11 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { flatNav } from '@/config/navigation'
-import { customers, models, policyPacks, instances } from '@/data/mock'
+import { models, policyPacks, instances } from '@/data/mock'
 import { recentAlerts } from '@/data/notifications'
 import type { AlertSeverity } from '@/data/notifications'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useCustomers } from '@/context/Customers'
 import { useSession } from '@/context/Session'
 import type { Capability } from '@/data/permissions'
 
@@ -62,6 +63,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { setScope } = useCustomerScope()
+  const { list: customers } = useCustomers()
   const { can } = useSession()
   const current = flatNav.find((n) => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)))
   const title = current?.label ?? 'Dashboard'
@@ -94,7 +96,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
       ...instances.map((i) => ({ kind: 'Instance', icon: Server, label: i.name, sub: i.customer, to: '/instances' })),
       ...flatNav.map((n) => ({ kind: 'Page', icon: LayoutDashboard, label: n.label, sub: 'Go to page', to: n.to })),
     ],
-    [],
+    [customers],
   )
 
   const query = q.trim().toLowerCase()

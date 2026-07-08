@@ -30,7 +30,8 @@ import {
 } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
-import { customers, fmtMoney } from '@/data/mock'
+import { useCustomers } from '@/context/Customers'
+import { fmtMoney } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 
 const tooltipStyle = {
@@ -66,7 +67,7 @@ const planOrder: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Tria
 export default function Customers() {
   const { logAction } = useSession()
   const navigate = useNavigate()
-  const [rows, setRows] = useState<Customer[]>(customers)
+  const { list: rows, add } = useCustomers()
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
   const [adding, setAdding] = useState(false)
@@ -204,7 +205,7 @@ export default function Customers() {
         onClose={() => setAdding(false)}
         onCreate={(c) => {
           logAction({ action: 'customer.create', target: c.name, category: 'customer' })
-          setRows((prev) => [c, ...prev])
+          add(c)
           setAdding(false)
           setQuery('')
           setPlan('All')
