@@ -24,6 +24,7 @@ import {
   Maximize2,
   Undo2,
   Terminal,
+  Lock,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, StatCard, Badge, Table, Tr, Td, Progress, EmptyState, Modal } from '@/components/ui'
@@ -33,7 +34,7 @@ import { deployments, regionByCode, releases } from '@/data/fleet'
 import type { Deployment } from '@/data/fleet'
 import { customers } from '@/data/mock'
 import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor, podsForWorkload, workloadLogs } from '@/data/clusters'
-import type { Workload, WorkloadStatus, HelmStatus, DriftStatus, PodStatus } from '@/data/clusters'
+import type { Workload, WorkloadStatus, HelmStatus, HelmRelease, DriftStatus, PodStatus } from '@/data/clusters'
 import {
   loadConfig,
   saveConfig,
@@ -75,14 +76,18 @@ export default function ClusterDetail() {
   const [workloads, setWorkloads] = useState<Workload[]>(() => (d ? workloadsFor(d) : []))
   const [detailName, setDetailName] = useState<string | null>(null)
   const [scaleName, setScaleName] = useState<string | null>(null)
+  const [helm, setHelm] = useState<HelmRelease[]>(() => (d ? helmFor(d) : []))
+  const [helmName, setHelmName] = useState<string | null>(null)
 
   useEffect(() => {
     if (d) {
       setConfig(loadConfig(d.id, d))
       setWorkloads(workloadsFor(d))
+      setHelm(helmFor(d))
     }
     setEditing(false)
     setDetailName(null)
+    setHelmName(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -145,6 +150,26 @@ export default function ClusterDetail() {
     logAction({ action: 'workload.rollback', target: `${w.name} → ${prev.version} · ${d.customer}`, category: 'operations' })
   }
   const canManageWorkloads = can('provision.manage')
+
+  // Helm apply / rollback (gated on provision.manage, audited)
+  const applyHelm = (name: string, values: string) => {
+    setHelm((prev) => prev.map((r) => {
+      if (r.name !== name) return r
+      const revision = r.revision + 1
+      return { ...r, values, revision, status: 'deployed', history: [{ revision, when: 'just now', note: 'Applied via console', values }, ...r.history] }
+    }))
+    logAction({ action: 'helm.apply', target: `${name} · ${d.customer}`, category: 'operations' })
+  }
+  const rollbackHelm = (name: string, toRevision: number) => {
+    setHelm((prev) => prev.map((r) => {
+      if (r.name !== name) return r
+      const target = r.history.find((h2) => h2.revision === toRevision)
+      if (!target) return r
+      const revision = r.revision + 1
+      return { ...r, values: target.values, revision, status: 'deployed', history: [{ revision, when: 'just now', note: `Rolled back to revision ${toRevision}`, values: target.values }, ...r.history] }
+    }))
+    logAction({ action: 'helm.rollback', target: `${name} → rev ${toRevision} · ${d.customer}`, category: 'operations' })
+  }
 
   const h = health(d)
   const region = regionByCode(d.regionCode)
@@ -243,7 +268,7 @@ export default function ClusterDetail() {
             onOpen={setDetailName}
           />
         )}
-        {tab === 'infra' && <InfraTab d={d} />}
+        {tab === 'infra' && <InfraTab d={d} helm={helm} onOpenHelm={setHelmName} />}
         {tab === 'addons' && <AddonsTab d={d} view={view} editing={editing} setField={setField} />}
         {tab === 'config' && <ConfigTab view={view} editing={editing} canEdit={canEdit} onEdit={startEdit} setField={setField} />}
       </div>
@@ -268,6 +293,20 @@ export default function ClusterDetail() {
         const w = workloads.find((x) => x.name === scaleName)
         if (!w) return null
         return <ScaleModal w={w} onClose={() => setScaleName(null)} onScale={(n) => scaleWorkload(w.name, n)} />
+      })()}
+
+      {helmName && (() => {
+        const r = helm.find((x) => x.name === helmName)
+        if (!r) return null
+        return (
+          <HelmDrawer
+            r={r}
+            canManage={canManageWorkloads}
+            onClose={() => setHelmName(null)}
+            onApply={(values) => applyHelm(r.name, values)}
+            onRollback={(rev) => rollbackHelm(r.name, rev)}
+          />
+        )
       })()}
     </>
   )
@@ -537,9 +576,8 @@ function ScaleModal({ w, onClose, onScale }: { w: Workload; onClose: () => void;
 /* ------------------------------------------------------------------ */
 /* Infrastructure (read-only)                                          */
 /* ------------------------------------------------------------------ */
-function InfraTab({ d }: { d: Deployment }) {
+function InfraTab({ d, helm, onOpenHelm }: { d: Deployment; helm: HelmRelease[]; onOpenHelm: (name: string) => void }) {
   const tf = terraformFor(d)
-  const helm = helmFor(d)
   return (
     <div className="space-y-5">
       {tf.drift === 'Drift detected' && (
@@ -567,10 +605,11 @@ function InfraTab({ d }: { d: Deployment }) {
         <div className="mb-2 flex items-center gap-2">
           <Package className="h-4 w-4 text-ink-400" />
           <h4 className="text-sm font-semibold text-ink-900">Helm releases</h4>
+          <span className="text-xs text-ink-400">· click to edit values / diff / roll back</span>
         </div>
         <Table columns={['Release', 'Chart', 'Chart ver.', 'App ver.', 'Rev', 'Namespace', 'Status']}>
           {helm.map((r) => (
-            <Tr key={r.name}>
+            <Tr key={r.name} onClick={() => onOpenHelm(r.name)}>
               <Td className="font-medium text-ink-900">{r.name}</Td>
               <Td className="font-mono text-xs text-ink-600">{r.chart}</Td>
               <Td className="font-mono text-xs text-ink-600">{r.chartVersion}</Td>
@@ -786,6 +825,134 @@ function ConfigTab({ view, editing, canEdit, onEdit, setField }: { view: Cluster
         </div>
       </Card>
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Helm release drawer (values / diff / history)                       */
+/* ------------------------------------------------------------------ */
+type DiffRow = { t: 'ctx' | 'add' | 'del'; s: string }
+function diffLines(live: string, desired: string): DiffRow[] {
+  const a = live.split('\n')
+  const b = desired.split('\n')
+  const max = Math.max(a.length, b.length)
+  const rows: DiffRow[] = []
+  for (let i = 0; i < max; i++) {
+    const l = a[i]
+    const r = b[i]
+    if (l === r) rows.push({ t: 'ctx', s: l ?? '' })
+    else {
+      if (l !== undefined) rows.push({ t: 'del', s: l })
+      if (r !== undefined) rows.push({ t: 'add', s: r })
+    }
+  }
+  return rows
+}
+
+type HelmTab = 'values' | 'diff' | 'history'
+function HelmDrawer({ r, canManage, onClose, onApply, onRollback }: {
+  r: HelmRelease
+  canManage: boolean
+  onClose: () => void
+  onApply: (values: string) => void
+  onRollback: (revision: number) => void
+}) {
+  const [tab, setTab] = useState<HelmTab>('values')
+  const [desired, setDesired] = useState(r.values)
+  const dirty = desired !== r.values
+  const diff = diffLines(r.values, desired)
+  const changes = diff.filter((d) => d.t !== 'ctx').length
+
+  const tabs: { key: HelmTab; label: string }[] = [
+    { key: 'values', label: 'Values' },
+    { key: 'diff', label: `Diff${changes ? ` · ${changes}` : ''}` },
+    { key: 'history', label: `History · ${r.history.length}` },
+  ]
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={<span className="font-mono text-lg">{r.name}</span>}
+      subtitle={`${r.chart} ${r.chartVersion} · ${r.namespace} · rev ${r.revision}`}
+      maxWidth="max-w-3xl"
+      headerRight={<Badge tone={helmStatusTone[r.status]} dot>{r.status}</Badge>}
+      footer={
+        <div className="flex w-full items-center justify-between">
+          <span className="text-xs text-ink-400">{dirty ? `${changes} line change(s) pending` : 'No pending changes'}</span>
+          <div className="flex items-center gap-2">
+            <button className="btn-ghost" onClick={onClose}>Close</button>
+            {canManage && dirty && <button className="btn-secondary" onClick={() => setDesired(r.values)}>Discard</button>}
+            {canManage && (
+              <button className="btn-primary disabled:opacity-50" onClick={() => onApply(desired)} disabled={!dirty}>
+                <Save className="h-4 w-4" />Apply (rev {r.revision + 1})
+              </button>
+            )}
+          </div>
+        </div>
+      }
+    >
+      <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-200">
+        {tabs.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-800'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'values' && (
+        <div>
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-400">Desired values (values.yaml)</label>
+          <textarea
+            className="input min-h-[320px] w-full font-mono text-xs leading-relaxed"
+            value={desired}
+            onChange={(e) => setDesired(e.target.value)}
+            readOnly={!canManage}
+            spellCheck={false}
+          />
+          {!canManage && <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-400"><Lock className="h-3 w-3" /> Your role can view values but not apply changes.</p>}
+        </div>
+      )}
+
+      {tab === 'diff' && (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs leading-relaxed">
+          {changes === 0 ? (
+            <p className="text-center text-ink-400">Live matches desired — no diff.</p>
+          ) : (
+            diff.map((row, i) => (
+              <div key={i} className={row.t === 'add' ? 'bg-emerald-50 text-emerald-700' : row.t === 'del' ? 'bg-rose-50 text-rose-700' : 'text-ink-500'}>
+                <span className="select-none pr-2 text-ink-300">{row.t === 'add' ? '+' : row.t === 'del' ? '-' : ' '}</span>
+                {row.s || ' '}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="space-y-2">
+          {r.history.map((rev) => {
+            const current = rev.revision === r.revision
+            return (
+              <div key={rev.revision} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${current ? 'border-brand-300 bg-brand-50/40' : 'border-slate-200'}`}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-ink-900">Revision {rev.revision}</span>
+                    {current && <Badge tone="blue" dot>current</Badge>}
+                  </div>
+                  <p className="truncate text-xs text-ink-500">{rev.note} · {rev.when}</p>
+                </div>
+                {!current && canManage && (
+                  <button className="btn-secondary px-2.5 py-1 text-xs" onClick={() => onRollback(rev.revision)}>
+                    <Undo2 className="h-3.5 w-3.5" />Roll back
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Modal>
   )
 }
 

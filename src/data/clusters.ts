@@ -137,6 +137,12 @@ export function terraformFor(d: Deployment): Terraform {
 /* Helm releases                                                       */
 /* ------------------------------------------------------------------ */
 export type HelmStatus = 'deployed' | 'pending' | 'failed'
+export interface HelmRevision {
+  revision: number
+  when: string
+  note: string
+  values: string
+}
 export interface HelmRelease {
   name: string
   chart: string
@@ -145,15 +151,65 @@ export interface HelmRelease {
   revision: number
   namespace: string
   status: HelmStatus
+  /** Live rendered values (YAML). */
+  values: string
+  history: HelmRevision[]
 }
 
 export function helmFor(d: Deployment): HelmRelease[] {
   const offline = d.status === 'Offline'
+  const slug = d.customer.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const base = d.nodes > 4 ? 4 : 3
+
+  const platformValues = (tag: string, replicas: number) =>
+    [
+      `replicaCount: ${replicas}`,
+      'image:',
+      '  repository: registry.plcy.app/plcy/policy-engine',
+      `  tag: ${tag}`,
+      'resources:',
+      '  requests:',
+      '    cpu: 500m',
+      '    memory: 1Gi',
+      'autoscaling:',
+      '  enabled: true',
+      `  minReplicas: ${Math.max(1, replicas - 1)}`,
+      `  maxReplicas: ${replicas + 3}`,
+      'ingress:',
+      '  enabled: true',
+      `  host: ${slug}.plcy.app`,
+      'sovereignty:',
+      `  tier: ${d.sovereignty}`,
+    ].join('\n')
+
+  const platform: HelmRelease = {
+    name: 'plcy-platform', chart: 'plcy-platform', chartVersion: d.version.replace('v', ''), appVersion: d.version, revision: 12,
+    namespace: 'plcy-system', status: offline ? 'pending' : 'deployed',
+    values: platformValues(d.version, base),
+    history: [
+      { revision: 12, when: '2 days ago', note: `Upgrade to ${d.version}`, values: platformValues(d.version, base) },
+      { revision: 11, when: '3 weeks ago', note: 'Scale up · v4.8.1', values: platformValues('v4.8.1', base) },
+      { revision: 10, when: '6 weeks ago', note: 'Initial install · v4.8.1', values: platformValues('v4.8.1', Math.max(1, base - 1)) },
+    ],
+  }
+
+  const simple = (name: string, chart: string, cv: string, av: string, rev: number, ns: string, extra: string): HelmRelease => {
+    const values = [`fullnameOverride: ${name}`, `image:`, `  tag: ${av}`, extra].join('\n')
+    return {
+      name, chart, chartVersion: cv, appVersion: av, revision: rev, namespace: ns, status: 'deployed',
+      values,
+      history: [
+        { revision: rev, when: '3 weeks ago', note: `Upgrade to ${av}`, values },
+        { revision: rev - 1, when: '8 weeks ago', note: 'Initial install', values: values.replace(`tag: ${av}`, 'tag: (previous)') },
+      ],
+    }
+  }
+
   return [
-    { name: 'plcy-platform', chart: 'plcy-platform', chartVersion: d.version.replace('v', ''), appVersion: d.version, revision: 12, namespace: 'plcy-system', status: offline ? 'pending' : 'deployed' },
-    { name: 'ingress-nginx', chart: 'ingress-nginx', chartVersion: '4.10.1', appVersion: '1.10.1', revision: 3, namespace: 'ingress', status: 'deployed' },
-    { name: 'cert-manager', chart: 'cert-manager', chartVersion: '1.14.5', appVersion: '1.14.5', revision: 2, namespace: 'cert-manager', status: 'deployed' },
-    { name: 'kube-prometheus-stack', chart: 'kube-prometheus-stack', chartVersion: '58.2.1', appVersion: '0.73.0', revision: 5, namespace: 'monitoring', status: 'deployed' },
+    platform,
+    simple('ingress-nginx', 'ingress-nginx', '4.10.1', '1.10.1', 3, 'ingress', 'controller:\n  replicaCount: 2\n  service:\n    type: LoadBalancer'),
+    simple('cert-manager', 'cert-manager', '1.14.5', '1.14.5', 2, 'cert-manager', 'installCRDs: true\nprometheus:\n  enabled: true'),
+    simple('kube-prometheus-stack', 'kube-prometheus-stack', '58.2.1', '0.73.0', 5, 'monitoring', 'grafana:\n  enabled: true\nretention: 30d'),
   ]
 }
 
