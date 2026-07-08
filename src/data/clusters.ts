@@ -184,6 +184,49 @@ export function addonsFor(d: Deployment): Addon[] {
 }
 
 /* ------------------------------------------------------------------ */
+/* Pods & logs (for a workload)                                        */
+/* ------------------------------------------------------------------ */
+export type PodStatus = 'Running' | 'CrashLoopBackOff' | 'Pending' | 'Terminating'
+export interface Pod {
+  name: string
+  node: string
+  status: PodStatus
+  restarts: number
+  age: string
+}
+
+const POD_AGES = ['2d', '18h', '5h', '47m', '12m', '3m']
+
+export function podsForWorkload(w: Workload, regionCode: string): Pod[] {
+  const n = Math.max(w.replicas, 1)
+  return Array.from({ length: n }, (_, i) => {
+    const bad = w.status !== 'Running' && i === n - 1
+    return {
+      name: `${w.name}-${shortDigest(w.name + i).slice(0, 8)}-${shortDigest(w.name + 'p' + i).slice(0, 5)}`,
+      node: `${regionCode}-node-${String((i % 6) + 1).padStart(2, '0')}`,
+      status: w.status === 'Pending' ? 'Pending' : bad ? 'CrashLoopBackOff' : 'Running',
+      restarts: bad ? w.restarts : 0,
+      age: POD_AGES[i % POD_AGES.length],
+    }
+  })
+}
+
+export function workloadLogs(w: Workload): string[] {
+  if (w.status === 'Pending') return ['waiting for scheduler…', `0/${w.replicas} pods ready`]
+  const base = [
+    `level=info msg="starting ${w.name}" image=${w.image}`,
+    `level=info msg="config loaded" policyPacks=6`,
+    'level=info msg="connected to control plane"',
+    `level=info msg="serving" addr=:8080 ready=${w.replicasReady}/${w.replicas}`,
+  ]
+  if (w.status === 'Degraded') {
+    base.push(`level=warn msg="readiness probe failed" restarts=${w.restarts}`)
+    base.push('level=error msg="container OOMKilled — restarting"')
+  }
+  return base
+}
+
+/* ------------------------------------------------------------------ */
 /* Node pools                                                          */
 /* ------------------------------------------------------------------ */
 export interface NodePool {

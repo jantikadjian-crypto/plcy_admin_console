@@ -21,16 +21,19 @@ import {
   Plus,
   Trash2,
   Building2,
+  Maximize2,
+  Undo2,
+  Terminal,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, StatCard, Badge, Table, Tr, Td, Progress, EmptyState } from '@/components/ui'
+import { Card, CardTitle, StatCard, Badge, Table, Tr, Td, Progress, EmptyState, Modal } from '@/components/ui'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
-import { deployments, regionByCode } from '@/data/fleet'
+import { deployments, regionByCode, releases } from '@/data/fleet'
 import type { Deployment } from '@/data/fleet'
 import { customers } from '@/data/mock'
-import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor } from '@/data/clusters'
-import type { Workload, WorkloadStatus, HelmStatus, DriftStatus } from '@/data/clusters'
+import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor, podsForWorkload, workloadLogs } from '@/data/clusters'
+import type { Workload, WorkloadStatus, HelmStatus, DriftStatus, PodStatus } from '@/data/clusters'
 import {
   loadConfig,
   saveConfig,
@@ -69,10 +72,17 @@ export default function ClusterDetail() {
   const [config, setConfig] = useState<ClusterConfig | null>(null)
   const [draft, setDraft] = useState<ClusterConfig | null>(null)
   const [editing, setEditing] = useState(false)
+  const [workloads, setWorkloads] = useState<Workload[]>(() => (d ? workloadsFor(d) : []))
+  const [detailName, setDetailName] = useState<string | null>(null)
+  const [scaleName, setScaleName] = useState<string | null>(null)
 
   useEffect(() => {
-    if (d) setConfig(loadConfig(d.id, d))
+    if (d) {
+      setConfig(loadConfig(d.id, d))
+      setWorkloads(workloadsFor(d))
+    }
     setEditing(false)
+    setDetailName(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -113,6 +123,28 @@ export default function ClusterDetail() {
     if (editing) setDraft(JSON.parse(JSON.stringify(def)) as ClusterConfig)
     logAction({ action: 'cluster.config.reset', target: `${d.customer} cluster`, category: 'operations' })
   }
+
+  // Workload lifecycle actions (gated on provision.manage, audited)
+  const patchWorkload = (name: string, patch: Partial<Workload>) =>
+    setWorkloads((prev) => prev.map((w) => (w.name === name ? { ...w, ...patch } : w)))
+  const restartWorkload = (w: Workload) => {
+    patchWorkload(w.name, { status: 'Pending', replicasReady: 0 })
+    logAction({ action: 'workload.restart', target: `${w.name} · ${d.customer}`, category: 'operations' })
+    window.setTimeout(() => patchWorkload(w.name, { status: 'Running', replicasReady: w.replicas, restarts: 0 }), 1200)
+  }
+  const scaleWorkload = (name: string, n: number) => {
+    patchWorkload(name, { replicas: n, replicasReady: n, status: 'Running' })
+    logAction({ action: 'workload.scale', target: `${name} → ${n} replicas · ${d.customer}`, category: 'operations' })
+    setScaleName(null)
+  }
+  const rollbackWorkload = (w: Workload) => {
+    const idx = releases.findIndex((r) => w.image.endsWith(r.version))
+    if (idx < 0) return
+    const prev = releases[idx + 1] ?? releases[idx]
+    patchWorkload(w.name, { image: w.image.replace(/:[^:]+$/, `:${prev.version}`), status: 'Running', replicasReady: w.replicas, restarts: 0 })
+    logAction({ action: 'workload.rollback', target: `${w.name} → ${prev.version} · ${d.customer}`, category: 'operations' })
+  }
+  const canManageWorkloads = can('provision.manage')
 
   const h = health(d)
   const region = regionByCode(d.regionCode)
@@ -201,11 +233,42 @@ export default function ClusterDetail() {
 
       <div className="mt-6">
         {tab === 'overview' && <OverviewTab d={d} />}
-        {tab === 'workloads' && <WorkloadsTab d={d} />}
+        {tab === 'workloads' && (
+          <WorkloadsTab
+            workloads={workloads}
+            canManage={canManageWorkloads}
+            onRestart={restartWorkload}
+            onScale={setScaleName}
+            onRollback={rollbackWorkload}
+            onOpen={setDetailName}
+          />
+        )}
         {tab === 'infra' && <InfraTab d={d} />}
         {tab === 'addons' && <AddonsTab d={d} view={view} editing={editing} setField={setField} />}
         {tab === 'config' && <ConfigTab view={view} editing={editing} canEdit={canEdit} onEdit={startEdit} setField={setField} />}
       </div>
+
+      {detailName && (() => {
+        const w = workloads.find((x) => x.name === detailName)
+        if (!w) return null
+        return (
+          <WorkloadDrawer
+            w={w}
+            regionCode={d.regionCode}
+            canManage={canManageWorkloads}
+            onClose={() => setDetailName(null)}
+            onRestart={() => restartWorkload(w)}
+            onScale={() => setScaleName(w.name)}
+            onRollback={() => rollbackWorkload(w)}
+          />
+        )
+      })()}
+
+      {scaleName && (() => {
+        const w = workloads.find((x) => x.name === scaleName)
+        if (!w) return null
+        return <ScaleModal w={w} onClose={() => setScaleName(null)} onScale={(n) => scaleWorkload(w.name, n)} />
+      })()}
     </>
   )
 }
@@ -293,8 +356,23 @@ function OverviewTab({ d }: { d: Deployment }) {
 /* ------------------------------------------------------------------ */
 /* Workloads (read-only)                                               */
 /* ------------------------------------------------------------------ */
-function WorkloadsTab({ d }: { d: Deployment }) {
-  const workloads = workloadsFor(d)
+const canRollback = (w: Workload) => releases.some((r) => w.image.endsWith(r.version))
+
+function WorkloadsTab({
+  workloads,
+  canManage,
+  onRestart,
+  onScale,
+  onRollback,
+  onOpen,
+}: {
+  workloads: Workload[]
+  canManage: boolean
+  onRestart: (w: Workload) => void
+  onScale: (name: string) => void
+  onRollback: (w: Workload) => void
+  onOpen: (name: string) => void
+}) {
   const signed = workloads.filter((w) => w.signed).length
   const cves = workloads.reduce((s, w) => s + w.cves, 0)
   return (
@@ -305,24 +383,26 @@ function WorkloadsTab({ d }: { d: Deployment }) {
         <Badge tone={cves > 0 ? 'red' : 'green'} dot>{cves} open CVE{cves === 1 ? '' : 's'}</Badge>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
+        <table className="w-full min-w-[820px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
               <th className="py-2 pr-3">Workload</th>
               <th className="py-2 pr-3">Image</th>
               <th className="py-2 pr-3">Ready</th>
               <th className="py-2 pr-3">Restarts</th>
-              <th className="py-2 pr-3">Requests</th>
               <th className="py-2 pr-3">Security</th>
               <th className="py-2 pr-3">Status</th>
+              <th className="py-2 pr-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {workloads.map((w: Workload) => (
               <tr key={`${w.namespace}/${w.name}`} className="border-b border-slate-100 align-top last:border-0">
                 <td className="py-2.5 pr-3">
-                  <p className="font-medium text-ink-900">{w.name}</p>
-                  <p className="text-xs text-ink-400">{w.namespace} · {w.kind}</p>
+                  <button className="text-left" onClick={() => onOpen(w.name)}>
+                    <p className="font-medium text-ink-900 hover:text-brand-700">{w.name}</p>
+                    <p className="text-xs text-ink-400">{w.namespace} · {w.kind}</p>
+                  </button>
                 </td>
                 <td className="py-2.5 pr-3">
                   <p className="font-mono text-xs text-ink-700">{w.image}</p>
@@ -330,7 +410,6 @@ function WorkloadsTab({ d }: { d: Deployment }) {
                 </td>
                 <td className="py-2.5 pr-3"><span className={`font-mono text-xs ${w.replicasReady < w.replicas ? 'font-semibold text-rose-600' : 'text-ink-700'}`}>{w.replicasReady}/{w.replicas}</span></td>
                 <td className="py-2.5 pr-3"><span className={`font-mono text-xs ${w.restarts > 0 ? 'text-orange-600' : 'text-ink-500'}`}>{w.restarts}</span></td>
-                <td className="py-2.5 pr-3 font-mono text-xs text-ink-600">{w.cpu} / {w.mem}</td>
                 <td className="py-2.5 pr-3">
                   <div className="flex items-center gap-1.5">
                     {w.signed && <span title="Signed (cosign)"><ShieldCheck className="h-4 w-4 text-emerald-500" /></span>}
@@ -338,12 +417,120 @@ function WorkloadsTab({ d }: { d: Deployment }) {
                   </div>
                 </td>
                 <td className="py-2.5 pr-3"><Badge tone={workloadStatusTone[w.status]} dot>{w.status}</Badge></td>
+                <td className="py-2.5 pr-3">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <IconBtn title="Logs & pods" onClick={() => onOpen(w.name)}><Terminal className="h-4 w-4" /></IconBtn>
+                    {canManage && <IconBtn title="Restart" onClick={() => onRestart(w)}><RotateCw className="h-4 w-4" /></IconBtn>}
+                    {canManage && <IconBtn title="Scale" onClick={() => onScale(w.name)}><Maximize2 className="h-4 w-4" /></IconBtn>}
+                    {canManage && canRollback(w) && <IconBtn title="Roll back image" onClick={() => onRollback(w)}><Undo2 className="h-4 w-4" /></IconBtn>}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {!canManage && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-400"><Terminal className="h-3 w-3" /> Your role can view workloads but not restart, scale, or roll them back.</p>}
     </Card>
+  )
+}
+
+function IconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} title={title} aria-label={title} className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-slate-100 hover:text-brand-600">
+      {children}
+    </button>
+  )
+}
+
+const podStatusTone: Record<PodStatus, 'green' | 'red' | 'slate' | 'orange'> = { Running: 'green', CrashLoopBackOff: 'red', Pending: 'slate', Terminating: 'orange' }
+
+function WorkloadDrawer({ w, regionCode, canManage, onClose, onRestart, onScale, onRollback }: {
+  w: Workload
+  regionCode: string
+  canManage: boolean
+  onClose: () => void
+  onRestart: () => void
+  onScale: () => void
+  onRollback: () => void
+}) {
+  const pods = podsForWorkload(w, regionCode)
+  const logs = workloadLogs(w)
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={w.name}
+      subtitle={`${w.namespace} · ${w.kind}`}
+      maxWidth="max-w-3xl"
+      headerRight={<Badge tone={workloadStatusTone[w.status]} dot>{w.status}</Badge>}
+      footer={
+        <div className="flex w-full items-center justify-between">
+          <span className="font-mono text-xs text-ink-400">{w.image}</span>
+          <div className="flex items-center gap-2">
+            <button className="btn-ghost" onClick={onClose}>Close</button>
+            {canManage && <button className="btn-secondary" onClick={onRestart}><RotateCw className="h-4 w-4" />Restart</button>}
+            {canManage && <button className="btn-secondary" onClick={onScale}><Maximize2 className="h-4 w-4" />Scale</button>}
+            {canManage && canRollback(w) && <button className="btn-secondary" onClick={onRollback}><Undo2 className="h-4 w-4" />Roll back</button>}
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-5">
+        <div>
+          <div className="mb-2 flex items-baseline justify-between">
+            <p className="text-sm font-semibold text-ink-900">Pods</p>
+            <span className="text-xs text-ink-500">{w.replicasReady}/{w.replicas} ready</span>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            {pods.map((p) => (
+              <div key={p.name} className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-0">
+                <span className="truncate font-mono text-xs text-ink-700">{p.name}</span>
+                <span className="hidden font-mono text-xs text-ink-400 sm:inline">{p.node}</span>
+                <span className="font-mono text-xs text-ink-400">{p.restarts} restarts · {p.age}</span>
+                <Badge tone={podStatusTone[p.status]} dot>{p.status}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink-900">Logs</p>
+          <div className="space-y-0.5 rounded-xl bg-ink-900/95 p-3 font-mono text-xs text-slate-200">
+            {logs.map((l, i) => (
+              <div key={i} className={l.includes('error') ? 'text-rose-300' : l.includes('warn') ? 'text-amber-300' : ''}>
+                <span className="text-slate-500">{String(i + 1).padStart(2, '0')} </span>{l}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ScaleModal({ w, onClose, onScale }: { w: Workload; onClose: () => void; onScale: (n: number) => void }) {
+  const [n, setN] = useState(w.replicas)
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Scale ${w.name}`}
+      subtitle={`${w.namespace} · currently ${w.replicas} replica${w.replicas === 1 ? '' : 's'}`}
+      maxWidth="max-w-sm"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={() => onScale(n)}><Maximize2 className="h-4 w-4" />Scale to {n}</button>
+        </>
+      }
+    >
+      <label className="mb-1.5 block text-sm font-medium text-ink-700">Desired replicas</label>
+      <div className="flex items-center gap-3">
+        <button className="btn-secondary px-3" onClick={() => setN((v) => Math.max(0, v - 1))}>−</button>
+        <input type="number" min={0} className="input w-24 text-center" value={n} onChange={(e) => setN(Math.max(0, Number(e.target.value)))} />
+        <button className="btn-secondary px-3" onClick={() => setN((v) => v + 1)}>+</button>
+      </div>
+    </Modal>
   )
 }
 
