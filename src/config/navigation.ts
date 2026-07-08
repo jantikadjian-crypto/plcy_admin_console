@@ -32,6 +32,7 @@ import {
   DatabaseBackup,
   PackageCheck,
   Route,
+  BellRing,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -114,6 +115,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Admin Security', to: '/admin-security', icon: Lock },
       { label: 'Privileged Access', to: '/privileged-access', icon: Fingerprint },
       { label: 'Supply Chain', to: '/supply-chain', icon: PackageCheck },
+      { label: 'Notifications', to: '/notifications', icon: BellRing },
       { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
       { label: 'Super Admin', to: '/super-admin', icon: Crown },
       { label: 'Settings', to: '/settings', icon: Settings },

@@ -14,6 +14,7 @@ import Transfers from './pages/Transfers'
 import Subprocessors from './pages/Subprocessors'
 import DSAR from './pages/DSAR'
 import PrivilegedAccess from './pages/PrivilegedAccess'
+import Notifications from './pages/Notifications'
 import Provisioning from './pages/Provisioning'
 import Backups from './pages/Backups'
 import SupplyChain from './pages/SupplyChain'
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/subprocessors" element={<Subprocessors />} />
         <Route path="/dsar" element={<DSAR />} />
         <Route path="/privileged-access" element={<PrivilegedAccess />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route path="/provisioning" element={<Provisioning />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/supply-chain" element={<SupplyChain />} />
