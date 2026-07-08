@@ -1,13 +1,38 @@
 import { useState } from 'react'
-import { Plus, Eye, ArrowRight, ShieldCheck, ShieldAlert, Ban } from 'lucide-react'
+import { Plus, Eye, ArrowRight, ShieldCheck, ShieldAlert, Ban, AlertTriangle } from 'lucide-react'
 import { PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Modal } from '@/components/ui'
 import { Card, CardTitle } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { transfers as seed } from '@/data/privacy'
-import type { Transfer, TransferMechanism, TIA } from '@/data/privacy'
+import type { Transfer, TransferMechanism } from '@/data/privacy'
 import { regionByCode } from '@/data/fleet'
+import { loadPolicies, evaluateResidency } from '@/data/residency'
+import type { Mechanism, ResidencyDecision, ResidencyResult } from '@/data/residency'
 import { useCustomerScope } from '@/context/CustomerScope'
+
+const decisionTone: Record<ResidencyDecision, 'green' | 'yellow' | 'red'> = { Allow: 'green', 'Require safeguard': 'yellow', Block: 'red' }
+const residencyPolicies = loadPolicies()
+function toMechanism(m: TransferMechanism): Mechanism | undefined {
+  if (m === 'SCCs') return 'SCCs'
+  if (m === 'Adequacy decision') return 'Adequacy decision'
+  return undefined
+}
+function transferVerdict(t: Transfer): ResidencyResult {
+  // Aggregate/unknown sources (e.g. "All regions") are evaluated per-region at the gateway.
+  if (!residencyPolicies[t.from]) {
+    return { decision: 'Allow', reason: 'Multi-region flow — evaluated per source region at the gateway.' }
+  }
+  return evaluateResidency(residencyPolicies[t.from], {
+    sourceRegion: t.from,
+    operation: 'Transfer',
+    targetRegion: t.from === t.to ? undefined : t.to,
+    mechanism: toMechanism(t.mechanism),
+    dataCategory: t.dataCategory,
+  })
+}
+/** A recorded "Approved" that the live policy would Block is a conflict. */
+const isConflict = (t: Transfer) => t.status === 'Approved' && transferVerdict(t).decision === 'Block'
 
 const mechanismTone: Record<TransferMechanism, 'green' | 'blue' | 'purple' | 'slate' | 'red'> = {
   'In-region only': 'green',
@@ -16,12 +41,6 @@ const mechanismTone: Record<TransferMechanism, 'green' | 'blue' | 'purple' | 'sl
   'Air-gapped (no egress)': 'slate',
   Blocked: 'red',
 }
-const tiaTone: Record<TIA, 'green' | 'orange' | 'slate'> = {
-  Complete: 'green',
-  Pending: 'orange',
-  'N/A': 'slate',
-}
-
 const regionName = (code: string) => regionByCode(code)?.name ?? code
 const isInRegion = (m: TransferMechanism) => m === 'In-region only' || m === 'Air-gapped (no egress)'
 
@@ -58,10 +77,22 @@ export default function Transfers() {
         <StatCard label="Under review" value={underReview} icon={ShieldAlert} tone="orange" footer="Awaiting legal sign-off" />
       </div>
 
+      {scoped.some(isConflict) && (
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <p className="text-sm text-amber-900">
+            <strong>{scoped.filter(isConflict).length}</strong> approved transfer(s) would be <strong>blocked</strong> by the current residency policy. Review before they run.
+          </p>
+        </div>
+      )}
+
       <Card className="mt-6">
-        <CardTitle title="Transfer Register" subtitle={`${scoped.length} data flow${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
-        <Table columns={['ID', 'Customer', 'Route', 'Data category', 'Mechanism', 'TIA', 'Status', 'Reviewed', '']}>
-          {scoped.map((t) => (
+        <CardTitle title="Transfer Register" subtitle={`${scoped.length} data flow${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`} · evaluated against residency policy`} />
+        <Table columns={['ID', 'Customer', 'Route', 'Data category', 'Mechanism', 'Residency policy', 'Status', 'Reviewed', '']}>
+          {scoped.map((t) => {
+            const v = transferVerdict(t)
+            const conflict = isConflict(t)
+            return (
             <Tr key={t.id}>
               <Td className="font-mono text-xs text-ink-700">{t.id}</Td>
               <Td className="text-ink-700">{t.customer}</Td>
@@ -81,7 +112,12 @@ export default function Transfers() {
               </Td>
               <Td className="text-ink-700">{t.dataCategory}</Td>
               <Td><Badge tone={mechanismTone[t.mechanism]}>{t.mechanism}</Badge></Td>
-              <Td><Badge tone={tiaTone[t.tia]}>{t.tia}</Badge></Td>
+              <Td>
+                <div className="flex items-center gap-1.5">
+                  <Badge tone={decisionTone[v.decision]} dot>{v.decision}</Badge>
+                  {conflict && <span title="Conflicts with recorded status"><AlertTriangle className="h-3.5 w-3.5 text-amber-600" /></span>}
+                </div>
+              </Td>
               <Td><StatusBadge status={t.status} /></Td>
               <Td className="text-xs text-ink-500">{t.reviewed}</Td>
               <Td>
@@ -90,7 +126,8 @@ export default function Transfers() {
                 </button>
               </Td>
             </Tr>
-          ))}
+            )
+          })}
         </Table>
       </Card>
 
@@ -121,6 +158,26 @@ export default function Transfers() {
               <KV label="TIA" value={sel.tia} />
               <KV label="Reviewed" value={sel.reviewed} />
             </div>
+
+            {(() => {
+              const v = transferVerdict(sel)
+              const box =
+                v.decision === 'Allow'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                  : v.decision === 'Block'
+                    ? 'border-rose-200 bg-rose-50 text-rose-900'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+              return (
+                <div className={`flex items-start gap-3 rounded-xl border p-4 ${box}`}>
+                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">Residency policy · {v.decision}</p>
+                    <p className="mt-0.5 text-sm opacity-90">{v.reason}</p>
+                    {v.safeguard && <p className="mt-1 text-xs font-medium opacity-80">Safeguard: {v.safeguard}</p>}
+                  </div>
+                </div>
+              )
+            })()}
 
             {sel.status === 'Blocked' ? (
               <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">

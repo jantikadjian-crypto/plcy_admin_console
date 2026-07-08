@@ -47,7 +47,9 @@ export function defaultResidencyPolicy(code: string): ResidencyPolicy {
   if (r?.sovereignty === 'Sovereign Cloud') {
     return { regionCode: code, allowedTargets: p, crossBorderRequiresSafeguard: true, allowedMechanisms: ['SCCs', 'Adequacy decision'], backupRegions: [code, ...p], telemetry: 'Metadata only', supportAccess: 'In-region staff' }
   }
-  return { regionCode: code, allowedTargets: p, crossBorderRequiresSafeguard: false, allowedMechanisms: ['SCCs', 'Adequacy decision', 'BCRs'], backupRegions: [code, ...p], telemetry: 'Full', supportAccess: 'Break-glass (approved)' }
+  // Standard tier: data may move anywhere except air-gapped regions; cross-jurisdiction still needs a safeguard.
+  const nonAirgapped = regions.filter((x) => x.code !== code && x.sovereignty !== 'Air-gapped').map((x) => x.code)
+  return { regionCode: code, allowedTargets: nonAirgapped, crossBorderRequiresSafeguard: true, allowedMechanisms: ['SCCs', 'Adequacy decision', 'BCRs'], backupRegions: [code, ...p], telemetry: 'Full', supportAccess: 'Break-glass (approved)' }
 }
 
 const sameJurisdiction = (a: string, b: string) => regionByCode(a)?.jurisdiction === regionByCode(b)?.jurisdiction
@@ -65,7 +67,8 @@ export interface ResidencyResult {
   safeguard?: string
 }
 
-export function evaluateResidency(policy: ResidencyPolicy, req: ResidencyRequest): ResidencyResult {
+export function evaluateResidency(policy: ResidencyPolicy | undefined, req: ResidencyRequest): ResidencyResult {
+  if (!policy) return { decision: 'Block', reason: 'No residency policy is configured for the source region.' }
   const src = regionByCode(policy.regionCode)
   const laws = src?.laws.join(', ') ?? ''
 

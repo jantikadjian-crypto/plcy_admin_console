@@ -3,8 +3,18 @@ import { DatabaseBackup, Play, Eye, ShieldCheck, CircleCheck, CircleAlert, HardD
 import { Card, CardTitle, PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Modal } from '@/components/ui'
 import { backups, opsTotals } from '@/data/ops'
 import type { Backup } from '@/data/ops'
-import { regionByCode } from '@/data/fleet'
+import { regionByCode, deploymentByCustomer } from '@/data/fleet'
+import { loadPolicies, evaluateResidency } from '@/data/residency'
+import type { ResidencyDecision } from '@/data/residency'
 import { useCustomerScope } from '@/context/CustomerScope'
+
+const decisionTone: Record<ResidencyDecision, 'green' | 'yellow' | 'red'> = { Allow: 'green', 'Require safeguard': 'yellow', Block: 'red' }
+const residencyPolicies = loadPolicies()
+/** Where the customer's primary data lives, vs. where this backup resides. */
+function backupVerdict(b: Backup) {
+  const primary = deploymentByCustomer(b.customer)?.regionCode ?? b.regionCode
+  return evaluateResidency(residencyPolicies[primary], { sourceRegion: primary, operation: 'Backup', targetRegion: b.regionCode })
+}
 
 export default function Backups() {
   const { scope, isAll } = useCustomerScope()
@@ -34,14 +44,17 @@ export default function Backups() {
       {/* Table */}
       <Card className="mt-6">
         <CardTitle title="Backup Posture" subtitle={`${scoped.length} protected environment${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
-        <Table columns={['Customer', 'Region', 'Last backup', 'Frequency', 'RPO', 'RTO', 'Retention', 'Restore points', 'Status', 'Encrypted', '']}>
-          {scoped.map((b) => (
+        <Table columns={['Customer', 'Region', 'Residency', 'Last backup', 'Frequency', 'RPO', 'RTO', 'Retention', 'Restore points', 'Status', 'Encrypted', '']}>
+          {scoped.map((b) => {
+            const v = backupVerdict(b)
+            return (
             <Tr key={b.id}>
               <Td className="font-semibold text-ink-900">{b.customer}</Td>
               <Td>
                 <p className="text-sm text-ink-700">{regionByCode(b.regionCode)?.name ?? b.regionCode}</p>
                 <p className="font-mono text-xs text-ink-400">{b.regionCode}</p>
               </Td>
+              <Td><Badge tone={decisionTone[v.decision]} dot>{v.decision === 'Allow' ? 'In-region' : v.decision}</Badge></Td>
               <Td className="text-sm text-ink-700">{b.lastBackup}</Td>
               <Td className="text-sm text-ink-700">{b.frequency}</Td>
               <Td className="font-mono text-xs text-ink-700">{b.rpoMin}m</Td>
@@ -56,7 +69,8 @@ export default function Backups() {
                 </button>
               </Td>
             </Tr>
-          ))}
+            )
+          })}
         </Table>
       </Card>
 
