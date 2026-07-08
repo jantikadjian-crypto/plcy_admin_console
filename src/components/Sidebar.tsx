@@ -9,28 +9,22 @@ import { useCustomerScope, ALL } from '@/context/CustomerScope'
 import { useSession } from '@/context/Session'
 
 /**
- * PLCY brand mark. Uses the logo asset at /plcy-logo.svg (or .png) when it is
- * present in `public/`, and falls back to the styled wordmark otherwise so the
- * header never looks broken.
+ * PLCY brand mark. Renders the logo image at /plcy-logo.png (falling back to
+ * /plcy-logo.svg). `object-contain` preserves the artwork's aspect ratio so it
+ * is never stretched.
  */
 const LOGO_CANDIDATES = ['/plcy-logo.png', '/plcy-logo.svg']
 
 function BrandMark() {
   const [idx, setIdx] = useState(0)
-  if (idx < LOGO_CANDIDATES.length) {
-    return (
-      <img
-        src={LOGO_CANDIDATES[idx]}
-        alt="PLCY"
-        className="h-9 w-auto max-w-[172px] object-contain object-left"
-        onError={() => setIdx((i) => i + 1)}
-      />
-    )
-  }
+  const src = LOGO_CANDIDATES[Math.min(idx, LOGO_CANDIDATES.length - 1)]
   return (
-    <div className="text-[28px] font-extrabold leading-none tracking-tight text-[#1668c4]" aria-label="PLCY">
-      PLCY
-    </div>
+    <img
+      src={src}
+      alt="PLCY"
+      className="h-10 w-auto max-w-[180px] object-contain object-left"
+      onError={() => setIdx((i) => i + 1)}
+    />
   )
 }
 
@@ -147,7 +141,7 @@ export default function Sidebar({
           <div>
             <BrandMark />
             <p className="mt-1.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.16em] text-ink-400">
-              Admin Console
+              Administration
             </p>
           </div>
           <button className="btn-ghost -mr-2 p-1.5 lg:hidden" onClick={onClose} aria-label="Close menu">
