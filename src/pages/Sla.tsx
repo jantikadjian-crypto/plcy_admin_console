@@ -11,6 +11,7 @@ import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, 
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useCreateIntent } from '@/hooks/useCreateIntent'
 import { slaTargets, maintenanceWindows, slaTotals } from '@/data/sla'
 import type {
   SlaTarget,
@@ -172,6 +173,7 @@ export default function Sla() {
     resetForm()
     setOpen(true)
   }
+  useCreateIntent(openScheduler)
 
   const atRiskBreached = slaTotals.atRisk + slaTotals.breached
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Bot, CheckCircle2, AlertTriangle, Activity, ShieldAlert, Eye } from 'lucide-react'
+import { useCreateIntent } from '@/hooks/useCreateIntent'
 import {
   ResponsiveContainer,
   PieChart,
@@ -63,6 +64,7 @@ export default function Models() {
   const [rows, setRows] = useState<AIModel[]>(models)
   const [sel, setSel] = useState<AIModel | null>(null)
   const [registering, setRegistering] = useState(false)
+  useCreateIntent(() => setRegistering(true))
 
   const scoped = isAll ? rows : rows.filter((m) => m.customer === scope)
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Server, HeartPulse, Activity, Gauge, Eye } from 'lucide-react'
+import { useCreateIntent } from '@/hooks/useCreateIntent'
 import {
   ResponsiveContainer,
   BarChart,
@@ -54,6 +55,7 @@ export default function Instances() {
   const [rows, setRows] = useState<Instance[]>(instances)
   const [sel, setSel] = useState<Instance | null>(null)
   const [provisioning, setProvisioning] = useState(false)
+  useCreateIntent(() => setProvisioning(true))
 
   const scoped = isAll ? rows : rows.filter((i) => i.customer === scope)
 

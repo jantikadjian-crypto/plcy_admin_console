@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { useCreateIntent } from '@/hooks/useCreateIntent'
 import {
   ResponsiveContainer,
   BarChart,
@@ -264,6 +265,7 @@ export default function Incidents() {
   const [sevFilter, setSevFilter] = useState<'All' | Severity>('All')
   const [selected, setSelected] = useState<Incident | null>(null)
   const [reporting, setReporting] = useState(false)
+  useCreateIntent(() => setReporting(true))
   const [items, setItems] = useState<Incident[]>(seedIncidents)
 
   useEffect(() => {

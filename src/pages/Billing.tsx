@@ -13,6 +13,7 @@ import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, 
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useCreateIntent } from '@/hooks/useCreateIntent'
 import {
   customerBilling,
   billingByCustomer,
@@ -196,6 +197,7 @@ export default function Billing() {
     setIssueAmount('')
     setIssueOpen(true)
   }
+  useCreateIntent(() => openIssue())
 
   const submitIssue = () => {
     const amount = Number(issueAmount) || 0

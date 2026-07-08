@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { useCreateIntent } from '@/hooks/useCreateIntent'
 import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck, Server, Bot } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -68,6 +69,7 @@ export default function Customers() {
   const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
   const [selected, setSelected] = useState<Customer | null>(null)
   const [adding, setAdding] = useState(false)
+  useCreateIntent(() => setAdding(true))
 
   const q = query.trim().toLowerCase()
   const filtered = rows.filter((c) => {
