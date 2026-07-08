@@ -183,6 +183,24 @@ export function addonsFor(d: Deployment): Addon[] {
   ]
 }
 
+/* ------------------------------------------------------------------ */
+/* Node pools                                                          */
+/* ------------------------------------------------------------------ */
+export interface NodePool {
+  name: string
+  count: number
+  instance: string
+}
+
+export function nodePoolsFor(d: Deployment): NodePool[] {
+  if (d.nodes === 0) return []
+  const pools: NodePool[] = [{ name: 'system', count: 2, instance: 'm5.xlarge' }]
+  if (d.gpuNodes > 0) pools.push({ name: 'inference-gpu', count: d.gpuNodes, instance: 'g5.xlarge' })
+  const rest = d.nodes - 2 - d.gpuNodes
+  if (rest > 0) pools.push({ name: 'general', count: rest, instance: 'm5.2xlarge' })
+  return pools
+}
+
 /* Fleet-level helpers */
 export const clusterTotals = (deps: Deployment[]) => {
   const drifted = deps.filter((d) => terraformFor(d).drift === 'Drift detected').length

@@ -8,6 +8,7 @@ import Instances from './pages/Instances'
 import Releases from './pages/Releases'
 import Bundles from './pages/Bundles'
 import Clusters from './pages/Clusters'
+import ClusterDetail from './pages/ClusterDetail'
 import Licensing from './pages/Licensing'
 import Regions from './pages/Regions'
 import Routing from './pages/Routing'
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/releases" element={<Releases />} />
         <Route path="/bundles" element={<Bundles />} />
         <Route path="/clusters" element={<Clusters />} />
+        <Route path="/clusters/:id" element={<ClusterDetail />} />
         <Route path="/licensing" element={<Licensing />} />
         <Route path="/regions" element={<Regions />} />
         <Route path="/routing" element={<Routing />} />
