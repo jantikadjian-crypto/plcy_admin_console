@@ -12,6 +12,7 @@ import {
   KeyRound,
   RotateCcw,
   Lock,
+  ChevronDown,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
@@ -29,6 +30,7 @@ import {
   EAccessFeature,
   FEATURE_DOMAINS,
   featureLabel,
+  hasAccess,
   effectiveAccessMap,
   saveAccessMap,
   resetAccessMap,
@@ -56,25 +58,61 @@ const tabs: { key: TabKey; icon: LucideIcon }[] = [
 type AccessMap = Record<EAccessFeature, EAccessRole[]>
 
 /* ------------------------------------------------------------------ */
-/* Role legend                                                          */
+/* Role summary cards — at-a-glance access per domain                   */
 /* ------------------------------------------------------------------ */
-function RoleLegend() {
+const barTone: Record<string, string> = {
+  purple: 'bg-violet-500',
+  blue: 'bg-blue-500',
+  green: 'bg-emerald-500',
+  orange: 'bg-orange-500',
+  red: 'bg-rose-500',
+  yellow: 'bg-amber-500',
+  slate: 'bg-slate-400',
+}
+
+function RoleSummaryCards({ map }: { map: AccessMap }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {roleDefs.map((r) => {
         const Icon = iconFor(r.iconKey)
         const assigned = assignedCount(r.id)
         return (
-          <div key={r.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${roleIconTone[r.tone]}`}>
-              <Icon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-semibold text-ink-900">{r.name}</p>
-                <span className="shrink-0 text-xs text-ink-400">{assigned} {assigned === 1 ? 'user' : 'users'}</span>
+          <div key={r.id} className="flex flex-col rounded-xl border border-slate-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${roleIconTone[r.tone]}`}>
+                <Icon className="h-5 w-5" />
               </div>
-              <p className="mt-0.5 text-xs leading-snug text-ink-500">{r.desc}</p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-semibold text-ink-900">{r.name}</p>
+                  <Badge tone={r.tone}>{assigned} {assigned === 1 ? 'user' : 'users'}</Badge>
+                </div>
+                <p className="mt-0.5 text-xs leading-snug text-ink-500">{r.desc}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2.5">
+              {FEATURE_DOMAINS.map((d) => {
+                const total = d.features.length
+                const granted = d.features.filter((f) => hasAccess(r.id, f, map)).length
+                const pct = total ? Math.round((granted / total) * 100) : 0
+                return (
+                  <div key={d.title}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-ink-600">{d.title}</span>
+                      <span className={`font-medium ${granted ? 'text-ink-700' : 'text-ink-300'}`}>
+                        {granted}/{total}
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full ${barTone[r.tone] ?? barTone.slate}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )
@@ -131,18 +169,35 @@ const cellTone: Record<string, string> = {
   slate: 'bg-slate-200 text-slate-600',
 }
 
-function AccessMatrix({
+function DomainSection({
+  domain,
   map,
+  open,
+  onOpen,
   onToggle,
 }: {
+  domain: (typeof FEATURE_DOMAINS)[number]
   map: AccessMap
+  open: boolean
+  onOpen: () => void
   onToggle: (feature: EAccessFeature, role: EAccessRole) => void
 }) {
   return (
-    <div className="space-y-6">
-      {FEATURE_DOMAINS.map((domain) => (
-        <Card key={domain.title}>
-          <CardTitle title={domain.title} subtitle={`${domain.features.length} features`} />
+    <Card padded={false} className="overflow-hidden">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50"
+      >
+        <div>
+          <p className="text-[15px] font-semibold text-ink-900">{domain.title}</p>
+          <p className="mt-0.5 text-xs text-ink-500">{domain.features.length} features</p>
+        </div>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-slate-100 px-5 pb-4 pt-1">
           <div className="-mx-1 overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
@@ -180,7 +235,32 @@ function AccessMatrix({
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function AccessMatrix({
+  map,
+  onToggle,
+}: {
+  map: AccessMap
+  onToggle: (feature: EAccessFeature, role: EAccessRole) => void
+}) {
+  // First domain expanded by default so the detail view is discoverable.
+  const [open, setOpen] = useState<Record<string, boolean>>({ [FEATURE_DOMAINS[0].title]: true })
+  return (
+    <div className="space-y-3">
+      {FEATURE_DOMAINS.map((domain) => (
+        <DomainSection
+          key={domain.title}
+          domain={domain}
+          map={map}
+          open={!!open[domain.title]}
+          onOpen={() => setOpen((p) => ({ ...p, [domain.title]: !p[domain.title] }))}
+          onToggle={onToggle}
+        />
       ))}
     </div>
   )
@@ -493,10 +573,16 @@ export default function Settings() {
               </div>
 
               <Card className="mb-6">
-                <CardTitle title="Roles" subtitle="Who each role is, and how many staff hold it" />
-                <RoleLegend />
+                <CardTitle title="Access by role" subtitle="At-a-glance — how much of each domain each role can reach" />
+                <RoleSummaryCards map={accessMap} />
               </Card>
 
+              <div className="mb-3">
+                <h4 className="text-base font-semibold text-ink-900">Access details</h4>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  Expand a domain to grant or revoke individual permissions
+                </p>
+              </div>
               <AccessMatrix map={accessMap} onToggle={toggleAccess} />
 
               <Card className="mt-6">
