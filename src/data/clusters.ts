@@ -300,6 +300,89 @@ export function nodePoolsFor(d: Deployment): NodePool[] {
   return pools
 }
 
+/* ------------------------------------------------------------------ */
+/* Namespace guardrails (quotas, network policy, pod security)          */
+/* ------------------------------------------------------------------ */
+export type PSALevel = 'privileged' | 'baseline' | 'restricted'
+export type PSAMode = 'enforce' | 'audit' | 'warn'
+export type NetDirection = 'Ingress' | 'Egress'
+export interface NetRule {
+  name: string
+  direction: NetDirection
+  peer: string
+  ports: string
+  allowed: boolean
+}
+export interface NamespaceGuardrails {
+  namespace: string
+  psa: PSALevel
+  psaMode: PSAMode
+  cpuUsed: number
+  cpuQuota: number
+  memUsed: number
+  memQuota: number
+  podsUsed: number
+  podsQuota: number
+  defaultDeny: boolean
+  rules: NetRule[]
+}
+
+export function namespacesFor(d: Deployment): NamespaceGuardrails[] {
+  const air = d.connectivity === 'Air-gapped'
+  const u = (quota: number) => Math.round(quota * (d.cpuPct / 100) * 10) / 10
+  const dns: NetRule = { name: 'allow-dns', direction: 'Egress', peer: 'kube-dns', ports: 'UDP/53', allowed: true }
+  return [
+    {
+      namespace: 'plcy-system', psa: 'restricted', psaMode: 'enforce',
+      cpuUsed: u(16), cpuQuota: 16, memUsed: Math.round(32 * (d.memPct / 100)), memQuota: 32, podsUsed: Math.min(d.podsHealthy, 40), podsQuota: 40,
+      defaultDeny: true,
+      rules: [
+        dns,
+        { name: 'egress-control-plane', direction: 'Egress', peer: 'control-plane', ports: 'TCP/443', allowed: true },
+        { name: 'egress-model-providers', direction: 'Egress', peer: 'external model APIs', ports: 'TCP/443', allowed: !air },
+        { name: 'ingress-from-gateway', direction: 'Ingress', peer: 'ingress-nginx', ports: 'TCP/8080', allowed: true },
+      ],
+    },
+    {
+      namespace: 'plcy-data', psa: 'restricted', psaMode: 'enforce',
+      cpuUsed: u(8), cpuQuota: 8, memUsed: Math.round(24 * (d.memPct / 100)), memQuota: 24, podsUsed: 4, podsQuota: 12,
+      defaultDeny: true,
+      rules: [
+        dns,
+        { name: 'ingress-from-system', direction: 'Ingress', peer: 'plcy-system', ports: 'TCP/5432,6379', allowed: true },
+        { name: 'egress-external', direction: 'Egress', peer: 'internet', ports: 'any', allowed: false },
+      ],
+    },
+    {
+      namespace: 'ingress', psa: 'baseline', psaMode: 'enforce',
+      cpuUsed: u(4), cpuQuota: 4, memUsed: Math.round(8 * (d.memPct / 100)), memQuota: 8, podsUsed: d.nodes, podsQuota: 10,
+      defaultDeny: false,
+      rules: [
+        { name: 'ingress-internet', direction: 'Ingress', peer: 'load balancer', ports: 'TCP/443', allowed: true },
+        { name: 'egress-to-system', direction: 'Egress', peer: 'plcy-system', ports: 'TCP/8080', allowed: true },
+      ],
+    },
+    {
+      namespace: 'cert-manager', psa: 'restricted', psaMode: 'enforce',
+      cpuUsed: u(1), cpuQuota: 2, memUsed: 1, memQuota: 4, podsUsed: 2, podsQuota: 6,
+      defaultDeny: true,
+      rules: [
+        dns,
+        { name: 'egress-acme', direction: 'Egress', peer: "Let's Encrypt ACME", ports: 'TCP/443', allowed: !air },
+      ],
+    },
+    {
+      namespace: 'monitoring', psa: 'baseline', psaMode: 'audit',
+      cpuUsed: u(6), cpuQuota: 6, memUsed: Math.round(12 * (d.memPct / 100)), memQuota: 12, podsUsed: 8, podsQuota: 20,
+      defaultDeny: true,
+      rules: [
+        dns,
+        { name: 'egress-scrape', direction: 'Egress', peer: 'all namespaces (metrics)', ports: 'TCP/9090-9100', allowed: true },
+      ],
+    },
+  ]
+}
+
 /* Fleet-level helpers */
 export const clusterTotals = (deps: Deployment[]) => {
   const drifted = deps.filter((d) => terraformFor(d).drift === 'Drift detected').length

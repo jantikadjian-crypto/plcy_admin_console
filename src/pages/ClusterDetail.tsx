@@ -33,8 +33,8 @@ import { useCustomerScope } from '@/context/CustomerScope'
 import { deployments, regionByCode, releases } from '@/data/fleet'
 import type { Deployment } from '@/data/fleet'
 import { customers } from '@/data/mock'
-import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor, podsForWorkload, workloadLogs } from '@/data/clusters'
-import type { Workload, WorkloadStatus, HelmStatus, HelmRelease, DriftStatus, PodStatus } from '@/data/clusters'
+import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor, podsForWorkload, workloadLogs, namespacesFor } from '@/data/clusters'
+import type { Workload, WorkloadStatus, HelmStatus, HelmRelease, DriftStatus, PodStatus, NamespaceGuardrails, PSALevel, PSAMode } from '@/data/clusters'
 import {
   loadConfig,
   saveConfig,
@@ -60,7 +60,7 @@ const workloadStatusTone: Record<WorkloadStatus, 'green' | 'orange' | 'slate'> =
 const helmStatusTone: Record<HelmStatus, 'green' | 'yellow' | 'red'> = { deployed: 'green', pending: 'yellow', failed: 'red' }
 const driftTone: Record<DriftStatus, 'green' | 'orange' | 'slate'> = { 'In sync': 'green', 'Drift detected': 'orange', Unknown: 'slate' }
 
-type Tab = 'overview' | 'workloads' | 'infra' | 'addons' | 'config'
+type Tab = 'overview' | 'workloads' | 'infra' | 'addons' | 'guardrails' | 'config'
 
 export default function ClusterDetail() {
   const { id } = useParams()
@@ -78,16 +78,21 @@ export default function ClusterDetail() {
   const [scaleName, setScaleName] = useState<string | null>(null)
   const [helm, setHelm] = useState<HelmRelease[]>(() => (d ? helmFor(d) : []))
   const [helmName, setHelmName] = useState<string | null>(null)
+  const [namespaces, setNamespaces] = useState<NamespaceGuardrails[]>(() => (d ? namespacesFor(d) : []))
+  const [nsEditing, setNsEditing] = useState(false)
+  const [nsDraft, setNsDraft] = useState<NamespaceGuardrails[] | null>(null)
 
   useEffect(() => {
     if (d) {
       setConfig(loadConfig(d.id, d))
       setWorkloads(workloadsFor(d))
       setHelm(helmFor(d))
+      setNamespaces(namespacesFor(d))
     }
     setEditing(false)
     setDetailName(null)
     setHelmName(null)
+    setNsEditing(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -171,6 +176,20 @@ export default function ClusterDetail() {
     logAction({ action: 'helm.rollback', target: `${name} → rev ${toRevision} · ${d.customer}`, category: 'operations' })
   }
 
+  // Namespace guardrails edit (gated on provision.manage, audited)
+  const nsView = nsEditing && nsDraft ? nsDraft : namespaces
+  const startNsEdit = () => { setNsDraft(JSON.parse(JSON.stringify(namespaces)) as NamespaceGuardrails[]); setNsEditing(true) }
+  const cancelNsEdit = () => setNsEditing(false)
+  const saveNs = () => {
+    if (nsDraft) {
+      setNamespaces(nsDraft)
+      logAction({ action: 'namespace.guardrails.update', target: `${d.customer} cluster`, category: 'operations' })
+    }
+    setNsEditing(false)
+  }
+  const setNsField = (namespace: string, patch: Partial<NamespaceGuardrails>) =>
+    setNsDraft((prev) => (prev ? prev.map((n) => (n.namespace === namespace ? { ...n, ...patch } : n)) : prev))
+
   const h = health(d)
   const region = regionByCode(d.regionCode)
   const tf = terraformFor(d)
@@ -180,6 +199,7 @@ export default function ClusterDetail() {
     { key: 'workloads', label: 'Workloads', icon: Container },
     { key: 'infra', label: 'Infrastructure', icon: GitBranch },
     { key: 'addons', label: 'Add-ons', icon: Puzzle },
+    { key: 'guardrails', label: 'Guardrails', icon: ShieldCheck },
     { key: 'config', label: 'Configuration', icon: SlidersHorizontal },
   ]
 
@@ -270,6 +290,17 @@ export default function ClusterDetail() {
         )}
         {tab === 'infra' && <InfraTab d={d} helm={helm} onOpenHelm={setHelmName} />}
         {tab === 'addons' && <AddonsTab d={d} view={view} editing={editing} setField={setField} />}
+        {tab === 'guardrails' && (
+          <GuardrailsTab
+            namespaces={nsView}
+            editing={nsEditing}
+            canEdit={canEdit}
+            onEdit={startNsEdit}
+            onCancel={cancelNsEdit}
+            onSave={saveNs}
+            setField={setNsField}
+          />
+        )}
         {tab === 'config' && <ConfigTab view={view} editing={editing} canEdit={canEdit} onEdit={startEdit} setField={setField} />}
       </div>
 
@@ -824,6 +855,138 @@ function ConfigTab({ view, editing, canEdit, onEdit, setField }: { view: Cluster
           ))}
         </div>
       </Card>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Guardrails tab (quotas, network policy, pod security)                */
+/* ------------------------------------------------------------------ */
+const psaTone: Record<PSALevel, 'green' | 'yellow' | 'red'> = { restricted: 'green', baseline: 'yellow', privileged: 'red' }
+const PSA_LEVELS: PSALevel[] = ['privileged', 'baseline', 'restricted']
+const PSA_MODES: PSAMode[] = ['enforce', 'audit', 'warn']
+const quotaPct = (used: number, quota: number) => (quota ? Math.min(100, Math.round((used / quota) * 100)) : 0)
+const quotaTone = (used: number, quota: number): 'orange' | 'blue' | 'red' => {
+  const p = quotaPct(used, quota)
+  return p >= 90 ? 'red' : p >= 75 ? 'orange' : 'blue'
+}
+
+function GuardrailsTab({ namespaces, editing, canEdit, onEdit, onCancel, onSave, setField }: {
+  namespaces: NamespaceGuardrails[]
+  editing: boolean
+  canEdit: boolean
+  onEdit: () => void
+  onCancel: () => void
+  onSave: () => void
+  setField: (namespace: string, patch: Partial<NamespaceGuardrails>) => void
+}) {
+  const numQuota = (val: number, on: (n: number) => void) => (
+    <input type="number" min={0} className="input h-8 w-16 py-1 text-xs" value={val} onChange={(e) => on(Number(e.target.value))} />
+  )
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+        <p className="text-sm text-ink-600">Per-namespace resource quotas, network policy, and pod-security admission.</p>
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <button className="btn-secondary" onClick={onCancel}><X className="h-4 w-4" />Cancel</button>
+            <button className="btn-primary" onClick={onSave}><Save className="h-4 w-4" />Save guardrails</button>
+          </div>
+        ) : canEdit ? (
+          <button className="btn-secondary" onClick={onEdit}><Pencil className="h-4 w-4" />Edit guardrails</button>
+        ) : (
+          <span className="text-xs text-ink-400">Your role can’t edit guardrails.</span>
+        )}
+      </div>
+
+      {namespaces.map((ns) => {
+        const updateRule = (i: number, allowed: boolean) => setField(ns.namespace, { rules: ns.rules.map((r, idx) => (idx === i ? { ...r, allowed } : r)) })
+        return (
+          <Card key={ns.namespace}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <p className="font-mono text-sm font-semibold text-ink-900">{ns.namespace}</p>
+              <div className="flex items-center gap-2">
+                {editing ? (
+                  <>
+                    <select className="input h-8 w-32 py-1 text-xs" value={ns.psa} onChange={(e) => setField(ns.namespace, { psa: e.target.value as PSALevel })}>
+                      {PSA_LEVELS.map((l) => <option key={l}>{l}</option>)}
+                    </select>
+                    <select className="input h-8 w-24 py-1 text-xs" value={ns.psaMode} onChange={(e) => setField(ns.namespace, { psaMode: e.target.value as PSAMode })}>
+                      {PSA_MODES.map((m) => <option key={m}>{m}</option>)}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <Badge tone={psaTone[ns.psa]}>PSA: {ns.psa}</Badge>
+                    <Badge tone="slate">{ns.psaMode}</Badge>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Resource quota */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {([
+                { label: 'CPU', used: ns.cpuUsed, quota: ns.cpuQuota, unit: 'cores', set: (n: number) => setField(ns.namespace, { cpuQuota: n }) },
+                { label: 'Memory', used: ns.memUsed, quota: ns.memQuota, unit: 'Gi', set: (n: number) => setField(ns.namespace, { memQuota: n }) },
+                { label: 'Pods', used: ns.podsUsed, quota: ns.podsQuota, unit: '', set: (n: number) => setField(ns.namespace, { podsQuota: n }) },
+              ]).map((q) => (
+                <div key={q.label}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="font-medium text-ink-600">{q.label}</span>
+                    <span className="flex items-center gap-1 font-mono text-ink-500">
+                      {q.used}{q.unit && ` ${q.unit}`} / {editing ? numQuota(q.quota, q.set) : `${q.quota}${q.unit ? ` ${q.unit}` : ''}`}
+                    </span>
+                  </div>
+                  <Progress value={quotaPct(q.used, q.quota)} tone={quotaTone(q.used, q.quota)} />
+                </div>
+              ))}
+            </div>
+
+            {/* Network policy */}
+            <div className="mt-5">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold text-ink-900">Network policy</p>
+                <label className="flex items-center gap-2 text-xs text-ink-600">
+                  Default deny
+                  {editing ? (
+                    <button
+                      onClick={() => setField(ns.namespace, { defaultDeny: !ns.defaultDeny })}
+                      aria-pressed={ns.defaultDeny}
+                      className={`inline-flex h-5 w-9 items-center rounded-full px-0.5 transition-colors ${ns.defaultDeny ? 'justify-end bg-brand-600' : 'justify-start bg-slate-300'}`}
+                    >
+                      <span className="h-4 w-4 rounded-full bg-white shadow-sm" />
+                    </button>
+                  ) : (
+                    <Badge tone={ns.defaultDeny ? 'green' : 'orange'}>{ns.defaultDeny ? 'On' : 'Off'}</Badge>
+                  )}
+                </label>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                {ns.rules.map((r, i) => (
+                  <div key={r.name} className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-0">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs text-ink-800">{r.name}</p>
+                      <p className="text-[11px] text-ink-400">{r.direction} · {r.peer} · {r.ports}</p>
+                    </div>
+                    {editing ? (
+                      <button
+                        onClick={() => updateRule(i, !r.allowed)}
+                        aria-pressed={r.allowed}
+                        className={`inline-flex h-5 w-9 items-center rounded-full px-0.5 transition-colors ${r.allowed ? 'justify-end bg-emerald-500' : 'justify-start bg-rose-400'}`}
+                      >
+                        <span className="h-4 w-4 rounded-full bg-white shadow-sm" />
+                      </button>
+                    ) : (
+                      <Badge tone={r.allowed ? 'green' : 'red'} dot>{r.allowed ? 'Allow' : 'Deny'}</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        )
+      })}
     </div>
   )
 }
