@@ -56,7 +56,7 @@ import { useCustomers } from '@/context/Customers'
 import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 import { billingByCustomer, invoices, paymentByCustomer, billingContactByCustomer } from '@/data/billing'
-import type { PaymentMethod, PaymentType, PaymentStatus } from '@/data/billing'
+import type { PaymentMethod, PaymentType, PaymentStatus, BillingContact } from '@/data/billing'
 
 const PLANS: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
 const STATUSES: Customer['status'][] = ['Active', 'Trial', 'Suspended', 'Churned']
@@ -125,9 +125,15 @@ export default function CustomerDetail() {
   const [draft, setDraft] = useState<Partial<Customer>>({})
   const [methods, setMethods] = useState<PaymentMethod[]>(() => paymentByCustomer(get(id ?? '')?.name ?? ''))
   const [payOpen, setPayOpen] = useState(false)
-  // Re-seed payment methods when the route switches to another customer.
+  const [contact, setContact] = useState<BillingContact | undefined>(() => billingContactByCustomer(get(id ?? '')?.name ?? ''))
+  const [editingContact, setEditingContact] = useState(false)
+  const [contactDraft, setContactDraft] = useState<BillingContact | null>(null)
+  // Re-seed payment methods and billing contact when the route switches customer.
   useEffect(() => {
-    setMethods(paymentByCustomer(get(id ?? '')?.name ?? ''))
+    const nm = get(id ?? '')?.name ?? ''
+    setMethods(paymentByCustomer(nm))
+    setContact(billingContactByCustomer(nm))
+    setEditingContact(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -195,7 +201,21 @@ export default function CustomerDetail() {
     setEditing(false)
   }
 
-  const contact = billingContactByCustomer(name)
+  const canEditBilling = can('license.manage')
+  const setContactField = (patch: Partial<BillingContact>) => setContactDraft((d) => (d ? { ...d, ...patch } : d))
+  const startContactEdit = () => {
+    if (!contact) return
+    setContactDraft({ ...contact, address: [...contact.address] })
+    setEditingContact(true)
+  }
+  const cancelContactEdit = () => setEditingContact(false)
+  const saveContact = () => {
+    if (contactDraft) {
+      setContact({ ...contactDraft, address: contactDraft.address.filter((l) => l.trim() !== '') })
+      logAction({ action: 'billing.contact.update', target: name, category: 'billing' })
+    }
+    setEditingContact(false)
+  }
   const addCard = (pm: PaymentMethod) => {
     setMethods((prev) => [...prev.map((m) => (pm.isDefault ? { ...m, isDefault: false } : m)), pm])
     logAction({ action: 'payment.method.add', target: `${pm.brand} •••• ${pm.last4} · ${name}`, category: 'billing' })
@@ -523,28 +543,73 @@ export default function CustomerDetail() {
 
             {contact && (
               <Card>
-                <CardTitle title="Billing Contact" subtitle="Accounts-payable contact & remittance address" />
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-ink-900">{contact.name}</p>
-                    <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-brand-700 hover:underline">
-                      <Mail className="h-4 w-4 shrink-0 text-ink-400" />
-                      {contact.email}
-                    </a>
-                    <p className="flex items-center gap-2 text-sm text-ink-700">
-                      <Phone className="h-4 w-4 shrink-0 text-ink-400" />
-                      {contact.phone}
-                    </p>
+                <CardTitle
+                  title="Billing Contact"
+                  subtitle="Accounts-payable contact & remittance address"
+                  action={
+                    !editingContact && canEditBilling ? (
+                      <button className="btn-ghost px-2 py-1 text-xs" onClick={startContactEdit}>
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                    ) : undefined
+                  }
+                />
+                {editingContact && contactDraft ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <EditField label="Contact name">
+                        <input className="input" value={contactDraft.name} onChange={(e) => setContactField({ name: e.target.value })} />
+                      </EditField>
+                      <EditField label="Email">
+                        <input className="input" type="email" value={contactDraft.email} onChange={(e) => setContactField({ email: e.target.value })} />
+                      </EditField>
+                      <EditField label="Phone">
+                        <input className="input" value={contactDraft.phone} onChange={(e) => setContactField({ phone: e.target.value })} />
+                      </EditField>
+                    </div>
+                    <EditField label="Remittance address (one line per row)">
+                      <textarea
+                        className="input min-h-[90px]"
+                        value={contactDraft.address.join('\n')}
+                        onChange={(e) => setContactField({ address: e.target.value.split('\n') })}
+                        placeholder={'400 Park Avenue\nNew York, NY 10022\nUnited States'}
+                      />
+                    </EditField>
+                    <div className="flex justify-end gap-2">
+                      <button className="btn-secondary" onClick={cancelContactEdit}>
+                        <X className="h-4 w-4" />
+                        Cancel
+                      </button>
+                      <button className="btn-primary" onClick={saveContact}>
+                        <Save className="h-4 w-4" />
+                        Save contact
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-start gap-2 text-sm text-ink-700">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-                    <address className="not-italic leading-relaxed">
-                      {contact.address.map((line) => (
-                        <span key={line} className="block">{line}</span>
-                      ))}
-                    </address>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-ink-900">{contact.name}</p>
+                      <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-brand-700 hover:underline">
+                        <Mail className="h-4 w-4 shrink-0 text-ink-400" />
+                        {contact.email}
+                      </a>
+                      <p className="flex items-center gap-2 text-sm text-ink-700">
+                        <Phone className="h-4 w-4 shrink-0 text-ink-400" />
+                        {contact.phone}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-ink-700">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
+                      <address className="not-italic leading-relaxed">
+                        {contact.address.map((line) => (
+                          <span key={line} className="block">{line}</span>
+                        ))}
+                      </address>
+                    </div>
                   </div>
-                </div>
+                )}
               </Card>
             )}
 
