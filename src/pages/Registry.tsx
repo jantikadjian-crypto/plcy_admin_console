@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Boxes,
   ShieldCheck,
@@ -10,12 +11,18 @@ import {
   FileCode2,
   CircleDot,
   CheckCircle2,
+  Cpu,
+  ArrowUpRight,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { registryImages, currentTagOf, sbomFor, totalCves } from '@/data/registry'
 import type { RegistryImage, ImageTag } from '@/data/registry'
+import { useRegistryPromoted, setPromotedTag } from '@/data/registryStore'
+import { deployments } from '@/data/fleet'
+import { imageAdoption, imageClusters } from '@/data/clusters'
+import type { ImageClusterRow } from '@/data/clusters'
 import { cves as allCves } from '@/data/ops'
 
 function CvePills({ tag }: { tag: ImageTag }) {
@@ -29,19 +36,29 @@ function CvePills({ tag }: { tag: ImageTag }) {
   )
 }
 
+type Override = Partial<Pick<RegistryImage, 'quarantined' | 'lastScan'>>
+
 export default function Registry() {
   const { logAction } = useSession()
-  const [images, setImages] = useState<RegistryImage[]>(registryImages)
+  const promoted = useRegistryPromoted()
+  const [overrides, setOverrides] = useState<Record<string, Override>>({})
   const [selId, setSelId] = useState<string | null>(null)
   const [scanning, setScanning] = useState<string | null>(null)
 
-  const patch = (id: string, p: Partial<RegistryImage>) => setImages((prev) => prev.map((im) => (im.id === id ? { ...im, ...p } : im)))
+  // Current tag comes from the shared promoted-tag store (also read by the
+  // cluster views); quarantine / last-scan are local session overrides.
+  const images: RegistryImage[] = registryImages.map((im) => ({
+    ...im,
+    currentTag: promoted[im.id] ?? im.currentTag,
+    ...overrides[im.id],
+  }))
+  const patch = (id: string, p: Override) => setOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...p } }))
 
   const promote = (img: RegistryImage, tag: string) => {
     const fromIdx = img.tags.findIndex((x) => x.tag === img.currentTag)
     const toIdx = img.tags.findIndex((x) => x.tag === tag)
     const action = toIdx < fromIdx ? 'image.promote' : 'image.rollback'
-    patch(img.id, { currentTag: tag })
+    setPromotedTag(img.id, tag)
     logAction({ action, target: `${img.name}:${tag}`, category: 'supply-chain' })
   }
   const rescan = (img: RegistryImage) => {
@@ -75,10 +92,11 @@ export default function Registry() {
       </div>
 
       <Card className="mt-6">
-        <CardTitle title="Images" subtitle="Current deployed tag and vulnerability posture · click to inspect" />
-        <Table columns={['Repository', 'Current tag', 'Signing', 'Vulnerabilities', 'Last scan', 'Status', '']}>
+        <CardTitle title="Images" subtitle="Promoted tag, fleet rollout, and vulnerability posture · click to inspect" />
+        <Table columns={['Repository', 'Promoted tag', 'Fleet rollout', 'Signing', 'Vulnerabilities', 'Status', '']}>
           {images.map((img) => {
             const cur = currentTagOf(img)
+            const ad = imageAdoption(img.id, deployments, promoted)
             return (
               <Tr key={img.id} onClick={() => setSelId(img.id)}>
                 <Td>
@@ -90,13 +108,24 @@ export default function Registry() {
                   <Badge tone={cur.channel === 'rc' ? 'yellow' : 'slate'}>{cur.channel}</Badge>
                 </Td>
                 <Td>
+                  {ad.live === 0 ? (
+                    <span className="text-xs text-ink-400">Not deployed</span>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-ink-600">{ad.onPromoted}/{ad.live} clusters</span>
+                      {ad.behind > 0 && <Badge tone="orange">{ad.behind} behind</Badge>}
+                      {ad.ahead > 0 && <Badge tone="blue">{ad.ahead} ahead</Badge>}
+                      {ad.behind === 0 && ad.ahead === 0 && <Badge tone="green" dot>in sync</Badge>}
+                    </div>
+                  )}
+                </Td>
+                <Td>
                   <div className="flex items-center gap-1.5">
                     {img.signed && <span title="Signed"><ShieldCheck className="h-4 w-4 text-emerald-500" /></span>}
                     <span className="text-xs text-ink-500">SLSA L{img.slsa}</span>
                   </div>
                 </Td>
                 <Td><CvePills tag={cur} /></Td>
-                <Td className="whitespace-nowrap text-xs text-ink-500">{img.lastScan}</Td>
                 <Td>{img.quarantined ? <Badge tone="red" dot>Quarantined</Badge> : <Badge tone="green" dot>Active</Badge>}</Td>
                 <Td><CircleDot className="h-4 w-4 text-ink-300" /></Td>
               </Tr>
@@ -108,6 +137,7 @@ export default function Registry() {
       {sel && (
         <ImageDrawer
           img={sel}
+          promoted={promoted}
           scanning={scanning === sel.id}
           onClose={() => setSelId(null)}
           onPromote={(tag) => promote(sel, tag)}
@@ -122,10 +152,13 @@ export default function Registry() {
 /* ------------------------------------------------------------------ */
 /* Image drawer                                                        */
 /* ------------------------------------------------------------------ */
-type DrawerTab = 'tags' | 'sbom' | 'cves'
+type DrawerTab = 'tags' | 'rollout' | 'sbom' | 'cves'
 
-function ImageDrawer({ img, scanning, onClose, onPromote, onRescan, onQuarantine }: {
+const clusterStatusTone = { 'In sync': 'green', Behind: 'orange', Ahead: 'blue', Untracked: 'slate' } as const
+
+function ImageDrawer({ img, promoted, scanning, onClose, onPromote, onRescan, onQuarantine }: {
   img: RegistryImage
+  promoted: Record<string, string>
   scanning: boolean
   onClose: () => void
   onPromote: (tag: string) => void
@@ -135,9 +168,11 @@ function ImageDrawer({ img, scanning, onClose, onPromote, onRescan, onQuarantine
   const [tab, setTab] = useState<DrawerTab>('tags')
   const sbom = sbomFor(img)
   const imgCves = allCves.filter((c) => c.image === img.name)
+  const clusters: ImageClusterRow[] = imageClusters(img.id, deployments, promoted)
 
   const tabs: { key: DrawerTab; label: string }[] = [
     { key: 'tags', label: `Tags · ${img.tags.length}` },
+    ...(clusters.length ? [{ key: 'rollout' as DrawerTab, label: `Fleet rollout · ${clusters.length}` }] : []),
     { key: 'sbom', label: `SBOM · ${sbom.length}` },
     { key: 'cves', label: `CVEs · ${imgCves.length}` },
   ]
@@ -212,6 +247,41 @@ function ImageDrawer({ img, scanning, onClose, onPromote, onRescan, onQuarantine
               </div>
             )
           })}
+        </div>
+      )}
+
+      {tab === 'rollout' && (
+        <div>
+          <p className="mb-3 text-xs text-ink-500">
+            Clusters running <span className="font-mono text-ink-700">{img.name}</span>, compared against the promoted tag{' '}
+            <span className="font-mono font-semibold text-ink-900">{img.currentTag}</span>. Behind clusters are candidates for a staged rollout.
+          </p>
+          <div className="space-y-2">
+            {clusters.map((c) => (
+              <Link
+                key={c.id}
+                to={`/clusters/${c.id}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/40"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Cpu className="h-4 w-4 shrink-0 text-ink-400" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink-900">{c.customer}</p>
+                    <p className="font-mono text-[11px] text-ink-400">{c.regionCode}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-ink-600">{c.deployedTag}</span>
+                  {c.offline ? (
+                    <Badge tone="slate" dot>offline</Badge>
+                  ) : (
+                    <Badge tone={clusterStatusTone[c.status]} dot>{c.status}</Badge>
+                  )}
+                  <ArrowUpRight className="h-3.5 w-3.5 text-ink-300" />
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

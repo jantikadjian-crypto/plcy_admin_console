@@ -11,6 +11,7 @@ import {
   GitBranch,
   ShieldAlert,
   Ban,
+  Boxes,
   ChevronRight,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -42,8 +43,9 @@ import {
 import { slaTargets, slaTotals } from '@/data/sla'
 import { billingTotals, customerBilling } from '@/data/billing'
 import { deployments } from '@/data/fleet'
-import { clusterTotals, terraformFor } from '@/data/clusters'
+import { clusterTotals, terraformFor, imageDriftForDeployment } from '@/data/clusters'
 import { registryImages, currentTagOf } from '@/data/registry'
+import { useRegistryPromoted } from '@/data/registryStore'
 
 /* ------------------------------------------------------------------ */
 /* Live command-center signals                                          */
@@ -74,7 +76,7 @@ const quarantined = registryImages.filter((i) => i.quarantined)
 const openIncidents = incidents.filter((i) => i.status !== 'Resolved')
 const pastDueCustomers = customerBilling.filter((b) => b.status === 'Past due')
 
-const signals: Signal[] = [
+const baseSignals: Signal[] = [
   { key: 'sla', label: 'SLA breaches', value: String(slaTotals.breached), icon: Gauge, tone: slaTotals.breached ? 'red' : 'green', footer: `${slaTotals.atRisk} at risk`, to: '/sla' },
   { key: 'billing', label: 'Past due', value: fmtMoney(billingTotals.pastDue), icon: Receipt, tone: billingTotals.pastDue ? 'red' : 'green', footer: `${billingTotals.pastDueCount} invoices`, to: '/billing' },
   { key: 'drift', label: 'Terraform drift', value: String(drift.drifted), icon: GitBranch, tone: drift.drifted ? 'orange' : 'green', footer: 'Clusters out of sync', to: '/clusters' },
@@ -83,7 +85,7 @@ const signals: Signal[] = [
   { key: 'quarantine', label: 'Quarantined', value: String(quarantined.length), icon: Ban, tone: quarantined.length ? 'orange' : 'green', footer: 'Images blocked', to: '/registry' },
 ]
 
-const attention: AttentionItem[] = [
+const baseAttention: AttentionItem[] = [
   ...slaTargets
     .filter((s) => s.status !== 'Meeting')
     .map<AttentionItem>((s) => ({
@@ -118,7 +120,7 @@ const attention: AttentionItem[] = [
     detail: `${i.customer} · ${i.severity} · ${i.status}`,
     to: '/incidents',
   })),
-].sort((a, b) => sevRank[a.sev] - sevRank[b.sev])
+]
 
 const toneBox: Record<Signal['tone'], string> = {
   red: 'bg-rose-50 text-rose-600',
@@ -149,6 +151,33 @@ function SignalCard({ s }: { s: Signal }) {
 }
 
 export default function Dashboard() {
+  const promoted = useRegistryPromoted()
+  // Clusters running an image tag behind what's been promoted in the registry.
+  const imageDriftItems: AttentionItem[] = deployments
+    .map((d) => ({ d, r: imageDriftForDeployment(d, promoted) }))
+    .filter(({ r }) => !r.offline && r.behind > 0)
+    .map(({ d, r }) => ({
+      sev: 'medium' as Sev,
+      title: `${d.customer} — image drift`,
+      detail: `${r.behind} workload${r.behind === 1 ? '' : 's'} behind promoted tag`,
+      to: `/clusters/${d.id}`,
+    }))
+  const attention = [...baseAttention, ...imageDriftItems].sort((a, b) => sevRank[a.sev] - sevRank[b.sev])
+
+  const clustersBehind = imageDriftItems.length
+  const signals: Signal[] = [
+    ...baseSignals,
+    {
+      key: 'imgdrift',
+      label: 'Image drift',
+      value: String(clustersBehind),
+      icon: Boxes,
+      tone: clustersBehind ? 'orange' : 'green',
+      footer: 'Clusters behind promoted',
+      to: '/registry',
+    },
+  ]
+
   return (
     <>
       <PageHeader
@@ -163,7 +192,7 @@ export default function Dashboard() {
       />
 
       {/* Command-center signals */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {signals.map((s) => (
           <SignalCard key={s.key} s={s} />
         ))}

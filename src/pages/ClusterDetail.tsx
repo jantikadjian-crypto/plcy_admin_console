@@ -25,6 +25,7 @@ import {
   Undo2,
   Terminal,
   Lock,
+  ArrowUpCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, StatCard, Badge, Table, Tr, Td, Progress, EmptyState, Modal } from '@/components/ui'
@@ -33,8 +34,9 @@ import { useCustomerScope } from '@/context/CustomerScope'
 import { deployments, regionByCode, releases } from '@/data/fleet'
 import type { Deployment } from '@/data/fleet'
 import { customers } from '@/data/mock'
-import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor, podsForWorkload, workloadLogs, namespacesFor } from '@/data/clusters'
-import type { Workload, WorkloadStatus, HelmStatus, HelmRelease, DriftStatus, PodStatus, NamespaceGuardrails, PSALevel, PSAMode } from '@/data/clusters'
+import { workloadsFor, terraformFor, helmFor, addonsFor, nodePoolsFor, podsForWorkload, workloadLogs, namespacesFor, imageDriftFor } from '@/data/clusters'
+import type { Workload, WorkloadStatus, HelmStatus, HelmRelease, DriftStatus, PodStatus, NamespaceGuardrails, PSALevel, PSAMode, ImageDriftStatus, ImageDrift } from '@/data/clusters'
+import { useRegistryPromoted } from '@/data/registryStore'
 import {
   loadConfig,
   saveConfig,
@@ -59,6 +61,7 @@ const memTone = (v: number): 'orange' | 'purple' => (v > 80 ? 'orange' : 'purple
 const workloadStatusTone: Record<WorkloadStatus, 'green' | 'orange' | 'slate'> = { Running: 'green', Degraded: 'orange', Pending: 'slate' }
 const helmStatusTone: Record<HelmStatus, 'green' | 'yellow' | 'red'> = { deployed: 'green', pending: 'yellow', failed: 'red' }
 const driftTone: Record<DriftStatus, 'green' | 'orange' | 'slate'> = { 'In sync': 'green', 'Drift detected': 'orange', Unknown: 'slate' }
+const imgDriftTone: Record<ImageDriftStatus, 'green' | 'orange' | 'blue' | 'slate'> = { 'In sync': 'green', Behind: 'orange', Ahead: 'blue', Untracked: 'slate' }
 
 type Tab = 'overview' | 'workloads' | 'infra' | 'addons' | 'guardrails' | 'config'
 
@@ -67,6 +70,7 @@ export default function ClusterDetail() {
   const navigate = useNavigate()
   const { can, logAction } = useSession()
   const { setScope } = useCustomerScope()
+  const promoted = useRegistryPromoted()
   const [tab, setTab] = useState<Tab>('overview')
 
   const d = deployments.find((x) => x.id === id)
@@ -153,6 +157,14 @@ export default function ClusterDetail() {
     const prev = releases[idx + 1] ?? releases[idx]
     patchWorkload(w.name, { image: w.image.replace(/:[^:]+$/, `:${prev.version}`), status: 'Running', replicasReady: w.replicas, restarts: 0 })
     logAction({ action: 'workload.rollback', target: `${w.name} → ${prev.version} · ${d.customer}`, category: 'operations' })
+  }
+  // Roll a workload onto the tag currently promoted for its image in the registry.
+  const syncWorkload = (w: Workload) => {
+    const drift = imageDriftFor(w, promoted)
+    if (!drift.promotedTag || drift.status === 'In sync' || drift.status === 'Untracked') return
+    patchWorkload(w.name, { image: w.image.replace(/:[^:]+$/, `:${drift.promotedTag}`), status: 'Pending', replicasReady: 0 })
+    logAction({ action: 'workload.sync', target: `${w.name} → ${drift.promotedTag} (promoted) · ${d.customer}`, category: 'operations' })
+    window.setTimeout(() => patchWorkload(w.name, { status: 'Running', replicasReady: w.replicas, restarts: 0 }), 1200)
   }
   const canManageWorkloads = can('provision.manage')
 
@@ -281,10 +293,12 @@ export default function ClusterDetail() {
         {tab === 'workloads' && (
           <WorkloadsTab
             workloads={workloads}
+            promoted={promoted}
             canManage={canManageWorkloads}
             onRestart={restartWorkload}
             onScale={setScaleName}
             onRollback={rollbackWorkload}
+            onSync={syncWorkload}
             onOpen={setDetailName}
           />
         )}
@@ -311,11 +325,13 @@ export default function ClusterDetail() {
           <WorkloadDrawer
             w={w}
             regionCode={d.regionCode}
+            drift={imageDriftFor(w, promoted)}
             canManage={canManageWorkloads}
             onClose={() => setDetailName(null)}
             onRestart={() => restartWorkload(w)}
             onScale={() => setScaleName(w.name)}
             onRollback={() => rollbackWorkload(w)}
+            onSync={() => syncWorkload(w)}
           />
         )
       })()}
@@ -430,34 +446,41 @@ const canRollback = (w: Workload) => releases.some((r) => w.image.endsWith(r.ver
 
 function WorkloadsTab({
   workloads,
+  promoted,
   canManage,
   onRestart,
   onScale,
   onRollback,
+  onSync,
   onOpen,
 }: {
   workloads: Workload[]
+  promoted: Record<string, string>
   canManage: boolean
   onRestart: (w: Workload) => void
   onScale: (name: string) => void
   onRollback: (w: Workload) => void
+  onSync: (w: Workload) => void
   onOpen: (name: string) => void
 }) {
   const signed = workloads.filter((w) => w.signed).length
   const cves = workloads.reduce((s, w) => s + w.cves, 0)
+  const behind = workloads.filter((w) => imageDriftFor(w, promoted).status === 'Behind').length
   return (
     <Card>
       <div className="mb-4 flex flex-wrap gap-2">
         <Badge tone="blue">{workloads.length} workloads</Badge>
         <Badge tone="green" dot>{signed}/{workloads.length} images signed</Badge>
         <Badge tone={cves > 0 ? 'red' : 'green'} dot>{cves} open CVE{cves === 1 ? '' : 's'}</Badge>
+        <Badge tone={behind > 0 ? 'orange' : 'green'} dot>{behind} behind promoted</Badge>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
+        <table className="w-full min-w-[920px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
               <th className="py-2 pr-3">Workload</th>
               <th className="py-2 pr-3">Image</th>
+              <th className="py-2 pr-3">Promoted / drift</th>
               <th className="py-2 pr-3">Ready</th>
               <th className="py-2 pr-3">Restarts</th>
               <th className="py-2 pr-3">Security</th>
@@ -466,41 +489,55 @@ function WorkloadsTab({
             </tr>
           </thead>
           <tbody>
-            {workloads.map((w: Workload) => (
-              <tr key={`${w.namespace}/${w.name}`} className="border-b border-slate-100 align-top last:border-0">
-                <td className="py-2.5 pr-3">
-                  <button className="text-left" onClick={() => onOpen(w.name)}>
-                    <p className="font-medium text-ink-900 hover:text-brand-700">{w.name}</p>
-                    <p className="text-xs text-ink-400">{w.namespace} · {w.kind}</p>
-                  </button>
-                </td>
-                <td className="py-2.5 pr-3">
-                  <p className="font-mono text-xs text-ink-700">{w.image}</p>
-                  <p className="font-mono text-[11px] text-ink-400">{w.digest.slice(0, 19)}…</p>
-                </td>
-                <td className="py-2.5 pr-3"><span className={`font-mono text-xs ${w.replicasReady < w.replicas ? 'font-semibold text-rose-600' : 'text-ink-700'}`}>{w.replicasReady}/{w.replicas}</span></td>
-                <td className="py-2.5 pr-3"><span className={`font-mono text-xs ${w.restarts > 0 ? 'text-orange-600' : 'text-ink-500'}`}>{w.restarts}</span></td>
-                <td className="py-2.5 pr-3">
-                  <div className="flex items-center gap-1.5">
-                    {w.signed && <span title="Signed (cosign)"><ShieldCheck className="h-4 w-4 text-emerald-500" /></span>}
-                    {w.cves > 0 && <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600"><ShieldAlert className="h-3.5 w-3.5" />{w.cves}</span>}
-                  </div>
-                </td>
-                <td className="py-2.5 pr-3"><Badge tone={workloadStatusTone[w.status]} dot>{w.status}</Badge></td>
-                <td className="py-2.5 pr-3">
-                  <div className="flex items-center justify-end gap-0.5">
-                    <IconBtn title="Logs & pods" onClick={() => onOpen(w.name)}><Terminal className="h-4 w-4" /></IconBtn>
-                    {canManage && <IconBtn title="Restart" onClick={() => onRestart(w)}><RotateCw className="h-4 w-4" /></IconBtn>}
-                    {canManage && <IconBtn title="Scale" onClick={() => onScale(w.name)}><Maximize2 className="h-4 w-4" /></IconBtn>}
-                    {canManage && canRollback(w) && <IconBtn title="Roll back image" onClick={() => onRollback(w)}><Undo2 className="h-4 w-4" /></IconBtn>}
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {workloads.map((w: Workload) => {
+              const drift = imageDriftFor(w, promoted)
+              const canSync = canManage && (drift.status === 'Behind' || drift.status === 'Ahead')
+              return (
+                <tr key={`${w.namespace}/${w.name}`} className="border-b border-slate-100 align-top last:border-0">
+                  <td className="py-2.5 pr-3">
+                    <button className="text-left" onClick={() => onOpen(w.name)}>
+                      <p className="font-medium text-ink-900 hover:text-brand-700">{w.name}</p>
+                      <p className="text-xs text-ink-400">{w.namespace} · {w.kind}</p>
+                    </button>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    <p className="font-mono text-xs text-ink-700">{w.image}</p>
+                    <p className="font-mono text-[11px] text-ink-400">{w.digest.slice(0, 19)}…</p>
+                  </td>
+                  <td className="py-2.5 pr-3">
+                    {drift.status === 'Untracked' ? (
+                      <span className="text-xs text-ink-400">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        <Badge tone={imgDriftTone[drift.status]} dot>{drift.status === 'In sync' ? 'In sync' : `${drift.status} · ${drift.promotedTag}`}</Badge>
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-2.5 pr-3"><span className={`font-mono text-xs ${w.replicasReady < w.replicas ? 'font-semibold text-rose-600' : 'text-ink-700'}`}>{w.replicasReady}/{w.replicas}</span></td>
+                  <td className="py-2.5 pr-3"><span className={`font-mono text-xs ${w.restarts > 0 ? 'text-orange-600' : 'text-ink-500'}`}>{w.restarts}</span></td>
+                  <td className="py-2.5 pr-3">
+                    <div className="flex items-center gap-1.5">
+                      {w.signed && <span title="Signed (cosign)"><ShieldCheck className="h-4 w-4 text-emerald-500" /></span>}
+                      {w.cves > 0 && <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600"><ShieldAlert className="h-3.5 w-3.5" />{w.cves}</span>}
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3"><Badge tone={workloadStatusTone[w.status]} dot>{w.status}</Badge></td>
+                  <td className="py-2.5 pr-3">
+                    <div className="flex items-center justify-end gap-0.5">
+                      {canSync && <IconBtn title={`Sync to promoted (${drift.promotedTag})`} onClick={() => onSync(w)}><ArrowUpCircle className="h-4 w-4" /></IconBtn>}
+                      <IconBtn title="Logs & pods" onClick={() => onOpen(w.name)}><Terminal className="h-4 w-4" /></IconBtn>
+                      {canManage && <IconBtn title="Restart" onClick={() => onRestart(w)}><RotateCw className="h-4 w-4" /></IconBtn>}
+                      {canManage && <IconBtn title="Scale" onClick={() => onScale(w.name)}><Maximize2 className="h-4 w-4" /></IconBtn>}
+                      {canManage && canRollback(w) && <IconBtn title="Roll back image" onClick={() => onRollback(w)}><Undo2 className="h-4 w-4" /></IconBtn>}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
-      {!canManage && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-400"><Terminal className="h-3 w-3" /> Your role can view workloads but not restart, scale, or roll them back.</p>}
+      {!canManage && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-400"><Terminal className="h-3 w-3" /> Your role can view workloads but not restart, scale, sync, or roll them back.</p>}
     </Card>
   )
 }
@@ -515,17 +552,20 @@ function IconBtn({ title, onClick, children }: { title: string; onClick: () => v
 
 const podStatusTone: Record<PodStatus, 'green' | 'red' | 'slate' | 'orange'> = { Running: 'green', CrashLoopBackOff: 'red', Pending: 'slate', Terminating: 'orange' }
 
-function WorkloadDrawer({ w, regionCode, canManage, onClose, onRestart, onScale, onRollback }: {
+function WorkloadDrawer({ w, regionCode, drift, canManage, onClose, onRestart, onScale, onRollback, onSync }: {
   w: Workload
   regionCode: string
+  drift: ImageDrift
   canManage: boolean
   onClose: () => void
   onRestart: () => void
   onScale: () => void
   onRollback: () => void
+  onSync: () => void
 }) {
   const pods = podsForWorkload(w, regionCode)
   const logs = workloadLogs(w)
+  const canSync = canManage && (drift.status === 'Behind' || drift.status === 'Ahead')
   return (
     <Modal
       open
@@ -539,6 +579,7 @@ function WorkloadDrawer({ w, regionCode, canManage, onClose, onRestart, onScale,
           <span className="font-mono text-xs text-ink-400">{w.image}</span>
           <div className="flex items-center gap-2">
             <button className="btn-ghost" onClick={onClose}>Close</button>
+            {canSync && <button className="btn-secondary" onClick={onSync}><ArrowUpCircle className="h-4 w-4" />Sync to {drift.promotedTag}</button>}
             {canManage && <button className="btn-secondary" onClick={onRestart}><RotateCw className="h-4 w-4" />Restart</button>}
             {canManage && <button className="btn-secondary" onClick={onScale}><Maximize2 className="h-4 w-4" />Scale</button>}
             {canManage && canRollback(w) && <button className="btn-secondary" onClick={onRollback}><Undo2 className="h-4 w-4" />Roll back</button>}
@@ -547,6 +588,14 @@ function WorkloadDrawer({ w, regionCode, canManage, onClose, onRestart, onScale,
       }
     >
       <div className="space-y-5">
+        {drift.status !== 'Untracked' && (
+          <div className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-sm ${drift.status === 'In sync' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : drift.status === 'Behind' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-blue-200 bg-blue-50 text-blue-800'}`}>
+            <span>
+              Registry promoted tag: <span className="font-mono font-semibold">{drift.promotedTag}</span> · deployed: <span className="font-mono font-semibold">{drift.deployedTag}</span>
+            </span>
+            <Badge tone={imgDriftTone[drift.status]} dot>{drift.status}</Badge>
+          </div>
+        )}
         <div>
           <div className="mb-2 flex items-baseline justify-between">
             <p className="text-sm font-semibold text-ink-900">Pods</p>

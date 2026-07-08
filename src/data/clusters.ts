@@ -389,3 +389,143 @@ export const clusterTotals = (deps: Deployment[]) => {
   const workloads = deps.reduce((s, d) => s + (d.status === 'Offline' ? 0 : workloadsFor(d).length), 0)
   return { drifted, workloads }
 }
+
+/* ------------------------------------------------------------------ */
+/* Image drift — registry promoted tag vs what a cluster runs           */
+/* ------------------------------------------------------------------ */
+/**
+ * Maps a cluster workload to the registry image whose *promoted* tag defines
+ * its desired version. The core PLCY platform components ship together from the
+ * platform chart, so those without a dedicated image track the platform image
+ * (policy-engine). Mirrored infra images (postgres, redis, ingress) aren't
+ * promoted through the PLCY registry, so they're untracked.
+ */
+const COMPONENT_IMAGE: Record<string, string> = {
+  'plcy-policy-engine': 'img_policy_engine',
+  'plcy-model-gateway': 'img_model_gateway',
+  'plcy-api': 'img_api_gateway',
+  'plcy-redactor': 'img_policy_engine',
+  'plcy-evaluator': 'img_policy_engine',
+  'plcy-audit-sink': 'img_policy_engine',
+}
+
+export type ImageDriftStatus = 'In sync' | 'Behind' | 'Ahead' | 'Untracked'
+export interface ImageDrift {
+  imageId: string | null
+  deployedTag: string
+  promotedTag: string
+  status: ImageDriftStatus
+}
+
+/** The tag portion of a workload image ref, e.g. `…/policy-engine:v4.8.2` → `v4.8.2`. */
+export function deployedTagOf(w: Workload): string {
+  const i = w.image.lastIndexOf(':')
+  return i > w.image.lastIndexOf('/') ? w.image.slice(i + 1) : ''
+}
+
+/** Rough semver compare that treats `-rc*` as just below the same core release. */
+function verValue(v: string): number[] {
+  const [core, pre] = v.replace(/^v/, '').split('-')
+  const nums = core.split('.').map((n) => Number(n) || 0)
+  while (nums.length < 3) nums.push(0)
+  // pre-release ranks below the final of the same core version
+  nums.push(pre ? -1 : 0)
+  return nums
+}
+export function compareVer(a: string, b: string): number {
+  const av = verValue(a)
+  const bv = verValue(b)
+  for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+    const d = (av[i] ?? 0) - (bv[i] ?? 0)
+    if (d !== 0) return d < 0 ? -1 : 1
+  }
+  return 0
+}
+
+export function imageDriftFor(w: Workload, promoted: Record<string, string>): ImageDrift {
+  const imageId = COMPONENT_IMAGE[w.name] ?? null
+  const deployedTag = deployedTagOf(w)
+  if (!imageId) return { imageId: null, deployedTag, promotedTag: '', status: 'Untracked' }
+  const promotedTag = promoted[imageId] ?? ''
+  if (!promotedTag || !deployedTag) return { imageId, deployedTag, promotedTag, status: 'Untracked' }
+  const c = compareVer(deployedTag, promotedTag)
+  return { imageId, deployedTag, promotedTag, status: c === 0 ? 'In sync' : c < 0 ? 'Behind' : 'Ahead' }
+}
+
+/** Per-deployment roll-up of tracked workloads that are behind/ahead of promoted. */
+export function imageDriftForDeployment(d: Deployment, promoted: Record<string, string>) {
+  if (d.status === 'Offline') return { behind: 0, ahead: 0, inSync: 0, tracked: 0, offline: true }
+  let behind = 0
+  let ahead = 0
+  let inSync = 0
+  for (const w of workloadsFor(d)) {
+    const drift = imageDriftFor(w, promoted)
+    if (drift.status === 'Untracked') continue
+    if (drift.status === 'Behind') behind++
+    else if (drift.status === 'Ahead') ahead++
+    else inSync++
+  }
+  return { behind, ahead, inSync, tracked: behind + ahead + inSync, offline: false }
+}
+
+/** Fleet adoption of a single image's promoted tag across live clusters. */
+export function imageAdoption(imageId: string, deps: Deployment[], promoted: Record<string, string>) {
+  const promotedTag = promoted[imageId] ?? ''
+  let onPromoted = 0
+  let behind = 0
+  let ahead = 0
+  for (const d of deps) {
+    if (d.status === 'Offline') continue
+    const w = workloadsFor(d).find((x) => COMPONENT_IMAGE[x.name] === imageId)
+    if (!w) continue
+    const c = compareVer(deployedTagOf(w), promotedTag)
+    if (c === 0) onPromoted++
+    else if (c < 0) behind++
+    else ahead++
+  }
+  return { promotedTag, onPromoted, behind, ahead, live: onPromoted + behind + ahead }
+}
+
+/** Per-cluster view of a single image: which tenants run it and whether they're behind. */
+export interface ImageClusterRow {
+  id: string
+  customer: string
+  regionCode: string
+  deployedTag: string
+  status: ImageDriftStatus
+  offline: boolean
+}
+export function imageClusters(imageId: string, deps: Deployment[], promoted: Record<string, string>): ImageClusterRow[] {
+  const promotedTag = promoted[imageId] ?? ''
+  const rows: ImageClusterRow[] = []
+  for (const d of deps) {
+    const w = workloadsFor(d).find((x) => COMPONENT_IMAGE[x.name] === imageId)
+    if (!w) continue
+    const deployedTag = deployedTagOf(w)
+    const offline = d.status === 'Offline'
+    const c = compareVer(deployedTag, promotedTag)
+    rows.push({
+      id: d.id,
+      customer: d.customer,
+      regionCode: d.regionCode,
+      deployedTag,
+      status: offline ? 'Untracked' : c === 0 ? 'In sync' : c < 0 ? 'Behind' : 'Ahead',
+      offline,
+    })
+  }
+  return rows
+}
+
+/** Fleet-wide count of clusters running at least one workload behind promoted. */
+export function imageDriftTotals(deps: Deployment[], promoted: Record<string, string>) {
+  let clustersBehind = 0
+  let workloadsBehind = 0
+  for (const d of deps) {
+    const r = imageDriftForDeployment(d, promoted)
+    if (r.behind > 0) {
+      clustersBehind++
+      workloadsBehind += r.behind
+    }
+  }
+  return { clustersBehind, workloadsBehind }
+}
