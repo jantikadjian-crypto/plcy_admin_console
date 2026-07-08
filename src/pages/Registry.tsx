@@ -82,7 +82,7 @@ export default function Registry() {
 
   return (
     <>
-      <PageHeader title="Container Registry" description="Signed OCI images shipped to registry.plcy.app — tags, SBOMs, and vulnerability posture across the fleet" />
+      <PageHeader title="Container Registry" description="Signed OCI images shipped to registry.plcy.app — tags, SBOMs, and vulnerability posture across the fleet. This is the master catalog of every version of PLCY's software: which version is approved to run, whether it's secure, and which customer clusters are actually running it." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Images" value={images.length} icon={Boxes} tone="blue" footer="In the registry" />
@@ -92,7 +92,7 @@ export default function Registry() {
       </div>
 
       <Card className="mt-6">
-        <CardTitle title="Images" subtitle="Promoted tag, fleet rollout, and vulnerability posture · click to inspect" />
+        <CardTitle title="Images" subtitle="Each row is one PLCY software component. See its approved (promoted) version, how many customer clusters run that version vs. how many are behind or ahead, and any known security issues. Click a row to inspect tags, view the SBOM, or promote/roll back a version." />
         <Table columns={['Repository', 'Promoted tag', 'Fleet rollout', 'Signing', 'Vulnerabilities', 'Status', '']}>
           {images.map((img) => {
             const cur = currentTagOf(img)
