@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -28,6 +28,11 @@ import {
   FileText,
   Plus,
   Star,
+  Trash2,
+  Mail,
+  Phone,
+  MapPin,
+  Lock,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -50,7 +55,7 @@ import { useCustomerScope } from '@/context/CustomerScope'
 import { useCustomers } from '@/context/Customers'
 import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum } from '@/data/mock'
 import type { Customer } from '@/data/mock'
-import { billingByCustomer, invoices, paymentByCustomer } from '@/data/billing'
+import { billingByCustomer, invoices, paymentByCustomer, billingContactByCustomer } from '@/data/billing'
 import type { PaymentMethod, PaymentType, PaymentStatus } from '@/data/billing'
 
 const PLANS: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
@@ -118,8 +123,13 @@ export default function CustomerDetail() {
   const [tab, setTab] = useState<Tab>('overview')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Customer>>({})
-  const [addedPayments, setAddedPayments] = useState<PaymentMethod[]>([])
+  const [methods, setMethods] = useState<PaymentMethod[]>(() => paymentByCustomer(get(id ?? '')?.name ?? ''))
   const [payOpen, setPayOpen] = useState(false)
+  // Re-seed payment methods when the route switches to another customer.
+  useEffect(() => {
+    setMethods(paymentByCustomer(get(id ?? '')?.name ?? ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   const customer = get(id ?? '')
 
@@ -183,6 +193,23 @@ export default function CustomerDetail() {
     update(c.id, draft)
     logAction({ action: 'customer.update', target: c.name, category: 'customer' })
     setEditing(false)
+  }
+
+  const contact = billingContactByCustomer(name)
+  const addCard = (pm: PaymentMethod) => {
+    setMethods((prev) => [...prev.map((m) => (pm.isDefault ? { ...m, isDefault: false } : m)), pm])
+    logAction({ action: 'payment.method.add', target: `${pm.brand} •••• ${pm.last4} · ${name}`, category: 'billing' })
+    setPayOpen(false)
+  }
+  const setDefaultMethod = (pmId: string) => {
+    const pm = methods.find((m) => m.id === pmId)
+    setMethods((prev) => prev.map((m) => ({ ...m, isDefault: m.id === pmId })))
+    if (pm) logAction({ action: 'payment.method.set-default', target: `${pm.brand} •••• ${pm.last4} · ${name}`, category: 'billing' })
+  }
+  const removeMethod = (pmId: string) => {
+    const pm = methods.find((m) => m.id === pmId)
+    setMethods((prev) => prev.filter((m) => m.id !== pmId))
+    if (pm) logAction({ action: 'payment.method.remove', target: `${pm.brand} •••• ${pm.last4} · ${name}`, category: 'billing' })
   }
 
   const tabs: { key: Tab; label: string; icon: LucideIcon; count?: number }[] = [
@@ -473,19 +500,53 @@ export default function CustomerDetail() {
                   ) : undefined
                 }
               />
-              {(() => {
-                const methods = [...paymentByCustomer(name), ...addedPayments]
-                return methods.length === 0 ? (
-                  <EmptyState icon={CreditCard} title="No payment method" description="No payment method on file for this customer." />
-                ) : (
-                  <div className="space-y-2">
-                    {methods.map((m) => (
-                      <PaymentRow key={m.id} m={m} />
-                    ))}
-                  </div>
-                )
-              })()}
+              {methods.length === 0 ? (
+                <EmptyState icon={CreditCard} title="No payment method" description="No payment method on file for this customer." />
+              ) : (
+                <div className="space-y-2">
+                  {methods.map((m) => (
+                    <PaymentRow
+                      key={m.id}
+                      m={m}
+                      canEdit={canEdit}
+                      onSetDefault={() => setDefaultMethod(m.id)}
+                      onRemove={() => removeMethod(m.id)}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex items-center gap-1.5 border-t border-slate-100 pt-3 text-xs text-ink-400">
+                <Lock className="h-3 w-3" />
+                Secured by Stripe{contact ? ` · ${contact.processorId}` : ''}
+              </div>
             </Card>
+
+            {contact && (
+              <Card>
+                <CardTitle title="Billing Contact" subtitle="Accounts-payable contact & remittance address" />
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-ink-900">{contact.name}</p>
+                    <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-sm text-brand-700 hover:underline">
+                      <Mail className="h-4 w-4 shrink-0 text-ink-400" />
+                      {contact.email}
+                    </a>
+                    <p className="flex items-center gap-2 text-sm text-ink-700">
+                      <Phone className="h-4 w-4 shrink-0 text-ink-400" />
+                      {contact.phone}
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm text-ink-700">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
+                    <address className="not-italic leading-relaxed">
+                      {contact.address.map((line) => (
+                        <span key={line} className="block">{line}</span>
+                      ))}
+                    </address>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {billing && (
               <Card>
@@ -663,15 +724,7 @@ export default function CustomerDetail() {
         )}
       </div>
 
-      <AddCardModal
-        open={payOpen}
-        onClose={() => setPayOpen(false)}
-        onAdd={(pm) => {
-          setAddedPayments((prev) => [...prev, pm])
-          logAction({ action: 'payment.method.add', target: `${pm.brand} •••• ${pm.last4} · ${name}`, category: 'billing' })
-          setPayOpen(false)
-        }}
-      />
+      <AddCardModal open={payOpen} onClose={() => setPayOpen(false)} onAdd={addCard} />
     </>
   )
 }
@@ -691,7 +744,17 @@ const payStatusTone: Record<PaymentStatus, 'green' | 'orange' | 'red'> = {
   Expired: 'red',
 }
 
-function PaymentRow({ m }: { m: PaymentMethod }) {
+function PaymentRow({
+  m,
+  canEdit,
+  onSetDefault,
+  onRemove,
+}: {
+  m: PaymentMethod
+  canEdit: boolean
+  onSetDefault: () => void
+  onRemove: () => void
+}) {
   const Icon = payIcon[m.type]
   const masked = m.last4 ? `•••• ${m.last4}` : m.type
   return (
@@ -715,6 +778,27 @@ function PaymentRow({ m }: { m: PaymentMethod }) {
         </p>
       </div>
       <Badge tone={payStatusTone[m.status]} dot>{m.status}</Badge>
+      {canEdit && (
+        <div className="flex items-center gap-1">
+          {!m.isDefault && (
+            <button
+              onClick={onSetDefault}
+              title="Set as default"
+              className="rounded-md px-2 py-1 text-xs font-medium text-ink-500 transition-colors hover:bg-slate-100 hover:text-ink-800"
+            >
+              Set default
+            </button>
+          )}
+          <button
+            onClick={onRemove}
+            aria-label="Remove payment method"
+            title="Remove"
+            className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

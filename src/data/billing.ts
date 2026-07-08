@@ -180,6 +180,33 @@ export const paymentMethods: Record<string, PaymentMethod[]> = {
 
 export const paymentByCustomer = (customer: string): PaymentMethod[] => paymentMethods[customer] ?? []
 
+/* ------------------------------------------------------------------ */
+/* Billing contact & address                                           */
+/* ------------------------------------------------------------------ */
+export interface BillingContact {
+  name: string
+  email: string
+  phone: string
+  address: string[]
+  /** Payment-processor customer id. */
+  processorId: string
+}
+
+export const billingContacts: Record<string, BillingContact> = {
+  'Meridian Bank': { name: 'Ellen Vance', email: 'ap@meridian.com', phone: '+1 212 555 0148', address: ['400 Park Avenue', 'New York, NY 10022', 'United States'], processorId: 'cus_Qk28MRD9fJ' },
+  'Helix Health': { name: 'Dr. Omar Reyes', email: 'finance@helixhealth.io', phone: '+49 30 5550 221', address: ['Friedrichstraße 88', '10117 Berlin', 'Germany'], processorId: 'cus_Qk31HLX4aa' },
+  'Vertex Capital': { name: 'Grace Tan', email: 'billing@vertexcap.com', phone: '+65 6555 0190', address: ['1 Raffles Place', 'Singapore 048616', 'Singapore'], processorId: 'cus_Qk44VTX7pp' },
+  'Pinecrest Insurance': { name: 'Raymond Ford', email: 'ap@pinecrest.com', phone: '+1 617 555 0133', address: ['210 Congress Street', 'Boston, MA 02110', 'United States'], processorId: 'cus_Qk52PIN2kk' },
+  'Northwind Retail': { name: 'Lena Fischer', email: 'invoices@northwind.co', phone: '+49 89 5550 337', address: ['Maximilianstraße 13', '80539 Munich', 'Germany'], processorId: 'cus_Qk60NWD5rr' },
+  'Atlas Logistics': { name: 'Carlos Mendez', email: 'ap@atlaslogistics.com', phone: '+1 312 555 0177', address: ['233 S Wacker Drive', 'Chicago, IL 60606', 'United States'], processorId: 'cus_Qk67ATL8tt' },
+  'Lumen Media': { name: 'Priya Shah', email: 'billing@lumen.tv', phone: '+1 310 555 0166', address: ['1600 Vine Street', 'Los Angeles, CA 90028', 'United States'], processorId: 'cus_Qk70LUM3vv' },
+  'Ferro Manufacturing': { name: 'Klaus Berger', email: 'buchhaltung@ferro.industries', phone: '+49 69 5550 402', address: ['Industriestraße 4', '60528 Frankfurt', 'Germany'], processorId: 'cus_Qk73FER6ww' },
+  'Saffron Foods': { name: 'Nadia Hassan', email: 'accounts@saffron.co', phone: '+44 20 7555 0119', address: ['70 Gracechurch Street', 'London EC3V 0HR', 'United Kingdom'], processorId: 'cus_Qk80SAF1xx' },
+  'Orbit Telecom': { name: 'Derek Nolan', email: 'ap@orbittel.net', phone: '+65 6555 0204', address: ['80 Robinson Road', 'Singapore 068898', 'Singapore'], processorId: 'cus_Qk88ORB4yy' },
+}
+
+export const billingContactByCustomer = (customer: string): BillingContact | undefined => billingContacts[customer]
+
 export type InvoiceStatus = 'Paid' | 'Open' | 'Past due' | 'Draft'
 
 export interface Invoice {
