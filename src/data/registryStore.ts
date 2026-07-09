@@ -14,6 +14,12 @@ import { registryImages } from './registry'
 
 const KEY = 'plcy.registry.promoted.v1'
 
+/**
+ * The PLCY platform ships as one chart driven by the policy-engine image, so its
+ * promoted tag is the version the whole fleet rolls out to.
+ */
+export const PLATFORM_IMAGE_ID = 'img_policy_engine'
+
 /** imageId -> promoted tag */
 export type PromotedMap = Record<string, string>
 
@@ -48,6 +54,11 @@ const getSnapshot = () => state
 
 export function promotedTag(imageId: string): string {
   return state[imageId] ?? registryImages.find((i) => i.id === imageId)?.currentTag ?? ''
+}
+
+/** The version the fleet rolls out to — the promoted tag of the platform image. */
+export function platformPromotedTag(promoted: PromotedMap): string {
+  return promoted[PLATFORM_IMAGE_ID] ?? promotedTag(PLATFORM_IMAGE_ID)
 }
 
 export function setPromotedTag(imageId: string, tag: string) {

@@ -9,7 +9,8 @@ import {
   Tooltip,
   Cell,
 } from 'recharts'
-import { Rocket, ArrowUpCircle, RotateCcw, CircleCheck, CircleAlert, ShieldCheck, Boxes } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Rocket, ArrowUpCircle, RotateCcw, CircleCheck, CircleAlert, ShieldCheck, Boxes, ArrowUpRight } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import {
   deployments as seedDeployments,
@@ -23,6 +24,8 @@ import type { Deployment, RolloutStatus, Channel, Release } from '@/data/fleet'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useSession } from '@/context/Session'
 import { GatedButton } from '@/components/GatedButton'
+import { useRegistryPromoted, platformPromotedTag } from '@/data/registryStore'
+import { compareVer } from '@/data/clusters'
 
 const tooltipStyle = { borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px -2px rgba(15,23,42,0.1)', fontSize: 12 }
 
@@ -49,18 +52,44 @@ function stepProgress(status: RolloutStatus): number {
 export default function Releases() {
   const { scope, isAll } = useCustomerScope()
   const { logAction } = useSession()
+  const promoted = useRegistryPromoted()
   const [rows, setRows] = useState<Deployment[]>(seedDeployments)
   const [sel, setSel] = useState<Deployment | null>(null)
   const [relSel, setRelSel] = useState<Release | null>(null)
 
+  // The rollout target is the tag promoted for the platform image in the
+  // Container Registry — promote there and the whole fleet re-evaluates here.
+  const target = platformPromotedTag(promoted) || LATEST_STABLE
+
+  // Status is derived against the live target; user-initiated transitions
+  // (Rolling out / Rollback) are held on the row until completed.
+  const displayStatus = (d: Deployment): RolloutStatus => {
+    if (d.status === 'Offline') return 'Offline'
+    if (d.status === 'Rolling out' || d.status === 'Rollback') return d.status
+    return compareVer(d.version, target) < 0 ? 'Update available' : 'Up to date'
+  }
+
   const scoped = isAll ? rows : rows.filter((d) => d.customer === scope)
 
-  const setStatus = (id: string, status: RolloutStatus, target?: string) =>
-    setRows((prev) => prev.map((d) => (d.id === id ? { ...d, status, target: target ?? d.target } : d)))
+  const setStatus = (id: string, status: RolloutStatus, patch?: Partial<Deployment>) =>
+    setRows((prev) => prev.map((d) => (d.id === id ? { ...d, status, target, ...patch } : d)))
 
-  const upToDate = scoped.filter((d) => d.status === 'Up to date').length
-  const updateAvailable = scoped.filter((d) => d.status === 'Update available').length
-  const rollingOut = scoped.filter((d) => d.status === 'Rolling out').length
+  const stage = (d: Deployment) => {
+    logAction({ action: d.connectivity === 'Air-gapped' ? 'release.ship-bundle' : 'release.stage', target: `${d.customer} → ${target}`, category: 'release' })
+    setStatus(d.id, 'Rolling out')
+  }
+  const complete = (d: Deployment) => {
+    logAction({ action: 'release.complete', target: `${d.customer} → ${target}`, category: 'release' })
+    setStatus(d.id, 'Up to date', { version: target })
+  }
+  const rollbackRolling = (d: Deployment) => {
+    logAction({ action: 'release.rollback', target: `${d.customer} → ${d.version}`, category: 'release' })
+    setStatus(d.id, 'Update available')
+  }
+
+  const upToDate = scoped.filter((d) => displayStatus(d) === 'Up to date').length
+  const updateAvailable = scoped.filter((d) => displayStatus(d) === 'Update available').length
+  const rollingOut = scoped.filter((d) => displayStatus(d) === 'Rolling out').length
 
   return (
     <>
@@ -70,11 +99,20 @@ export default function Releases() {
         actions={<GatedButton cap="release.rollout" className="btn-primary"><Rocket className="h-4 w-4" />New rollout</GatedButton>}
       />
 
+      {/* Registry ↔ fleet coherence banner */}
+      <Link to="/registry" className="mt-1 flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50/50 p-3 text-sm transition-colors hover:bg-brand-50">
+        <Boxes className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
+        <span className="text-ink-700">
+          Rollout target is <span className="font-mono font-semibold text-ink-900">{target}</span> — the tag promoted for <span className="font-mono">plcy/policy-engine</span> in the Container Registry. Promote a different tag there to change what the fleet rolls out to.
+        </span>
+        <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-brand-500" />
+      </Link>
+
       {/* Stat row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Latest stable" value={LATEST_STABLE} icon={Rocket} tone="blue" footer={`RC ${releases[0].version}`} />
-        <StatCard label="Up to date" value={`${upToDate}/${scoped.length}`} icon={CircleCheck} tone="green" footer="On current version" />
-        <StatCard label="Update available" value={updateAvailable} icon={CircleAlert} tone="orange" footer="Awaiting rollout" />
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Rollout target" value={target} icon={Rocket} tone="blue" footer="Promoted in registry" />
+        <StatCard label="Up to date" value={`${upToDate}/${scoped.length}`} icon={CircleCheck} tone="green" footer="On the promoted tag" />
+        <StatCard label="Update available" value={updateAvailable} icon={CircleAlert} tone="orange" footer="Behind the target" />
         <StatCard label="Rolling out" value={rollingOut} icon={ArrowUpCircle} tone="purple" footer="In progress" />
       </div>
 
@@ -133,49 +171,35 @@ export default function Releases() {
                   <Badge tone={sovTone(d.sovereignty)}>{d.sovereignty}</Badge>
                 </div>
               </Td>
-              <Td className="font-mono text-xs text-ink-700">{d.version}</Td>
-              <Td className="font-mono text-xs text-ink-500">{d.target}</Td>
-              <Td><Badge tone={statusTone[d.status]} dot>{d.status}</Badge></Td>
+              <Td className="font-mono text-xs text-ink-700">
+                {d.version}
+                {displayStatus(d) === 'Update available' && <span className="ml-1 text-[10px] font-semibold text-orange-600">behind</span>}
+              </Td>
+              <Td className="font-mono text-xs text-ink-500">{d.status === 'Offline' ? '—' : target}</Td>
+              <Td><Badge tone={statusTone[displayStatus(d)]} dot>{displayStatus(d)}</Badge></Td>
               <Td>
-                {d.status === 'Update available' && (
+                {displayStatus(d) === 'Update available' && (
                   <GatedButton
                     cap="release.rollout"
                     className="btn-secondary px-2.5 py-1 text-xs"
-                    onClick={() => {
-                      logAction({ action: d.connectivity === 'Air-gapped' ? 'release.ship-bundle' : 'release.stage', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
-                      setStatus(d.id, 'Rolling out', LATEST_STABLE)
-                    }}
+                    onClick={() => stage(d)}
                     title={d.connectivity === 'Air-gapped' ? 'Requires a signed update bundle' : 'Stage staged rollout'}
                   >
                     <ArrowUpCircle className="h-3.5 w-3.5" />
                     {d.connectivity === 'Air-gapped' ? 'Ship bundle' : 'Stage update'}
                   </GatedButton>
                 )}
-                {d.status === 'Rolling out' && (
+                {displayStatus(d) === 'Rolling out' && (
                   <div className="flex gap-1">
-                    <GatedButton cap="release.rollout" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => {
-                      logAction({ action: 'release.complete', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
-                      setStatus(d.id, 'Up to date', d.target)
-                    }}>
+                    <GatedButton cap="release.rollout" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => complete(d)}>
                       <CircleCheck className="h-3.5 w-3.5" />Complete
                     </GatedButton>
-                    <GatedButton cap="release.rollout" className="btn-ghost px-2 py-1 text-xs text-rose-600" onClick={() => {
-                      logAction({ action: 'release.rollback', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
-                      setStatus(d.id, 'Update available', d.version)
-                    }}>
+                    <GatedButton cap="release.rollout" className="btn-ghost px-2 py-1 text-xs text-rose-600" onClick={() => rollbackRolling(d)}>
                       <RotateCcw className="h-3.5 w-3.5" />Roll back
                     </GatedButton>
                   </div>
                 )}
-                {d.status === 'Up to date' && (
-                  <GatedButton cap="release.rollout" className="btn-ghost px-2 py-1 text-xs text-ink-500" onClick={() => {
-                    logAction({ action: 'release.rollback', target: d.customer + ' → ' + (d.target || LATEST_STABLE), category: 'release' })
-                    setStatus(d.id, 'Rollback', d.version)
-                  }}>
-                    <RotateCcw className="h-3.5 w-3.5" />Roll back
-                  </GatedButton>
-                )}
-                {(d.status === 'Offline' || d.status === 'Rollback') && <span className="text-xs text-ink-400">—</span>}
+                {(displayStatus(d) === 'Up to date' || displayStatus(d) === 'Offline' || displayStatus(d) === 'Rollback') && <span className="text-xs text-ink-400">—</span>}
               </Td>
               <Td>
                 <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label={`View ${d.customer}`} onClick={() => setSel(d)}>
@@ -194,7 +218,7 @@ export default function Releases() {
           onClose={() => setSel(null)}
           title={sel.customer}
           subtitle={`${regionByCode(sel.regionCode)?.name} · ${sel.regionCode}`}
-          headerRight={<Badge tone={statusTone[sel.status]} dot>{sel.status}</Badge>}
+          headerRight={<Badge tone={statusTone[displayStatus(sel)]} dot>{displayStatus(sel)}</Badge>}
         >
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
@@ -204,7 +228,7 @@ export default function Releases() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <KV label="Current" value={sel.version} mono />
-              <KV label="Target" value={sel.target} mono />
+              <KV label="Target (promoted)" value={sel.status === 'Offline' ? '—' : target} mono />
               <KV label="Last sync" value={sel.lastSync} />
             </div>
 
@@ -212,8 +236,8 @@ export default function Releases() {
               <h4 className="mb-3 text-sm font-semibold text-ink-900">Rollout pipeline</h4>
               <ol className="space-y-2.5">
                 {ROLLOUT_STEPS.map((step, i) => {
-                  const done = i < stepProgress(sel.status)
-                  const active = i === stepProgress(sel.status) && sel.status === 'Rolling out'
+                  const done = i < stepProgress(displayStatus(sel))
+                  const active = i === stepProgress(displayStatus(sel)) && displayStatus(sel) === 'Rolling out'
                   return (
                     <li key={step} className="flex items-center gap-3">
                       <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${done ? 'bg-emerald-500 text-white' : active ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}>
