@@ -66,7 +66,7 @@ export default function Transfers() {
     <>
       <PageHeader
         title="Data Transfers"
-        description="Cross-border transfer register — legal basis and residency for every data flow"
+        description="Cross-border transfer register — legal basis and residency for every data flow. A record of every time data moves from one region or country to another: why it's legally allowed (the legal basis) and whether the destination's residency rules permit or block it."
         actions={<button className="btn-primary"><Plus className="h-4 w-4" />Log transfer</button>}
       />
 

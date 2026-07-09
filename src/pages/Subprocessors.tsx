@@ -30,7 +30,7 @@ export default function Subprocessors() {
     <>
       <PageHeader
         title="Sub-processors"
-        description="Approved processors and the regions where they may operate"
+        description="Approved processors and the regions where they may operate. The third-party vendors PLCY relies on to run the service (cloud, monitoring, support), what customer data each can touch, and where they're allowed to operate — the list customers and auditors ask for."
         actions={<button className="btn-primary"><Plus className="h-4 w-4" />Add sub-processor</button>}
       />
 

@@ -29,7 +29,7 @@ export default function Backups() {
     <>
       <PageHeader
         title="Backups & DR"
-        description={isAll ? 'Backup posture and disaster-recovery readiness per client' : `Backup posture for ${scope}`}
+        description={isAll ? "Backup posture and disaster-recovery readiness per client — are backups running and recent, and could we restore each customer quickly if their environment failed? DR = disaster recovery; the key numbers are how far back a restore would lose data (RPO) and how long recovery takes (RTO)." : `Backup posture for ${scope}`}
         actions={<button className="btn-primary"><Play className="h-4 w-4" />Run backup</button>}
       />
 

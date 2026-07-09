@@ -324,7 +324,7 @@ export default function BulkOps() {
     <>
       <PageHeader
         title="Bulk Operations"
-        description="Run one action across many single-tenant environments — with batching, guardrails, and a full audit trail"
+        description="Run one action across many single-tenant environments — with batching, guardrails, and a full audit trail. Instead of repeating the same task (upgrade, restart, apply a policy) on each customer one by one, do it once across a whole group — rolled out in safe batches you can pause, with every action recorded."
       />
 
       {/* Stat row */}

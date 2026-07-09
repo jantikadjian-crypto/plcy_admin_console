@@ -120,7 +120,7 @@ export default function Residency() {
     <>
       <PageHeader
         title="Residency Controls"
-        description="Where each region's data may live and move — storage, backups, transfers, telemetry and support access, enforced by policy"
+        description="Where each region's data may live and move — storage, backups, transfers, telemetry and support access, enforced by policy. In plain terms: rules that pin each region's customer data to where it's legally allowed to sit, and automatically block or flag anything that would move it somewhere it shouldn't."
         actions={
           editing ? (
             <div className="flex items-center gap-2">

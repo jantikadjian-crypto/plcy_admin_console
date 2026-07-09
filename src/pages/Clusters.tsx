@@ -49,7 +49,7 @@ export default function Clusters() {
     <>
       <PageHeader
         title="Cluster Health"
-        description={isAll ? 'Kubernetes fleet health across single-tenant deployments' : `Kubernetes health for ${scope}`}
+        description={isAll ? "Live health of every customer's Kubernetes cluster — nodes, GPUs, CPU/memory use, and pod status. Each customer runs on their own isolated cluster; this is where you spot the ones that are offline, degraded, or running hot. Click a cluster to dig into its workloads, infrastructure, and guardrails." : `Kubernetes health for ${scope}`}
       />
 
       {/* Stat row */}

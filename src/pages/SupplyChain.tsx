@@ -72,7 +72,7 @@ export default function SupplyChain() {
     <>
       <PageHeader
         title="Supply Chain"
-        description="SBOM, image signing, and vulnerability posture for platform images"
+        description="SBOM, image signing, and vulnerability posture for platform images. Proof that the software PLCY ships is genuine and safe: a signed inventory of what's inside each image (the SBOM), cryptographic signatures proving it hasn't been tampered with, and any known security vulnerabilities."
         actions={<button className="btn-primary"><ScanLine className="h-4 w-4" />Run scan</button>}
       />
 
