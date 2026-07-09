@@ -78,6 +78,26 @@ export default function FleetPosture() {
           }
         />
 
+        <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-ink-600 sm:grid-cols-3">
+          <p>
+            <span className="font-semibold text-ink-800">Health</span> — is the cluster up and its pods running?{' '}
+            <span className="font-medium text-emerald-600">Healthy</span> = all good,{' '}
+            <span className="font-medium text-orange-600">Degraded</span> = some pods unhealthy,{' '}
+            <span className="font-medium text-rose-600">Offline</span> = unreachable.
+          </p>
+          <p>
+            <span className="font-semibold text-ink-800">Drift</span> — is it running what it should?{' '}
+            <span className="font-medium text-emerald-600">In sync</span> = matches approved config &amp; promoted image;{' '}
+            <span className="font-medium text-orange-600">N behind</span> = older than the promoted tag;{' '}
+            <span className="font-medium text-orange-600">TF · N res</span> = infra differs from Terraform;{' '}
+            <span className="font-medium text-ink-500">Unknown</span> = offline, can't tell.
+          </p>
+          <p>
+            <span className="font-semibold text-ink-800">Quota pressure</span> — how close a namespace is to its CPU / memory / pod limits. The %
+            is the highest across the cluster's namespaces; <span className="font-medium text-rose-600">hot</span> = at or above 90% and at risk of hitting the ceiling.
+          </p>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] border-collapse text-sm">
             <thead>
