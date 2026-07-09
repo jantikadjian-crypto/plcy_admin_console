@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Bell } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -11,9 +12,11 @@ import {
   rotation,
   escalation,
   recentAlerts,
-  notifTotals,
 } from '@/data/notifications'
 import type { ChannelType, RoutingRule, AlertSeverity, DeliveryStatus } from '@/data/notifications'
+import { useRegistryPromoted } from '@/data/registryStore'
+import { collectLiveSignals, evaluateRouting, routingSummary } from '@/data/alerting'
+import type { RoutingStatus } from '@/data/alerting'
 
 const channelIcon: Record<ChannelType, LucideIcon> = {
   Slack: MessageSquare,
@@ -38,6 +41,18 @@ const deliveryTone: Record<DeliveryStatus, 'green' | 'slate' | 'red'> = {
   Muted: 'slate',
   Failed: 'red',
 }
+const routingStatusTone: Record<RoutingStatus, 'green' | 'slate' | 'orange' | 'red'> = {
+  routed: 'green',
+  below: 'slate',
+  disabled: 'orange',
+  unrouted: 'red',
+}
+const routingStatusLabel: Record<RoutingStatus, string> = {
+  routed: 'Routed',
+  below: 'Below threshold',
+  disabled: 'Rule disabled',
+  unrouted: 'No route',
+}
 
 function ChannelBadges({ list }: { list: ChannelType[] }) {
   return (
@@ -51,8 +66,14 @@ function ChannelBadges({ list }: { list: ChannelType[] }) {
 
 export default function Notifications() {
   const { can, logAction } = useSession()
+  const promoted = useRegistryPromoted()
   const [rules, setRules] = useState<RoutingRule[]>(seedRules)
+  const [sentIds, setSentIds] = useState<Record<string, true>>({})
   const canManage = can('settings.modify')
+
+  const signals = collectLiveSignals(promoted)
+  const summary = routingSummary(signals, rules)
+  const primaryOnCall = onCall.find((o) => o.role === 'Primary')?.name ?? '—'
 
   const toggleRule = (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -61,11 +82,16 @@ export default function Notifications() {
     logAction({ action: `notification.rule.${rule.enabled ? 'disable' : 'enable'}`, target: rule.event, category: 'notifications' })
   }
 
+  const dispatch = (signalId: string, event: string, pages: boolean) => {
+    setSentIds((prev) => ({ ...prev, [signalId]: true }))
+    logAction({ action: pages ? 'notification.page' : 'notification.dispatch', target: event, category: 'notifications' })
+  }
+
   return (
     <>
       <PageHeader
         title="Notifications"
-        description="Alert routing, channels, and on-call across the fleet"
+        description="Alert routing, channels, and on-call across the fleet. Every live fleet signal is run through the routing rules below so you can see exactly who gets paged — and which signals fall through the cracks."
         actions={
           <GatedButton cap="settings.modify" className="btn-primary">
             <Plus className="h-4 w-4" />
@@ -74,13 +100,89 @@ export default function Notifications() {
         }
       />
 
-      {/* Stat row */}
+      {/* Live routing stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Alerts today" value={notifTotals.today} icon={Bell} tone="blue" footer="Across all rules" />
-        <StatCard label="Channels connected" value={`${notifTotals.channelsConnected}/${notifTotals.channelsTotal}`} icon={BellRing} tone="green" footer="Delivery integrations" />
-        <StatCard label="On-call now" value={notifTotals.onCall} icon={UserCheck} tone="purple" footer="Primary responder" />
-        <StatCard label="Rules enabled" value={`${rules.filter((r) => r.enabled).length}/${rules.length}`} icon={Siren} tone="orange" footer="Active routing rules" />
+        <StatCard label="Live signals" value={summary.total} icon={Radio} tone="blue" footer="Firing right now" />
+        <StatCard label="Routed" value={`${summary.routed}/${summary.total}`} icon={BellRing} tone={summary.routed === summary.total ? 'green' : 'orange'} footer={`${summary.paged} page on-call`} />
+        <StatCard label="Coverage gaps" value={summary.gaps} icon={ShieldAlert} tone={summary.gaps ? 'red' : 'green'} footer="Signals nobody is notified of" />
+        <StatCard label="On-call now" value={primaryOnCall} icon={UserCheck} tone="purple" footer="Primary responder" />
       </div>
+
+      {/* Live signal routing — the heart of the page */}
+      <Card className="mt-6">
+        <CardTitle
+          title="Live Signal Routing"
+          subtitle="Each signal currently firing across the fleet, resolved against the rules below — who gets notified, and what slips through"
+        />
+        <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-ink-600 sm:grid-cols-2 lg:grid-cols-4">
+          <p><span className="font-medium text-emerald-600">Routed</span> — an enabled rule matches and notifies its channels.</p>
+          <p><span className="font-medium text-slate-500">Below threshold</span> — a rule exists but this severity is under its floor.</p>
+          <p><span className="font-medium text-orange-600">Rule disabled</span> — the matching rule is turned off.</p>
+          <p><span className="font-medium text-rose-600">No route</span> — no rule covers this — a coverage gap.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
+                <th className="py-2 pr-3">Signal</th>
+                <th className="py-2 pr-3">Severity</th>
+                <th className="py-2 pr-3">Routing</th>
+                <th className="py-2 pr-3">Notifies</th>
+                <th className="py-2 pr-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {signals.map((s) => {
+                const o = evaluateRouting(s, rules)
+                const sent = sentIds[s.id]
+                return (
+                  <tr key={s.id} className="border-b border-slate-100 align-top last:border-0">
+                    <td className="py-2.5 pr-3">
+                      <Link to={s.to} className="group inline-flex items-center gap-1">
+                        <span className="font-medium text-ink-900 group-hover:text-brand-700">{s.event}</span>
+                        <ArrowUpRight className="h-3 w-3 text-ink-300 group-hover:text-brand-500" />
+                      </Link>
+                      <p className="text-xs text-ink-400">{s.category}</p>
+                    </td>
+                    <td className="py-2.5 pr-3"><Badge tone={sevTone[s.severity]}>{s.severity}</Badge></td>
+                    <td className="py-2.5 pr-3">
+                      <Badge tone={routingStatusTone[o.status]} dot>{routingStatusLabel[o.status]}</Badge>
+                      <p className="mt-0.5 text-[11px] text-ink-400">{o.reason}</p>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      {o.status === 'routed' ? (
+                        <div className="space-y-1">
+                          <ChannelBadges list={o.channels} />
+                          {o.responder && <p className="text-[11px] text-ink-500">→ {o.responder} (on-call)</p>}
+                          {o.mutedChannels.length > 0 && <p className="text-[11px] text-rose-500">{o.mutedChannels.join(', ')} not connected</p>}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-ink-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right">
+                      {o.status === 'routed' ? (
+                        sent ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600"><Check className="h-3.5 w-3.5" />Sent</span>
+                        ) : (
+                          <GatedButton cap="settings.modify" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => dispatch(s.id, s.event, o.pages)}>
+                            <Send className="h-3.5 w-3.5" />{o.pages ? 'Page now' : 'Notify'}
+                          </GatedButton>
+                        )
+                      ) : (
+                        <span className="text-xs text-ink-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {signals.length === 0 && (
+                <tr><td colSpan={5} className="py-10 text-center text-sm text-ink-400">No signals firing — the fleet is quiet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {/* Channels */}
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
