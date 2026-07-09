@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight } from 'lucide-react'
+import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -69,8 +69,7 @@ export default function Notifications() {
   const promoted = useRegistryPromoted()
   const [rules, setRules] = useState<RoutingRule[]>(seedRules)
   const [sentIds, setSentIds] = useState<Record<string, true>>({})
-  const [newRuleOpen, setNewRuleOpen] = useState(false)
-  const [newRuleCat, setNewRuleCat] = useState<string | null>(null)
+  const [ruleModal, setRuleModal] = useState<{ mode: 'create'; category: string } | { mode: 'edit'; rule: RoutingRule } | null>(null)
   const canManage = can('settings.modify')
 
   const signals = collectLiveSignals(promoted)
@@ -80,15 +79,19 @@ export default function Notifications() {
   // Categories with live signals but no rule — the gaps a new rule can close.
   const uncovered = [...new Set(signals.map((s) => s.category))].filter((c) => !rules.some((r) => r.category === c))
 
-  const openNewRule = (category?: string) => {
-    setNewRuleCat(category ?? uncovered[0] ?? 'Cluster')
-    setNewRuleOpen(true)
+  const openNewRule = (category?: string) => setRuleModal({ mode: 'create', category: category ?? uncovered[0] ?? 'Cluster' })
+  const openEditRule = (rule: RoutingRule) => setRuleModal({ mode: 'edit', rule })
+
+  const saveRule = (rule: RoutingRule) => {
+    setRules((prev) => (prev.some((r) => r.id === rule.id) ? prev.map((r) => (r.id === rule.id ? rule : r)) : [...prev, rule]))
+    const editing = rules.some((r) => r.id === rule.id)
+    logAction({ action: editing ? 'notification.rule.update' : 'notification.rule.create', target: `${rule.event} (${rule.category})`, category: 'notifications' })
+    setRuleModal(null)
   }
 
-  const addRule = (rule: RoutingRule) => {
-    setRules((prev) => [...prev, rule])
-    logAction({ action: 'notification.rule.create', target: `${rule.event} (${rule.category})`, category: 'notifications' })
-    setNewRuleOpen(false)
+  const deleteRule = (rule: RoutingRule) => {
+    setRules((prev) => prev.filter((r) => r.id !== rule.id))
+    logAction({ action: 'notification.rule.delete', target: `${rule.event} (${rule.category})`, category: 'notifications' })
   }
 
   const toggleRule = (id: string) => {
@@ -240,7 +243,7 @@ export default function Notifications() {
               </button>
             ) : undefined}
           />
-          <Table columns={['Event', 'Category', 'Min severity', 'Channels', 'Enabled']}>
+          <Table columns={['Event', 'Category', 'Min severity', 'Channels', 'Enabled', '']}>
             {rules.map((r) => (
               <Tr key={r.id}>
                 <Td className="font-semibold text-ink-900">{r.event}</Td>
@@ -257,6 +260,18 @@ export default function Notifications() {
                   >
                     <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
                   </button>
+                </Td>
+                <Td>
+                  {canManage && (
+                    <div className="flex items-center justify-end gap-0.5">
+                      <button onClick={() => openEditRule(r)} title="Edit rule" aria-label="Edit rule" className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-slate-100 hover:text-brand-600">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => deleteRule(r)} title="Delete rule" aria-label="Delete rule" className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </Td>
               </Tr>
             ))}
@@ -322,13 +337,14 @@ export default function Notifications() {
         </Table>
       </Card>
 
-      {newRuleOpen && (
-        <NewRuleModal
-          defaultCategory={newRuleCat ?? 'Cluster'}
+      {ruleModal && (
+        <RuleModal
+          rule={ruleModal.mode === 'edit' ? ruleModal.rule : undefined}
+          defaultCategory={ruleModal.mode === 'create' ? ruleModal.category : ruleModal.rule.category}
           existingIds={rules.map((r) => r.id)}
           uncovered={uncovered}
-          onClose={() => setNewRuleOpen(false)}
-          onCreate={addRule}
+          onClose={() => setRuleModal(null)}
+          onSave={saveRule}
         />
       )}
     </>
@@ -342,17 +358,19 @@ const RULE_CATEGORIES = ['Cluster', 'Supply chain', 'Reliability', 'Billing', 'L
 const SEVERITIES: AlertSeverity[] = ['Critical', 'High', 'Medium', 'Low']
 const ALL_CHANNELS: ChannelType[] = ['Slack', 'PagerDuty', 'Email', 'Webhook']
 
-function NewRuleModal({ defaultCategory, existingIds, uncovered, onClose, onCreate }: {
+function RuleModal({ rule, defaultCategory, existingIds, uncovered, onClose, onSave }: {
+  rule?: RoutingRule
   defaultCategory: string
   existingIds: string[]
   uncovered: string[]
   onClose: () => void
-  onCreate: (rule: RoutingRule) => void
+  onSave: (rule: RoutingRule) => void
 }) {
-  const [event, setEvent] = useState('')
-  const [category, setCategory] = useState(defaultCategory)
-  const [minSeverity, setMinSeverity] = useState<AlertSeverity>('High')
-  const [selChannels, setSelChannels] = useState<ChannelType[]>(['Slack'])
+  const isEdit = !!rule
+  const [event, setEvent] = useState(rule?.event ?? '')
+  const [category, setCategory] = useState(rule?.category ?? defaultCategory)
+  const [minSeverity, setMinSeverity] = useState<AlertSeverity>(rule?.minSeverity ?? 'High')
+  const [selChannels, setSelChannels] = useState<ChannelType[]>(rule?.channels ?? ['Slack'])
 
   const categories = [...new Set([defaultCategory, ...RULE_CATEGORIES])]
   const toggleChannel = (c: ChannelType) =>
@@ -360,33 +378,37 @@ function NewRuleModal({ defaultCategory, existingIds, uncovered, onClose, onCrea
 
   const valid = event.trim().length > 0 && selChannels.length > 0
 
-  const create = () => {
+  const submit = () => {
     if (!valid) return
+    if (isEdit) {
+      onSave({ ...rule, event: event.trim(), category, minSeverity, channels: selChannels })
+      return
+    }
     // Deterministic, collision-free id.
     let n = existingIds.length
     let id = `r_custom_${n}`
     while (existingIds.includes(id)) id = `r_custom_${++n}`
-    onCreate({ id, event: event.trim(), category, minSeverity, channels: selChannels, enabled: true })
+    onSave({ id, event: event.trim(), category, minSeverity, channels: selChannels, enabled: true })
   }
 
   return (
     <Modal
       open
       onClose={onClose}
-      title="New routing rule"
+      title={isEdit ? 'Edit routing rule' : 'New routing rule'}
       subtitle="Route a class of fleet events to notification channels"
       maxWidth="max-w-lg"
       footer={
         <>
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn-primary disabled:opacity-50" onClick={create} disabled={!valid}>
-            <Plus className="h-4 w-4" />Create rule
+          <button className="btn-primary disabled:opacity-50" onClick={submit} disabled={!valid}>
+            {isEdit ? <><Check className="h-4 w-4" />Save changes</> : <><Plus className="h-4 w-4" />Create rule</>}
           </button>
         </>
       }
     >
       <div className="space-y-4">
-        {uncovered.length > 0 && (
+        {!isEdit && uncovered.length > 0 && (
           <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span>Currently uncovered by any rule: <strong>{uncovered.join(', ')}</strong>. Pick one of these to close a gap.</span>
