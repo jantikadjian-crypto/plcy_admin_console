@@ -9,6 +9,17 @@
 export type ProvTemplate = 'SaaS' | 'Sovereign Cloud' | 'Air-gapped'
 export type ProvStatus = 'Requested' | 'Provisioning' | 'Configuring' | 'Ready' | 'Failed'
 
+/** Onboarding prerequisites captured when an environment is requested. */
+export interface OnboardingState {
+  plan: string
+  byok: boolean
+  residency: boolean
+  dpa: boolean
+  offlineLicense: boolean
+  escortedAccess: boolean
+  contacts: boolean
+}
+
 export interface Provision {
   id: string
   customer: string
@@ -18,6 +29,8 @@ export interface Provision {
   progress: number
   requested: string
   owner: string
+  /** Present when created via the onboarding wizard; drives the readiness checklist. */
+  onboarding?: OnboardingState
 }
 
 export const provisions: Provision[] = [
@@ -28,8 +41,8 @@ export const provisions: Provision[] = [
   { id: 'prov_echo', customer: 'Echo Media', template: 'SaaS', regionCode: 'us-west-2', status: 'Failed', progress: 40, requested: '2026-07-05 20:15', owner: 'marcus.ihde@plcy.app' },
 ]
 
-/** Ordered IaC pipeline steps for a provisioning run. */
-export const PROVISION_STEPS = [
+/** Cloud (SaaS / Sovereign Cloud) IaC pipeline. */
+export const CLOUD_STEPS = [
   'Approve request',
   'Terraform plan',
   'Provision VPC & EKS',
@@ -38,14 +51,63 @@ export const PROVISION_STEPS = [
   'Apply baseline policies',
   'Handover',
 ]
+/** Air-gapped path — no cloud provisioning; a signed bundle is shipped and imported on-prem. */
+export const AIRGAP_STEPS = [
+  'Approve request',
+  'Build signed bundle',
+  'Deliver to site (offline)',
+  'Import & verify signature',
+  'Activate on-prem',
+  'Issue offline license',
+  'Escorted handover',
+]
+export const PROVISION_STEPS = CLOUD_STEPS
+export const provisionSteps = (template: ProvTemplate): string[] => (template === 'Air-gapped' ? AIRGAP_STEPS : CLOUD_STEPS)
+
 export function provisionStep(status: ProvStatus): number {
   switch (status) {
     case 'Requested': return 1
     case 'Provisioning': return 3
     case 'Configuring': return 5
-    case 'Ready': return PROVISION_STEPS.length
+    case 'Ready': return CLOUD_STEPS.length
     case 'Failed': return 3
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Onboarding readiness — gates that must be in order before handover   */
+/* ------------------------------------------------------------------ */
+export interface ChecklistItem {
+  key: string
+  label: string
+  done: boolean
+  critical: boolean
+}
+
+/** Per-environment onboarding gates, tailored to the deployment mode. */
+export function onboardingChecklist(p: Provision): ChecklistItem[] {
+  const air = p.template === 'Air-gapped'
+  const sov = p.template !== 'SaaS'
+  const ob = p.onboarding
+  // For wizard-created rows, use the captured selections; otherwise infer from progress.
+  const at = (frac: number) => p.status === 'Ready' || p.progress >= frac
+  const items: ChecklistItem[] = [
+    { key: 'plan', label: 'Contract & plan confirmed', done: ob ? !!ob.plan : at(10), critical: false },
+    { key: 'region', label: 'Region & sovereignty selected', done: true, critical: false },
+    { key: 'env', label: air ? 'Signed bundle delivered to site' : 'Environment provisioned (IaC)', done: at(air ? 50 : 60), critical: true },
+    { key: 'policies', label: 'Baseline policy packs applied', done: at(80), critical: false },
+    { key: 'dpa', label: 'DPA & sub-processors reviewed', done: ob ? ob.dpa : at(45), critical: false },
+    { key: 'contacts', label: 'Notification contacts set', done: ob ? ob.contacts : at(85), critical: false },
+  ]
+  if (sov) {
+    items.push({ key: 'byok', label: 'BYOK / in-region encryption', done: ob ? ob.byok : at(60), critical: true })
+    items.push({ key: 'residency', label: 'Data residency policy configured', done: ob ? ob.residency : at(70), critical: true })
+  }
+  if (air) {
+    items.push({ key: 'license', label: 'Offline license issued', done: ob ? ob.offlineLicense : at(90), critical: true })
+    items.push({ key: 'escort', label: 'Escorted-access rule configured', done: ob ? ob.escortedAccess : at(90), critical: true })
+  }
+  return items
 }
 
 /* ------------------------------------------------------------------ */

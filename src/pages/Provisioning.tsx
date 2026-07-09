@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Cloud, Server, ShieldOff, Plus, RotateCcw, Eye, Clock, CircleCheck, CircleAlert, Boxes, Layers } from 'lucide-react'
+import { Cloud, Server, ShieldOff, Plus, RotateCcw, Eye, Clock, CircleCheck, CircleAlert, Boxes, Layers, Check, X, ArrowRight, ArrowLeft, ClipboardCheck } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
-import { provisions as seedProvisions, PROVISION_STEPS, provisionStep, opsTotals } from '@/data/ops'
-import type { Provision, ProvTemplate } from '@/data/ops'
-import { regionByCode } from '@/data/fleet'
+import { provisions as seedProvisions, provisionSteps, provisionStep, onboardingChecklist, opsTotals } from '@/data/ops'
+import type { Provision, ProvTemplate, OnboardingState, ChecklistItem } from '@/data/ops'
+import { regionByCode, regions } from '@/data/fleet'
 import { useSession } from '@/context/Session'
 import { GatedButton } from '@/components/GatedButton'
 
@@ -30,13 +30,35 @@ const cardTone: Record<'blue' | 'purple' | 'red', string> = {
 
 const nodeSize: Record<ProvTemplate, string> = { SaaS: 'm6i.2xlarge', 'Sovereign Cloud': 'm6i.4xlarge', 'Air-gapped': 'on-prem' }
 
+let provSeq = 0
+
 export default function Provisioning() {
   const { logAction } = useSession()
   const [rows, setRows] = useState<Provision[]>(seedProvisions)
   const [sel, setSel] = useState<Provision | null>(null)
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const retry = (id: string) =>
     setRows((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'Provisioning', progress: 40 } : p)))
+
+  const createProvision = (draft: { customer: string; template: ProvTemplate; regionCode: string; onboarding: OnboardingState }) => {
+    provSeq += 1
+    const p: Provision = {
+      id: `prov_new_${provSeq}`,
+      customer: draft.customer,
+      template: draft.template,
+      regionCode: draft.regionCode,
+      status: 'Requested',
+      progress: 10,
+      requested: 'just now',
+      owner: 'jack@plcy.app',
+      onboarding: draft.onboarding,
+    }
+    setRows((prev) => [p, ...prev])
+    logAction({ action: 'provision.request', target: `${draft.customer} · ${draft.template} · ${draft.regionCode}`, category: 'provisioning' })
+    setWizardOpen(false)
+    setSel(p)
+  }
 
   const current = sel ? rows.find((p) => p.id === sel.id) ?? sel : null
 
@@ -45,7 +67,7 @@ export default function Provisioning() {
       <PageHeader
         title="Provisioning"
         description="Day-0 onboarding — provision new single-tenant environments via IaC"
-        actions={<GatedButton cap="provision.manage" className="btn-primary"><Plus className="h-4 w-4" />New environment</GatedButton>}
+        actions={<GatedButton cap="provision.manage" className="btn-primary" onClick={() => setWizardOpen(true)}><Plus className="h-4 w-4" />New environment</GatedButton>}
       />
 
       {/* Stat row */}
@@ -134,10 +156,12 @@ export default function Provisioning() {
           }
         >
           <div className="space-y-5">
+            <OnboardingReadiness items={onboardingChecklist(current)} />
+
             <section>
-              <h4 className="mb-3 text-sm font-semibold text-ink-900">IaC pipeline</h4>
+              <h4 className="mb-3 text-sm font-semibold text-ink-900">{current.template === 'Air-gapped' ? 'Air-gapped delivery pipeline' : 'IaC pipeline'}</h4>
               <ol className="space-y-2.5">
-                {PROVISION_STEPS.map((step, i) => {
+                {provisionSteps(current.template).map((step, i) => {
                   const progress = provisionStep(current.status)
                   const done = i < progress
                   const active = i === progress && current.status !== 'Ready'
@@ -188,7 +212,204 @@ export default function Provisioning() {
           </div>
         </Modal>
       )}
+
+      {wizardOpen && <OnboardWizard onClose={() => setWizardOpen(false)} onCreate={createProvision} />}
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Onboarding readiness checklist                                       */
+/* ------------------------------------------------------------------ */
+function OnboardingReadiness({ items }: { items: ChecklistItem[] }) {
+  const done = items.filter((i) => i.done).length
+  const criticalPending = items.filter((i) => i.critical && !i.done)
+  const ready = criticalPending.length === 0 && done === items.length
+  return (
+    <section className="rounded-xl border border-slate-200 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-ink-900"><ClipboardCheck className="h-4 w-4 text-ink-400" />Onboarding readiness</h4>
+        <Badge tone={ready ? 'green' : criticalPending.length ? 'red' : 'orange'} dot>
+          {ready ? 'Ready to hand over' : criticalPending.length ? `${criticalPending.length} blocker${criticalPending.length === 1 ? '' : 's'}` : `${done}/${items.length} done`}
+        </Badge>
+      </div>
+      <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {items.map((i) => (
+          <li key={i.key} className="flex items-center gap-2 text-sm">
+            {i.done ? (
+              <Check className="h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <X className={`h-4 w-4 shrink-0 ${i.critical ? 'text-rose-500' : 'text-slate-300'}`} />
+            )}
+            <span className={i.done ? 'text-ink-700' : i.critical ? 'font-medium text-rose-700' : 'text-ink-500'}>{i.label}</span>
+            {!i.done && i.critical && <span className="ml-auto text-[10px] font-semibold uppercase text-rose-500">required</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Onboarding wizard                                                    */
+/* ------------------------------------------------------------------ */
+const WIZARD_TEMPLATES: { name: ProvTemplate; icon: typeof Cloud; tone: 'blue' | 'purple' | 'red'; desc: string }[] = TEMPLATES
+
+function OnboardWizard({ onClose, onCreate }: {
+  onClose: () => void
+  onCreate: (draft: { customer: string; template: ProvTemplate; regionCode: string; onboarding: OnboardingState }) => void
+}) {
+  const [step, setStep] = useState(0)
+  const [customer, setCustomer] = useState('')
+  const [plan, setPlan] = useState('Enterprise')
+  const [template, setTemplate] = useState<ProvTemplate>('SaaS')
+  const [regionCode, setRegionCode] = useState('us-east-1')
+  const air = template === 'Air-gapped'
+  const sov = template !== 'SaaS'
+
+  // Compliance prerequisites — defaults nudge the required ones on for regulated modes.
+  const [byok, setByok] = useState(false)
+  const [residency, setResidency] = useState(false)
+  const [dpa, setDpa] = useState(false)
+  const [offlineLicense, setOfflineLicense] = useState(false)
+  const [escortedAccess, setEscortedAccess] = useState(false)
+  const [contacts, setContacts] = useState(false)
+
+  const pickTemplate = (t: ProvTemplate) => {
+    setTemplate(t)
+    // Steer region + prerequisites to sensible defaults for the mode.
+    if (t === 'Air-gapped') { setRegionCode('de-sov-1'); setByok(true); setResidency(true); setOfflineLicense(true); setEscortedAccess(true) }
+    else if (t === 'Sovereign Cloud') { setRegionCode('eu-central-1'); setByok(true); setResidency(true) }
+    else setRegionCode('us-east-1')
+  }
+
+  const onboarding: OnboardingState = { plan, byok, residency, dpa, offlineLicense, escortedAccess, contacts }
+  const preview: Provision = { id: 'preview', customer: customer || 'New customer', template, regionCode, status: 'Requested', progress: 10, requested: 'just now', owner: 'jack@plcy.app', onboarding }
+  const checklist = onboardingChecklist(preview)
+  const criticalPending = checklist.filter((i) => i.critical && !i.done)
+
+  const canNext = step === 0 ? customer.trim().length > 0 : true
+  const steps = ['Customer & mode', 'Compliance & prerequisites', 'Review']
+
+  const Toggle = ({ on, set, label, hint, required }: { on: boolean; set: (v: boolean) => void; label: string; hint: string; required?: boolean }) => (
+    <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
+      <div className="min-w-0 pr-3">
+        <p className="text-sm font-medium text-ink-900">{label}{required && <span className="ml-1.5 text-[10px] font-semibold uppercase text-rose-500">required</span>}</p>
+        <p className="text-xs text-ink-500">{hint}</p>
+      </div>
+      <button onClick={() => set(!on)} aria-pressed={on} className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors ${on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-300'}`}>
+        <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+      </button>
+    </div>
+  )
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Onboard a new environment"
+      subtitle={`Step ${step + 1} of ${steps.length} · ${steps[step]}`}
+      maxWidth="max-w-2xl"
+      footer={
+        <div className="flex w-full items-center justify-between">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <div className="flex items-center gap-2">
+            {step > 0 && <button className="btn-secondary" onClick={() => setStep((s) => s - 1)}><ArrowLeft className="h-4 w-4" />Back</button>}
+            {step < steps.length - 1 ? (
+              <button className="btn-primary disabled:opacity-50" onClick={() => setStep((s) => s + 1)} disabled={!canNext}>Next<ArrowRight className="h-4 w-4" /></button>
+            ) : (
+              <button className="btn-primary" onClick={() => onCreate({ customer: customer.trim(), template, regionCode, onboarding })}><Plus className="h-4 w-4" />Request environment</button>
+            )}
+          </div>
+        </div>
+      }
+    >
+      {/* Stepper */}
+      <div className="mb-5 flex items-center gap-2">
+        {steps.map((s, i) => (
+          <div key={s} className="flex flex-1 items-center gap-2">
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${i < step ? 'bg-emerald-500 text-white' : i === step ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{i < step ? '✓' : i + 1}</span>
+            <span className={`text-xs ${i === step ? 'font-semibold text-ink-900' : 'text-ink-400'}`}>{s}</span>
+            {i < steps.length - 1 && <span className="h-px flex-1 bg-slate-200" />}
+          </div>
+        ))}
+      </div>
+
+      {step === 0 && (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">Customer</label>
+            <input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="e.g. Beacon Financial" autoFocus />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-ink-700">Plan</label>
+              <select className="input" value={plan} onChange={(e) => setPlan(e.target.value)}>
+                {['Enterprise', 'Business', 'Growth', 'Trial'].map((p) => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-ink-700">Region</label>
+              <select className="input" value={regionCode} onChange={(e) => setRegionCode(e.target.value)}>
+                {regions.filter((r) => (air ? r.sovereignty === 'Air-gapped' : true)).map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-ink-700">Deployment mode</label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {WIZARD_TEMPLATES.map((t) => {
+                const on = template === t.name
+                return (
+                  <button key={t.name} onClick={() => pickTemplate(t.name)} className={`rounded-xl border p-3 text-left transition-colors ${on ? 'border-brand-400 bg-brand-50/50 ring-1 ring-brand-400' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className={`mb-2 flex h-9 w-9 items-center justify-center rounded-lg border ${cardTone[t.tone]}`}><t.icon className="h-5 w-5" /></div>
+                    <p className="text-sm font-semibold text-ink-900">{t.name}</p>
+                    <p className="mt-0.5 text-xs text-ink-500">{t.desc}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="space-y-3">
+          {air && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <ShieldOff className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>Air-gapped onboarding has extra required gates — a signed offline bundle, an offline license, and an escorted-access rule — before the site can go live.</span>
+            </div>
+          )}
+          {sov && <Toggle on={byok} set={setByok} label="BYOK / in-region encryption" hint="Customer-managed keys in an in-region HSM." required />}
+          {sov && <Toggle on={residency} set={setResidency} label="Data residency policy" hint="Pin data to the region; block cross-border by default." required />}
+          {air && <Toggle on={offlineLicense} set={setOfflineLicense} label="Offline license" hint="Issue a signed license key for the air-gapped site." required />}
+          {air && <Toggle on={escortedAccess} set={setEscortedAccess} label="Escorted-access rule" hint="Break-glass access requires an escort on-site." required />}
+          <Toggle on={dpa} set={setDpa} label="DPA & sub-processors reviewed" hint="Data-processing agreement signed; sub-processor list shared." />
+          <Toggle on={contacts} set={setContacts} label="Notification contacts" hint="Customer ops contacts set for alerts." />
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <KV label="Customer" value={customer || '—'} />
+            <KV label="Plan" value={plan} />
+            <KV label="Mode" value={template} />
+            <KV label="Region" value={regionByCode(regionCode)?.name ?? regionCode} />
+            <KV label="Node size" value={nodeSize[template]} mono />
+            <KV label="BYOK" value={byok ? 'Yes' : 'No'} />
+          </div>
+          <OnboardingReadiness items={checklist} />
+          {criticalPending.length > 0 && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>You can request the environment now, but it can't be handed over until the {criticalPending.length} required gate{criticalPending.length === 1 ? '' : 's'} above {criticalPending.length === 1 ? 'is' : 'are'} complete.</span>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }
 
