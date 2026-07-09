@@ -7,6 +7,7 @@
 import { Crown, Wrench, Headset, Calculator, ShieldCheck, Megaphone, BarChart3 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { EAccessRole } from './access'
+import type { ChannelConfig } from './notifications'
 
 export type Department =
   | 'Executive'
@@ -44,6 +45,19 @@ export interface Employee {
   manager: string
   lastActive: string
   onCall: OnCall
+  /** How this person is reached for alerts & paging. Defaults derived if unset. */
+  channels?: ChannelConfig[]
+}
+
+/** Per-employee contact channels — stored edits if present, else derived from their record. */
+export function employeeChannels(emp: Employee): ChannelConfig[] {
+  if (emp.channels && emp.channels.length) return emp.channels
+  const handle = '@' + emp.email.split('@')[0].replace(/\./g, '')
+  return [
+    { id: `${emp.id}_email`, type: 'Email', target: emp.email, endpoint: '', desc: 'Primary email', connected: true },
+    { id: `${emp.id}_slack`, type: 'Slack', target: handle, endpoint: '', desc: 'Slack direct message', connected: true },
+    { id: `${emp.id}_pd`, type: 'PagerDuty', target: emp.onCall.enabled ? emp.onCall.pagerDutyService : '—', endpoint: '', desc: 'PagerDuty responder', connected: emp.onCall.enabled },
+  ]
 }
 
 export interface DepartmentMeta {

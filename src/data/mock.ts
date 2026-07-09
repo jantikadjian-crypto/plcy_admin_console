@@ -4,6 +4,7 @@
  * by the internal PLCY team to manage customers, their deployed instances,
  * the AI models under governance, and the policy packs that enforce controls.
  */
+import type { ChannelConfig } from './notifications'
 
 /* ------------------------------------------------------------------ */
 /* Customers                                                           */
@@ -23,6 +24,19 @@ export interface Customer {
   csm: string
   since: string
   notes?: string
+  /** Where alerts about this customer are sent. Defaults derived if unset. */
+  channels?: ChannelConfig[]
+}
+
+/** Per-customer notification contacts — stored edits if present, else sensible defaults. */
+export function customerChannels(c: Customer): ChannelConfig[] {
+  if (c.channels && c.channels.length) return c.channels
+  return [
+    { id: `${c.id}_email`, type: 'Email', target: `ops@${c.domain}`, endpoint: '', desc: 'Customer ops distribution', connected: true },
+    { id: `${c.id}_slack`, type: 'Slack', target: 'Slack Connect', endpoint: '', desc: 'Shared incident channel', connected: false },
+    { id: `${c.id}_webhook`, type: 'Webhook', target: 'Customer ITSM', endpoint: '', desc: 'ServiceNow / Jira webhook', connected: false },
+    { id: `${c.id}_pd`, type: 'PagerDuty', target: '—', endpoint: '', desc: 'Customer PagerDuty', connected: false },
+  ]
 }
 
 export const customers: Customer[] = [

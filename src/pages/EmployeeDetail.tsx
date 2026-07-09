@@ -20,10 +20,12 @@ import {
   Lock,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Avatar, EmptyState } from '@/components/ui'
+import { ContactChannels } from '@/components/ContactChannels'
 import { useSession } from '@/context/Session'
 import { useEmployees } from '@/context/Employees'
-import { departmentMeta, DEPARTMENTS, activityFor } from '@/data/team'
+import { departmentMeta, DEPARTMENTS, activityFor, employeeChannels } from '@/data/team'
 import type { Employee, Department, EmployeeStatus, OnCallTier } from '@/data/team'
+import type { ChannelConfig } from '@/data/notifications'
 import { roleDefs, roleIconTone, iconFor, currentUser } from '@/data/roles'
 import { EAccessRole } from '@/data/access'
 import { CAPABILITIES, roleCapabilities } from '@/data/permissions'
@@ -72,6 +74,11 @@ export default function EmployeeDetail() {
   const resetMfa = () => {
     update(emp.id, { mfa: false })
     logAction({ action: 'employee.mfa.reset', target: emp.name, category: 'team' })
+  }
+  const saveChannel = (updated: ChannelConfig) => {
+    const next = employeeChannels(emp).map((c) => (c.id === updated.id ? updated : c))
+    update(emp.id, { channels: next })
+    logAction({ action: 'employee.channel.update', target: `${emp.name} · ${updated.type}`, category: 'team' })
   }
 
   const dm = departmentMeta(view.department)
@@ -216,6 +223,12 @@ export default function EmployeeDetail() {
           )}
         </Card>
       </div>
+
+      {/* Contact channels */}
+      <Card className="mt-6">
+        <CardTitle title="Contact Channels" subtitle="How this person is reached for alerts & paging · click a channel to configure it" />
+        <ContactChannels channels={employeeChannels(emp)} canEdit={canManage} onSave={saveChannel} columns={3} />
+      </Card>
 
       {/* Permissions */}
       <Card className="mt-6">

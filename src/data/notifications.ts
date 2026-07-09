@@ -9,16 +9,19 @@ export type ChannelType = 'Slack' | 'PagerDuty' | 'Email' | 'Webhook'
 export interface ChannelConfig {
   id: string
   type: ChannelType
+  /** Human-facing destination (channel / service / recipients / name). */
   target: string
+  /** Technical connection string (webhook URL, routing key, endpoint). */
+  endpoint: string
   desc: string
   connected: boolean
 }
 
 export const channels: ChannelConfig[] = [
-  { id: 'ch_slack', type: 'Slack', target: '#plcy-alerts', desc: 'Team channel for fleet alerts', connected: true },
-  { id: 'ch_pd', type: 'PagerDuty', target: 'PLCY On-Call · P1', desc: 'Pages the on-call engineer', connected: true },
-  { id: 'ch_email', type: 'Email', target: 'oncall@plcy.app', desc: 'Email distribution list', connected: true },
-  { id: 'ch_webhook', type: 'Webhook', target: 'hooks.plcy.app/incoming', desc: 'Outbound webhook (SIEM)', connected: false },
+  { id: 'ch_slack', type: 'Slack', target: '#plcy-alerts', endpoint: 'https://hooks.slack.com/services/T024/B071/XXXXXXXX', desc: 'Team channel for fleet alerts', connected: true },
+  { id: 'ch_pd', type: 'PagerDuty', target: 'PLCY On-Call · P1', endpoint: 'R0ABCD1234EFGH5678IJKL', desc: 'Pages the on-call engineer', connected: true },
+  { id: 'ch_email', type: 'Email', target: 'oncall@plcy.app', endpoint: '', desc: 'Email distribution list', connected: true },
+  { id: 'ch_webhook', type: 'Webhook', target: 'SIEM', endpoint: 'https://hooks.plcy.app/incoming', desc: 'Outbound webhook (SIEM)', connected: false },
 ]
 
 export type AlertSeverity = 'Critical' | 'High' | 'Medium' | 'Low'

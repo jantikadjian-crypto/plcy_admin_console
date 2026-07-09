@@ -53,8 +53,10 @@ import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useCustomers } from '@/context/Customers'
-import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum } from '@/data/mock'
+import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum, customerChannels } from '@/data/mock'
 import type { Customer } from '@/data/mock'
+import { ContactChannels } from '@/components/ContactChannels'
+import type { ChannelConfig } from '@/data/notifications'
 import { billingByCustomer, invoices, paymentByCustomer, billingContactByCustomer } from '@/data/billing'
 import type { PaymentMethod, PaymentType, PaymentStatus, BillingContact } from '@/data/billing'
 
@@ -199,6 +201,11 @@ export default function CustomerDetail() {
     update(c.id, draft)
     logAction({ action: 'customer.update', target: c.name, category: 'customer' })
     setEditing(false)
+  }
+  const saveChannel = (updated: ChannelConfig) => {
+    const next = customerChannels(c).map((ch) => (ch.id === updated.id ? updated : ch))
+    update(c.id, { channels: next })
+    logAction({ action: 'customer.channel.update', target: `${c.name} · ${updated.type}`, category: 'customer' })
   }
 
   const canEditBilling = can('license.manage')
@@ -390,6 +397,11 @@ export default function CustomerDetail() {
                 <MiniStat icon={AlertOctagon} label="Open incidents" value={openIncidents} tone={openIncidents ? 'text-rose-600' : undefined} />
                 <MiniStat icon={Inbox} label="Open DSARs" value={openDsar} tone={openDsar ? 'text-orange-600' : undefined} />
               </div>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardTitle title="Notification Contacts" subtitle="Where alerts about this customer are sent · click a channel to configure it" />
+              <ContactChannels channels={customerChannels(c)} canEdit={canEdit} onSave={saveChannel} />
             </Card>
           </div>
         )}

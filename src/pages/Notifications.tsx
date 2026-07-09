@@ -6,24 +6,19 @@ import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } fr
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import {
-  channels,
+  channels as seedChannels,
   routingRules as seedRules,
   onCall,
   rotation,
   escalation,
   recentAlerts,
 } from '@/data/notifications'
-import type { ChannelType, RoutingRule, AlertSeverity, DeliveryStatus } from '@/data/notifications'
+import type { ChannelType, ChannelConfig, RoutingRule, AlertSeverity, DeliveryStatus } from '@/data/notifications'
 import { useRegistryPromoted } from '@/data/registryStore'
 import { collectLiveSignals, evaluateRouting, routingSummary } from '@/data/alerting'
 import type { RoutingStatus } from '@/data/alerting'
+import { ContactChannels, channelIcon } from '@/components/ContactChannels'
 
-const channelIcon: Record<ChannelType, LucideIcon> = {
-  Slack: MessageSquare,
-  PagerDuty: Siren,
-  Email: Mail,
-  Webhook: Webhook,
-}
 const channelTone: Record<ChannelType, 'purple' | 'red' | 'blue' | 'slate'> = {
   Slack: 'purple',
   PagerDuty: 'red',
@@ -70,10 +65,11 @@ export default function Notifications() {
   const [rules, setRules] = useState<RoutingRule[]>(seedRules)
   const [sentIds, setSentIds] = useState<Record<string, true>>({})
   const [ruleModal, setRuleModal] = useState<{ mode: 'create'; category: string } | { mode: 'edit'; rule: RoutingRule } | null>(null)
+  const [channelList, setChannelList] = useState<ChannelConfig[]>(seedChannels)
   const canManage = can('settings.modify')
 
   const signals = collectLiveSignals(promoted)
-  const summary = routingSummary(signals, rules)
+  const summary = routingSummary(signals, rules, channelList)
   const primaryOnCall = onCall.find((o) => o.role === 'Primary')?.name ?? '—'
 
   // Categories with live signals but no rule — the gaps a new rule can close.
@@ -104,6 +100,11 @@ export default function Notifications() {
   const dispatch = (signalId: string, event: string, pages: boolean) => {
     setSentIds((prev) => ({ ...prev, [signalId]: true }))
     logAction({ action: pages ? 'notification.page' : 'notification.dispatch', target: event, category: 'notifications' })
+  }
+
+  const saveChannel = (updated: ChannelConfig) => {
+    setChannelList((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+    logAction({ action: 'notification.channel.update', target: `${updated.type} · ${updated.target}`, category: 'notifications' })
   }
 
   return (
@@ -152,7 +153,7 @@ export default function Notifications() {
             </thead>
             <tbody>
               {signals.map((s) => {
-                const o = evaluateRouting(s, rules)
+                const o = evaluateRouting(s, rules, channelList)
                 const sent = sentIds[s.id]
                 return (
                   <tr key={s.id} className="border-b border-slate-100 align-top last:border-0">
@@ -208,28 +209,13 @@ export default function Notifications() {
       </Card>
 
       {/* Channels */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {channels.map((c) => {
-          const Icon = channelIcon[c.type]
-          return (
-            <Card key={c.id}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${c.connected ? 'bg-slate-100 text-ink-600' : 'bg-slate-50 text-ink-400'}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-ink-900">{c.type}</p>
-                    <p className="font-mono text-xs text-ink-500">{c.target}</p>
-                  </div>
-                </div>
-                {c.connected ? <Badge tone="green" dot>Connected</Badge> : <Badge tone="slate">Off</Badge>}
-              </div>
-              <p className="mt-3 text-xs text-ink-500">{c.desc}</p>
-            </Card>
-          )
-        })}
+      <div className="mb-2 mt-6 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-ink-900">Delivery channels</h3>
+          <p className="text-xs text-ink-500">Where alerts are sent · click a channel to enter its connection details</p>
+        </div>
       </div>
+      <ContactChannels channels={channelList} canEdit={canManage} onSave={saveChannel} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Routing rules */}
@@ -347,6 +333,7 @@ export default function Notifications() {
           onSave={saveRule}
         />
       )}
+
     </>
   )
 }

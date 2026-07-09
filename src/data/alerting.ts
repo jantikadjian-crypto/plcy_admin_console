@@ -12,8 +12,8 @@ import { slaTargets } from './sla'
 import { customerBilling } from './billing'
 import { terraformFor, imageDriftForDeployment } from './clusters'
 import { registryImages, currentTagOf } from './registry'
-import { channels as channelConfigs, onCall } from './notifications'
-import type { RoutingRule, ChannelType, AlertSeverity } from './notifications'
+import { channels as defaultChannels, onCall } from './notifications'
+import type { RoutingRule, ChannelType, AlertSeverity, ChannelConfig } from './notifications'
 
 export interface LiveSignal {
   id: string
@@ -88,7 +88,7 @@ export function collectLiveSignals(promoted: Record<string, string>): LiveSignal
 }
 
 /** Resolve a signal against the (possibly edited) rule set → who gets paged. */
-export function evaluateRouting(signal: LiveSignal, rules: RoutingRule[]): RoutingOutcome {
+export function evaluateRouting(signal: LiveSignal, rules: RoutingRule[], channels: ChannelConfig[] = defaultChannels): RoutingOutcome {
   const rule = rules.find((r) => r.category === signal.category)
   if (!rule) {
     return { status: 'unrouted', channels: [], mutedChannels: [], pages: false, reason: 'No rule covers this category — nobody is notified' }
@@ -99,7 +99,7 @@ export function evaluateRouting(signal: LiveSignal, rules: RoutingRule[]): Routi
   if (SEV_RANK[signal.severity] < SEV_RANK[rule.minSeverity]) {
     return { status: 'below', rule, channels: rule.channels, mutedChannels: [], pages: false, reason: `Below the rule's ${rule.minSeverity} threshold` }
   }
-  const muted = rule.channels.filter((c) => !channelConfigs.find((ch) => ch.type === c)?.connected)
+  const muted = rule.channels.filter((c) => !channels.find((ch) => ch.type === c)?.connected)
   const pages = rule.channels.includes('PagerDuty')
   const responder = pages ? onCall.find((o) => o.role === 'Primary')?.name : undefined
   return {
@@ -119,12 +119,12 @@ export interface RoutingSummary {
   gaps: number
   paged: number
 }
-export function routingSummary(signals: LiveSignal[], rules: RoutingRule[]): RoutingSummary {
+export function routingSummary(signals: LiveSignal[], rules: RoutingRule[], channels: ChannelConfig[] = defaultChannels): RoutingSummary {
   let routed = 0
   let gaps = 0
   let paged = 0
   for (const s of signals) {
-    const o = evaluateRouting(s, rules)
+    const o = evaluateRouting(s, rules, channels)
     if (o.status === 'routed') {
       routed++
       if (o.pages) paged++
