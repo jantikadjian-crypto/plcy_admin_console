@@ -79,7 +79,7 @@ const pastDueCustomers = customerBilling.filter((b) => b.status === 'Past due')
 const baseSignals: Signal[] = [
   { key: 'sla', label: 'SLA breaches', value: String(slaTotals.breached), icon: Gauge, tone: slaTotals.breached ? 'red' : 'green', footer: `${slaTotals.atRisk} at risk`, to: '/sla' },
   { key: 'billing', label: 'Past due', value: fmtMoney(billingTotals.pastDue), icon: Receipt, tone: billingTotals.pastDue ? 'red' : 'green', footer: `${billingTotals.pastDueCount} invoices`, to: '/billing' },
-  { key: 'drift', label: 'Terraform drift', value: String(drift.drifted), icon: GitBranch, tone: drift.drifted ? 'orange' : 'green', footer: 'Clusters out of sync', to: '/clusters' },
+  { key: 'drift', label: 'Terraform drift', value: String(drift.drifted), icon: GitBranch, tone: drift.drifted ? 'orange' : 'green', footer: 'Clusters out of sync', to: '/fleet-posture' },
   { key: 'cve', label: 'Critical CVEs', value: String(criticalImages.length), icon: ShieldAlert, tone: criticalImages.length ? 'red' : 'green', footer: 'Images on current tag', to: '/registry' },
   { key: 'incidents', label: 'Open incidents', value: String(openIncidents.length), icon: AlertOctagon, tone: openIncidents.length ? 'orange' : 'green', footer: 'Across the fleet', to: '/incidents' },
   { key: 'quarantine', label: 'Quarantined', value: String(quarantined.length), icon: Ban, tone: quarantined.length ? 'orange' : 'green', footer: 'Images blocked', to: '/registry' },

@@ -529,3 +529,104 @@ export function imageDriftTotals(deps: Deployment[], promoted: Record<string, st
   }
   return { clustersBehind, workloadsBehind }
 }
+
+/* ------------------------------------------------------------------ */
+/* Fleet posture — guardrails + drift rolled up across every tenant     */
+/* ------------------------------------------------------------------ */
+export type ClusterHealth = 'Healthy' | 'Degraded' | 'Offline'
+
+/** Per-namespace posture summary derived from its guardrails. */
+export interface NsPosture {
+  namespace: string
+  maxQuotaPct: number
+  quotaHot: boolean
+  quotaWarn: boolean
+  psa: PSALevel
+  psaMode: PSAMode
+  psaWeak: boolean
+  defaultDeny: boolean
+  extEgress: boolean
+}
+
+/** One row per tenant: drift + guardrail posture, ready for a fleet table. */
+export interface ClusterPosture {
+  d: Deployment
+  health: ClusterHealth
+  tfDrift: DriftStatus
+  tfDriftedResources: number
+  imageBehind: number
+  imageAhead: number
+  namespaces: NsPosture[]
+  quotaHot: number
+  maxQuotaPct: number
+  psaWeak: number
+  extEgress: number
+  hasDrift: boolean
+  score: number
+}
+
+const EXTERNAL_PEER = /external|internet|model|acme|encrypt/i
+
+function nsPosture(ns: NamespaceGuardrails): NsPosture {
+  const pct = (u: number, q: number) => (q ? (u / q) * 100 : 0)
+  const maxQuotaPct = Math.round(Math.max(pct(ns.cpuUsed, ns.cpuQuota), pct(ns.memUsed, ns.memQuota), pct(ns.podsUsed, ns.podsQuota)))
+  return {
+    namespace: ns.namespace,
+    maxQuotaPct,
+    quotaHot: maxQuotaPct >= 90,
+    quotaWarn: maxQuotaPct >= 75,
+    psa: ns.psa,
+    psaMode: ns.psaMode,
+    psaWeak: ns.psa === 'privileged' || ns.psaMode !== 'enforce',
+    defaultDeny: ns.defaultDeny,
+    extEgress: ns.rules.some((r) => r.direction === 'Egress' && r.allowed && EXTERNAL_PEER.test(r.peer)),
+  }
+}
+
+export function clusterPosture(d: Deployment, promoted: Record<string, string>): ClusterPosture {
+  const health: ClusterHealth = d.status === 'Offline' ? 'Offline' : d.podsHealthy < d.podsTotal ? 'Degraded' : 'Healthy'
+  const tf = terraformFor(d)
+  const img = imageDriftForDeployment(d, promoted)
+  const namespaces = namespacesFor(d).map(nsPosture)
+  const quotaHot = namespaces.filter((n) => n.quotaHot).length
+  const maxQuotaPct = namespaces.reduce((m, n) => Math.max(m, n.maxQuotaPct), 0)
+  const psaWeak = namespaces.filter((n) => n.psaWeak).length
+  const extEgress = namespaces.filter((n) => n.extEgress).length
+  const hasDrift = tf.drift === 'Drift detected' || img.behind > 0
+  // Weighted so the most at-risk tenants sort to the top.
+  const score =
+    (health === 'Offline' ? 50 : health === 'Degraded' ? 20 : 0) +
+    (tf.drift === 'Drift detected' ? 10 : 0) +
+    img.behind * 4 +
+    quotaHot * 6 +
+    psaWeak * 2
+  return {
+    d,
+    health,
+    tfDrift: tf.drift,
+    tfDriftedResources: tf.driftedResources,
+    imageBehind: img.behind,
+    imageAhead: img.ahead,
+    namespaces,
+    quotaHot,
+    maxQuotaPct,
+    psaWeak,
+    extEgress,
+    hasDrift,
+    score,
+  }
+}
+
+export function fleetPosture(deps: Deployment[], promoted: Record<string, string>): ClusterPosture[] {
+  return deps.map((d) => clusterPosture(d, promoted)).sort((a, b) => b.score - a.score)
+}
+
+/** Headline counters for the fleet-posture summary cards. */
+export function fleetPostureTotals(rows: ClusterPosture[]) {
+  return {
+    clustersDrift: rows.filter((r) => r.hasDrift).length,
+    quotaHotNamespaces: rows.reduce((s, r) => s + r.quotaHot, 0),
+    psaWeakNamespaces: rows.reduce((s, r) => s + r.psaWeak, 0),
+    clustersExtEgress: rows.filter((r) => r.extEgress > 0).length,
+  }
+}

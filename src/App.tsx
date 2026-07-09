@@ -11,6 +11,7 @@ import Releases from './pages/Releases'
 import Bundles from './pages/Bundles'
 import Clusters from './pages/Clusters'
 import ClusterDetail from './pages/ClusterDetail'
+import FleetPosture from './pages/FleetPosture'
 import Licensing from './pages/Licensing'
 import Regions from './pages/Regions'
 import Residency from './pages/Residency'
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/bundles" element={<Bundles />} />
         <Route path="/clusters" element={<Clusters />} />
         <Route path="/clusters/:id" element={<ClusterDetail />} />
+        <Route path="/fleet-posture" element={<FleetPosture />} />
         <Route path="/licensing" element={<Licensing />} />
         <Route path="/regions" element={<Regions />} />
         <Route path="/residency" element={<Residency />} />

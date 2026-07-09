@@ -37,6 +37,7 @@ import {
   Gauge,
   Receipt,
   UserCog,
+  Radar,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -75,6 +76,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Releases', to: '/releases', icon: Rocket },
       { label: 'Update Bundles', to: '/bundles', icon: Boxes },
       { label: 'Cluster Health', to: '/clusters', icon: Cpu },
+      { label: 'Fleet Posture', to: '/fleet-posture', icon: Radar },
       { label: 'Backups & DR', to: '/backups', icon: DatabaseBackup },
       { label: 'Licensing', to: '/licensing', icon: BadgeCheck },
     ],

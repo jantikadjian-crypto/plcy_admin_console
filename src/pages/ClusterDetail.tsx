@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Activity,
@@ -71,7 +71,10 @@ export default function ClusterDetail() {
   const { can, logAction } = useSession()
   const { setScope } = useCustomerScope()
   const promoted = useRegistryPromoted()
-  const [tab, setTab] = useState<Tab>('overview')
+  const [searchParams] = useSearchParams()
+  const TAB_KEYS: Tab[] = ['overview', 'workloads', 'infra', 'addons', 'guardrails', 'config']
+  const requestedTab = searchParams.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(requestedTab && TAB_KEYS.includes(requestedTab) ? requestedTab : 'overview')
 
   const d = deployments.find((x) => x.id === id)
   const [config, setConfig] = useState<ClusterConfig | null>(null)
