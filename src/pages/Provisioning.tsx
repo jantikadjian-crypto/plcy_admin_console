@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Cloud, Server, ShieldOff, Plus, RotateCcw, Eye, Clock, CircleCheck, CircleAlert, Boxes, Layers, Check, X, ArrowRight, ArrowLeft, ClipboardCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Cloud, Server, ShieldOff, Plus, RotateCcw, Eye, Clock, CircleCheck, CircleAlert, Boxes, Layers, Check, X, ArrowRight, ArrowLeft, ArrowUpRight, ClipboardCheck } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
 import { provisions as seedProvisions, provisionSteps, provisionStep, onboardingChecklist, opsTotals } from '@/data/ops'
 import type { Provision, ProvTemplate, OnboardingState, ChecklistItem } from '@/data/ops'
@@ -156,7 +157,7 @@ export default function Provisioning() {
           }
         >
           <div className="space-y-5">
-            <OnboardingReadiness items={onboardingChecklist(current)} />
+            <OnboardingReadiness items={onboardingChecklist(current)} linkable />
 
             <section>
               <h4 className="mb-3 text-sm font-semibold text-ink-900">{current.template === 'Air-gapped' ? 'Air-gapped delivery pipeline' : 'IaC pipeline'}</h4>
@@ -221,7 +222,7 @@ export default function Provisioning() {
 /* ------------------------------------------------------------------ */
 /* Onboarding readiness checklist                                       */
 /* ------------------------------------------------------------------ */
-function OnboardingReadiness({ items }: { items: ChecklistItem[] }) {
+function OnboardingReadiness({ items, linkable = false }: { items: ChecklistItem[]; linkable?: boolean }) {
   const done = items.filter((i) => i.done).length
   const criticalPending = items.filter((i) => i.critical && !i.done)
   const ready = criticalPending.length === 0 && done === items.length
@@ -233,18 +234,28 @@ function OnboardingReadiness({ items }: { items: ChecklistItem[] }) {
           {ready ? 'Ready to hand over' : criticalPending.length ? `${criticalPending.length} blocker${criticalPending.length === 1 ? '' : 's'}` : `${done}/${items.length} done`}
         </Badge>
       </div>
+      {linkable && !ready && <p className="mb-2 text-xs text-ink-400">Pending gates link to the page that completes them.</p>}
       <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-        {items.map((i) => (
-          <li key={i.key} className="flex items-center gap-2 text-sm">
-            {i.done ? (
-              <Check className="h-4 w-4 shrink-0 text-emerald-500" />
-            ) : (
-              <X className={`h-4 w-4 shrink-0 ${i.critical ? 'text-rose-500' : 'text-slate-300'}`} />
-            )}
-            <span className={i.done ? 'text-ink-700' : i.critical ? 'font-medium text-rose-700' : 'text-ink-500'}>{i.label}</span>
-            {!i.done && i.critical && <span className="ml-auto text-[10px] font-semibold uppercase text-rose-500">required</span>}
-          </li>
-        ))}
+        {items.map((i) => {
+          const showLink = linkable && !i.done && i.to
+          return (
+            <li key={i.key} className="flex items-center gap-2 text-sm">
+              {i.done ? (
+                <Check className="h-4 w-4 shrink-0 text-emerald-500" />
+              ) : (
+                <X className={`h-4 w-4 shrink-0 ${i.critical ? 'text-rose-500' : 'text-slate-300'}`} />
+              )}
+              <span className={i.done ? 'text-ink-700' : i.critical ? 'font-medium text-rose-700' : 'text-ink-500'}>{i.label}</span>
+              {showLink ? (
+                <Link to={i.to!} className="ml-auto inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-medium text-brand-600 hover:text-brand-700">
+                  {i.cta ?? 'Set up'}<ArrowUpRight className="h-3 w-3" />
+                </Link>
+              ) : (
+                !i.done && i.critical && <span className="ml-auto text-[10px] font-semibold uppercase text-rose-500">required</span>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

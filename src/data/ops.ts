@@ -82,6 +82,10 @@ export interface ChecklistItem {
   label: string
   done: boolean
   critical: boolean
+  /** Page that satisfies this gate — deep-linked from the readiness checklist. */
+  to?: string
+  /** Short call-to-action for a pending gate, e.g. "Issue license". */
+  cta?: string
 }
 
 /** Per-environment onboarding gates, tailored to the deployment mode. */
@@ -92,20 +96,20 @@ export function onboardingChecklist(p: Provision): ChecklistItem[] {
   // For wizard-created rows, use the captured selections; otherwise infer from progress.
   const at = (frac: number) => p.status === 'Ready' || p.progress >= frac
   const items: ChecklistItem[] = [
-    { key: 'plan', label: 'Contract & plan confirmed', done: ob ? !!ob.plan : at(10), critical: false },
-    { key: 'region', label: 'Region & sovereignty selected', done: true, critical: false },
-    { key: 'env', label: air ? 'Signed bundle delivered to site' : 'Environment provisioned (IaC)', done: at(air ? 50 : 60), critical: true },
-    { key: 'policies', label: 'Baseline policy packs applied', done: at(80), critical: false },
-    { key: 'dpa', label: 'DPA & sub-processors reviewed', done: ob ? ob.dpa : at(45), critical: false },
-    { key: 'contacts', label: 'Notification contacts set', done: ob ? ob.contacts : at(85), critical: false },
+    { key: 'plan', label: 'Contract & plan confirmed', done: ob ? !!ob.plan : at(10), critical: false, to: '/customers', cta: 'Open customers' },
+    { key: 'region', label: 'Region & sovereignty selected', done: true, critical: false, to: '/regions', cta: 'View regions' },
+    { key: 'env', label: air ? 'Signed bundle delivered to site' : 'Environment provisioned (IaC)', done: at(air ? 50 : 60), critical: true, to: air ? '/bundles' : undefined, cta: air ? 'Build bundle' : undefined },
+    { key: 'policies', label: 'Baseline policy packs applied', done: at(80), critical: false, to: '/policy-packs', cta: 'Apply packs' },
+    { key: 'dpa', label: 'DPA & sub-processors reviewed', done: ob ? ob.dpa : at(45), critical: false, to: '/subprocessors', cta: 'Review sub-processors' },
+    { key: 'contacts', label: 'Notification contacts set', done: ob ? ob.contacts : at(85), critical: false, to: '/customers', cta: 'Set contacts' },
   ]
   if (sov) {
-    items.push({ key: 'byok', label: 'BYOK / in-region encryption', done: ob ? ob.byok : at(60), critical: true })
-    items.push({ key: 'residency', label: 'Data residency policy configured', done: ob ? ob.residency : at(70), critical: true })
+    items.push({ key: 'byok', label: 'BYOK / in-region encryption', done: ob ? ob.byok : at(60), critical: true, to: '/regions', cta: 'Configure keys' })
+    items.push({ key: 'residency', label: 'Data residency policy configured', done: ob ? ob.residency : at(70), critical: true, to: '/residency', cta: 'Set policy' })
   }
   if (air) {
-    items.push({ key: 'license', label: 'Offline license issued', done: ob ? ob.offlineLicense : at(90), critical: true })
-    items.push({ key: 'escort', label: 'Escorted-access rule configured', done: ob ? ob.escortedAccess : at(90), critical: true })
+    items.push({ key: 'license', label: 'Offline license issued', done: ob ? ob.offlineLicense : at(90), critical: true, to: '/licensing', cta: 'Issue license' })
+    items.push({ key: 'escort', label: 'Escorted-access rule configured', done: ob ? ob.escortedAccess : at(90), critical: true, to: '/privileged-access', cta: 'Configure access' })
   }
   return items
 }
