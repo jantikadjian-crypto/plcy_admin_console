@@ -13,6 +13,7 @@ export interface AuditItem {
   category: string
   result: 'Success' | 'Denied'
   time: string
+  ip?: string
 }
 
 interface LogInput {
@@ -39,9 +40,10 @@ const seedAudit: AuditItem[] = auditLog.map((e) => ({
   actor: e.actor,
   action: e.action,
   target: e.target,
-  category: 'system',
+  category: e.category,
   result: e.result,
   time: e.time,
+  ip: e.ip,
 }))
 
 function nowStamp(): string {
@@ -67,6 +69,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       category: input.category ?? 'action',
       result: input.result ?? 'Success',
       time: nowStamp(),
+      ip: '10.4.1.2',
     }
     setAudit((prev) => [item, ...prev])
   }, [])

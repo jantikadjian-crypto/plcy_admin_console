@@ -58,17 +58,29 @@ export default function AuditLog() {
   const [sel, setSel] = useState<AuditItem | null>(null)
   const [query, setQuery] = useState('')
   const [cat, setCat] = useState('All')
+  const [actor, setActor] = useState('All')
+  const [res, setRes] = useState<'All' | 'Success' | 'Denied'>('All')
 
-  const categories = useMemo(() => ['All', ...Array.from(new Set(audit.map((a) => a.category)))], [audit])
+  const categories = useMemo(() => ['All', ...Array.from(new Set(audit.map((a) => a.category))).sort()], [audit])
+  const actors = useMemo(() => ['All', ...Array.from(new Set(audit.map((a) => a.actor))).sort()], [audit])
   const q = query.trim().toLowerCase()
   const filtered = audit.filter((e) => {
     const matchesQ = !q || [e.actor, e.action, e.target, e.category].some((f) => f.toLowerCase().includes(q))
     const matchesCat = cat === 'All' || e.category === cat
-    return matchesQ && matchesCat
+    const matchesActor = actor === 'All' || e.actor === actor
+    const matchesRes = res === 'All' || e.result === res
+    return matchesQ && matchesCat && matchesActor && matchesRes
   })
 
   const distinctActors = new Set(audit.map((a) => a.actor)).size
   const deniedCount = audit.filter((a) => a.result === 'Denied').length
+
+  // Activity by category, derived from the full trail.
+  const byCategory = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const a of audit) counts.set(a.category, (counts.get(a.category) ?? 0) + 1)
+    return Array.from(counts, ([category, events]) => ({ category, events })).sort((a, b) => b.events - a.events)
+  }, [audit])
 
   return (
     <>
@@ -94,14 +106,30 @@ export default function AuditLog() {
       {/* Filter row */}
       <Card className="mt-6" padded={false}>
         <div className="flex flex-col gap-3 p-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-            <input
-              className="input pl-9"
-              placeholder="Search by actor, action, target, or category…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+              <input
+                className="input pl-9"
+                placeholder="Search by actor, action, target, or category…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <select className="input sm:w-56" value={actor} onChange={(e) => setActor(e.target.value)}>
+              {actors.map((a) => <option key={a} value={a}>{a === 'All' ? 'All actors' : a}</option>)}
+            </select>
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              {(['All', 'Success', 'Denied'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRes(r)}
+                  className={clsx('rounded-md px-3 py-1.5 text-xs font-medium transition-colors', res === r ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800')}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {categories.map((f) => (
@@ -122,21 +150,37 @@ export default function AuditLog() {
         </div>
       </Card>
 
-      {/* Events by hour */}
-      <Card className="mt-6">
-        <CardTitle title="Events by Hour" subtitle="Privileged action volume over the last 24 hours" />
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={eventsByHour} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
-              <XAxis dataKey="hour" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f1f5f9' }} formatter={(v: number) => `${v} events`} />
-              <Bar dataKey="events" fill="#3366ff" radius={[6, 6, 0, 0]} maxBarSize={44} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
+      {/* Breakdown charts */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card>
+          <CardTitle title="Activity by Category" subtitle="Where privileged actions are happening" />
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byCategory} layout="vertical" margin={{ top: 4, right: 12, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="category" width={92} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f1f5f9' }} formatter={(v: number) => `${v} events`} />
+                <Bar dataKey="events" fill="#3366ff" radius={[0, 6, 6, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+        <Card>
+          <CardTitle title="Events by Hour" subtitle="Privileged action volume over the last 24 hours" />
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={eventsByHour} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                <XAxis dataKey="hour" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f1f5f9' }} formatter={(v: number) => `${v} events`} />
+                <Bar dataKey="events" fill="#8b5cf6" radius={[6, 6, 0, 0]} maxBarSize={44} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
 
       {/* Table */}
       <Card className="mt-6">
@@ -186,6 +230,7 @@ function AuditModal({ entry: e, onClose }: { entry: AuditItem; onClose: () => vo
     { label: 'Action', value: e.action, mono: true },
     { label: 'Target', value: e.target },
     { label: 'Category', value: e.category },
+    { label: 'Source IP', value: e.ip ?? '—', mono: true },
     { label: 'Time', value: e.time, mono: true },
     { label: 'Result', value: e.result },
   ]
@@ -195,6 +240,7 @@ function AuditModal({ entry: e, onClose }: { entry: AuditItem; onClose: () => vo
     action: e.action,
     target: e.target,
     category: e.category,
+    source_ip: e.ip ?? null,
     time: e.time,
     result: e.result,
     user_agent: sys ? 'plcy-internal/1.0' : 'PLCY-Console/4.8.2',
