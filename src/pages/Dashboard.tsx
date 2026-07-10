@@ -46,6 +46,7 @@ import { deployments } from '@/data/fleet'
 import { clusterTotals, terraformFor, imageDriftForDeployment } from '@/data/clusters'
 import { registryImages, currentTagOf } from '@/data/registry'
 import { useRegistryPromoted } from '@/data/registryStore'
+import { policyTotals } from '@/data/policy'
 
 /* ------------------------------------------------------------------ */
 /* Live command-center signals                                          */
@@ -228,7 +229,7 @@ export default function Dashboard() {
             <Mini label="Customers" value={String(totals.customers)} sub={`${totals.activeCustomers} active`} />
             <Mini label="Instances" value={String(totals.instances)} sub={`${totals.healthyInstances} healthy`} />
             <Mini label="Models" value={String(totals.models)} sub="Governed" />
-            <Mini label="Policy packs" value={String(totals.policyPacks)} sub="Enforced" />
+            <Mini label="Policy packs" value={String(policyTotals.packs)} sub={`${policyTotals.controls} controls`} />
             <Mini label="Avg compliance" value={`${totals.avgCompliance}%`} sub="Fleet score" />
             <Mini label="MRR" value={fmtMoney(totals.mrr)} sub="Recurring" />
           </div>

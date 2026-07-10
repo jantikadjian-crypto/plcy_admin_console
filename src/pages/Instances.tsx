@@ -23,7 +23,8 @@ import {
   Td,
   Modal,
 } from '@/components/ui'
-import { instances, policyPacks, customers, fmtNum } from '@/data/mock'
+import { instances, customers, fmtNum } from '@/data/mock'
+import { packs as policyPacks } from '@/data/policy'
 import type { Instance } from '@/data/mock'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useSession } from '@/context/Session'
@@ -280,7 +281,7 @@ function InstanceModal({ instance: i, onClose }: { instance: Instance; onClose: 
   // Derived, deterministic metrics for display.
   const p95 = i.rps > 0 ? Math.round(40 + i.rps / 30) : 0
   const errorRate = i.status === 'Healthy' ? '0.02%' : i.status === 'Degraded' ? '1.4%' : '—'
-  const appliedPacks = policyPacks.filter((p) => p.status === 'Published').slice(0, i.policyPacks)
+  const appliedPacks = policyPacks.filter((p) => p.status === 'live').slice(0, i.policyPacks)
 
   const metrics: { label: string; value: string }[] = [
     { label: 'Uptime (30d)', value: i.uptime > 0 ? `${i.uptime.toFixed(2)}%` : '—' },

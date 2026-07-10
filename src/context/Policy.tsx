@@ -24,12 +24,30 @@ const KEY = 'plcy.policy.v1'
 
 interface Store { packs: PolicyPack[]; controls: Control[] }
 
+/**
+ * Union any newly-shipped seed packs/controls into a stored catalog. Users with
+ * an existing `plcy.policy.v1` keep all their edits, but items added to the seed
+ * after they first loaded (e.g. new composite packs) still show up. Matching is
+ * by id, so a user's own edit to a seeded item is preserved (not overwritten).
+ */
+function mergeSeed(stored: Store): Store {
+  const packIds = new Set(stored.packs.map((p) => p.id))
+  const controlIds = new Set(stored.controls.map((c) => c.id))
+  const newPacks = seedPacks.filter((p) => !packIds.has(p.id))
+  const newControls = seedControls.filter((c) => !controlIds.has(c.id))
+  if (newPacks.length === 0 && newControls.length === 0) return stored
+  return {
+    packs: [...stored.packs, ...newPacks],
+    controls: [...stored.controls, ...newControls],
+  }
+}
+
 function load(): Store {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Store
-      if (Array.isArray(parsed?.packs) && Array.isArray(parsed?.controls)) return parsed
+      if (Array.isArray(parsed?.packs) && Array.isArray(parsed?.controls)) return mergeSeed(parsed)
     }
   } catch {
     /* ignore */

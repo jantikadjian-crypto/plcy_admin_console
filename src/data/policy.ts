@@ -5,7 +5,7 @@
  *  - Primitive packs (P1–P10): single-purpose, composable runtime guardrails,
  *    each made of atomic controls enforced at the Policy Enforcement Point (OPA
  *    Rego rules + detectors + OpenTelemetry evidence).
- *  - Composite packs: framework-aligned (F1–F12) or industry (I1–I6) bundles
+ *  - Composite packs: framework-aligned (F1–F13) or industry (I1–I7) bundles
  *    that compose primitives to satisfy a standard or vertical.
  *
  * Modelled after the source workbook (PACKS / CONTROLS / DEPENDENCIES / tag
@@ -152,7 +152,7 @@ export const controls: Control[] = [
 ]
 
 /* ------------------------------------------------------------------ */
-/* Packs (28)                                                          */
+/* Packs (30)                                                          */
 /* ------------------------------------------------------------------ */
 const prim = (id: string, name: string, category: PackCategory, region: string, description: string): PolicyPack => ({
   id, name, type: 'primitive', category, description, frameworks: [], industries: [], region, dependencies: [], status: 'live', version: '1.0',
@@ -189,6 +189,7 @@ export const packs: PolicyPack[] = [
   fw('F10', 'OWASP Top 10 for LLM Apps Pack', ['OWASP LLM Top 10'], 'Global', ['P6', 'P7', 'P9', 'P10'], 'Guardrails for the OWASP Top 10 LLM application risks.'),
   fw('F11', 'CIS Controls Baseline Pack', ['CIS Controls v8'], 'Global', ['P3', 'P5', 'P7', 'P9'], 'CIS Controls v8 baseline security hygiene.'),
   fw('F12', 'PCI DSS Payment Data Pack', ['PCI DSS'], 'Global', ['P2', 'P3', 'P5', 'P7', 'P9'], 'Cardholder-data handling controls for AI flows.'),
+  fw('F13', 'HIPAA PHI Protection Pack', ['HIPAA'], 'US', ['P2', 'P3', 'P4', 'P5', 'P6', 'P9'], 'Protected health information (PHI) handling and de-identification for healthcare AI.'),
   // Industry composites
   ind('I1', 'Retail & E-Commerce AI Governance Pack', ['Retail', 'E-commerce'], ['PCI DSS', 'GDPR', 'India DPDP'], ['F12', 'F1', 'P6', 'P7', 'P10'], 'Payment, personalization, and provenance controls for retail AI.'),
   ind('I2', 'Education & Kids Safety Pack', ['Education'], ['GDPR', 'India DPDP'], ['P2', 'P3', 'P6', 'P7'], 'Minor-safety, consent, and content controls for edtech.'),
@@ -196,6 +197,7 @@ export const packs: PolicyPack[] = [
   ind('I4', 'HR & Hiring AI Governance Pack', ['HR/Recruiting'], ['GDPR', 'India DPDP'], ['F1', 'F5', 'P2', 'P3', 'P6', 'P7', 'P8'], 'Fairness, consent, and human-oversight controls for hiring AI.'),
   ind('I5', 'Manufacturing / OT & Critical Infrastructure Pack', ['Manufacturing', 'OT', 'Critical Infrastructure'], ['EU NIS2'], ['F3', 'P5', 'P7', 'P8', 'P9'], 'Resilience and egress controls for OT / critical infrastructure.'),
   ind('I6', 'Media / Marketing / AdTech Governance Pack', ['Media/Marketing', 'AdTech'], ['EU DSA', 'Directive 2002/58/EC (ePrivacy)', 'GDPR'], ['F4', 'F2', 'F1'], 'Content-safety, consent, and grounding controls for media/adtech.'),
+  ind('I7', 'Healthcare AI Governance Pack', ['Healthcare'], ['HIPAA', 'GDPR'], ['F13', 'F1', 'P6', 'P7', 'P8'], 'PHI protection, retrieval grounding, and human oversight for clinical & healthcare AI.'),
 ]
 
 /* ------------------------------------------------------------------ */

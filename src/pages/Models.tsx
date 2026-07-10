@@ -22,7 +22,8 @@ import {
   Td,
   Modal,
 } from '@/components/ui'
-import { models, policyPacks, customers, fmtCompact, fmtNum } from '@/data/mock'
+import { models, customers, fmtCompact, fmtNum } from '@/data/mock'
+import { packs as policyPacks, controls as policyControls, controlCount } from '@/data/policy'
 import type { AIModel } from '@/data/mock'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useSession } from '@/context/Session'
@@ -299,7 +300,7 @@ function ModelField({ label, children, className }: { label: string; children: R
 /* ------------------------------------------------------------------ */
 function ModelModal({ model: m, onClose }: { model: AIModel; onClose: () => void }) {
   const isBlocked = m.status === 'Blocked'
-  const guardrails = isBlocked ? [] : policyPacks.filter((p) => p.status === 'Published').slice(0, m.risk === 'High' ? 5 : m.risk === 'Medium' ? 3 : 2)
+  const guardrails = isBlocked ? [] : policyPacks.filter((p) => p.status === 'live').slice(0, m.risk === 'High' ? 5 : m.risk === 'Medium' ? 3 : 2)
 
   const facts: { label: string; value: string }[] = [
     { label: 'Provider', value: m.provider },
@@ -366,7 +367,7 @@ function ModelModal({ model: m, onClose }: { model: AIModel; onClose: () => void
                 <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-ink-900">{p.name}</p>
-                    <p className="text-xs text-ink-500">{p.category} · {p.rules} rules</p>
+                    <p className="text-xs text-ink-500">{p.category} · {controlCount(p, policyPacks, policyControls)} controls</p>
                   </div>
                   <Badge tone="green" dot>Enforced</Badge>
                 </div>

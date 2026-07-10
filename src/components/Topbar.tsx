@@ -19,7 +19,8 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { flatNav } from '@/config/navigation'
-import { models, policyPacks, instances } from '@/data/mock'
+import { models, instances } from '@/data/mock'
+import { packs as policyPacks, controls as policyControls, familyOf } from '@/data/policy'
 import { recentAlerts } from '@/data/notifications'
 import type { AlertSeverity } from '@/data/notifications'
 import { useCustomerScope } from '@/context/CustomerScope'
@@ -92,7 +93,8 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
     () => [
       ...customers.map((c) => ({ kind: 'Customer', icon: Users, label: c.name, sub: c.domain, to: `/customers/${c.id}`, customer: c.name })),
       ...models.map((m) => ({ kind: 'Model', icon: Bot, label: m.name, sub: `${m.provider} · ${m.customer}`, to: '/models' })),
-      ...policyPacks.map((p) => ({ kind: 'Policy Pack', icon: Package, label: p.name, sub: p.category, to: '/policy-packs' })),
+      ...policyPacks.map((p) => ({ kind: 'Policy Pack', icon: Package, label: p.name, sub: p.type === 'primitive' ? 'Primitive' : `Composite · ${p.kind}`, to: '/policy-packs' })),
+      ...policyControls.map((c) => ({ kind: 'Control', icon: Package, label: `${c.id} — ${c.name}`, sub: familyOf(c.prefix), to: '/policy-packs' })),
       ...instances.map((i) => ({ kind: 'Instance', icon: Server, label: i.name, sub: i.customer, to: '/instances' })),
       ...flatNav.map((n) => ({ kind: 'Page', icon: LayoutDashboard, label: n.label, sub: 'Go to page', to: n.to })),
     ],
