@@ -273,7 +273,7 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
             <tbody>
               {filtered.map((ct) => (
                 <tr key={ct.id} className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50" onClick={() => onOpen(ct)}>
-                  <td className="py-2.5 pr-3"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span><p className="text-xs text-ink-600">{ct.name}</p></td>
+                  <td className="py-2.5 pr-3"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span><span className="ml-1.5 text-[11px] text-ink-400">({familyOf(ct.prefix)})</span><p className="text-xs text-ink-600">{ct.name}</p></td>
                   <td className="py-2.5 pr-3"><span className="text-xs text-ink-500">{familyOf(ct.prefix)}</span></td>
                   <td className="py-2.5 pr-3"><Badge tone="slate">{ct.detector}</Badge></td>
                   <td className="py-2.5 pr-3"><Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge></td>
@@ -360,7 +360,7 @@ function PackDrawer({ pack, packs, controls, onClose, onOpenPack, onOpenControl,
             <div className="overflow-hidden rounded-xl border border-slate-200">
               {packControls.map((ct) => (
                 <button key={ct.id} onClick={() => onOpenControl(ct)} className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-slate-50">
-                  <span className="min-w-0"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span> <span className="text-sm text-ink-700">{ct.name}</span></span>
+                  <span className="min-w-0"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span><span className="ml-1.5 text-[11px] text-ink-400">({familyOf(ct.prefix)})</span> <span className="text-sm text-ink-700">{ct.name}</span></span>
                   <Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge>
                 </button>
               ))}
@@ -391,7 +391,7 @@ decision := "${ct.decision.toLowerCase()}" {
   return (
     <Modal
       open onClose={onClose}
-      title={<span className="font-mono text-base">{ct.id}</span>} subtitle={ct.name} maxWidth="max-w-2xl"
+      title={<span className="flex items-baseline gap-2"><span className="font-mono text-base">{ct.id}</span><span className="text-xs font-normal text-ink-400">({familyOf(ct.prefix)})</span></span>} subtitle={ct.name} maxWidth="max-w-2xl"
       headerRight={<Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge>}
       footer={
         <div className="flex w-full items-center justify-between">
