@@ -11,7 +11,9 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardTitle, StatCard, PageHeader, Table, Tr, Td } from '@/components/ui'
-import { policyPacks, fmtNum, fmtCompact } from '@/data/mock'
+import { fmtNum, fmtCompact } from '@/data/mock'
+import { packs as policyPacks, controlsForPack } from '@/data/policy'
+import type { PolicyPack } from '@/data/policy'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -33,16 +35,49 @@ const trafficTrend = [
 const modes = ['Monitor', 'Warn', 'Block'] as const
 type Mode = (typeof modes)[number]
 
-const published = policyPacks.filter((p) => p.status === 'Published')
+/* Enforcement rows derive from the live policy catalog (@/data/policy) so the
+ * page always reflects the real packs, controls, and composites — no separate
+ * hardcoded list to drift. Scope / hits / last-triggered are deterministic
+ * pseudo-values keyed off each pack id (mock telemetry, stable across renders). */
+const hash = (s: string) => [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7)
+const lastOptions = ['1 min ago', '4 min ago', '11 min ago', '18 min ago', '26 min ago', '41 min ago']
 
-const rowConfig: Record<string, { mode: Mode; scope: string; hits: number; last: string }> = {
-  pp_pii: { mode: 'Block', scope: '5 customers · 9 instances', hits: 3420, last: '2 min ago' },
-  pp_finreg: { mode: 'Block', scope: '2 customers · 4 instances', hits: 1180, last: '11 min ago' },
-  pp_hipaa: { mode: 'Block', scope: '1 customer · 3 instances', hits: 640, last: '24 min ago' },
-  pp_prompt: { mode: 'Warn', scope: '6 customers · 10 instances', hits: 2870, last: '1 min ago' },
-  pp_bias: { mode: 'Monitor', scope: '4 customers · 6 instances', hits: 210, last: '38 min ago' },
-  pp_toxic: { mode: 'Warn', scope: '5 customers · 8 instances', hits: 1540, last: '5 min ago' },
+/** A pack enforced only through monitor-mode controls reports Monitor; privacy/
+ * security/sovereignty/compliance packs Block; governance/cost packs Warn. */
+function modeFor(pack: PolicyPack): Mode {
+  const ctrls = controlsForPack(pack)
+  if (ctrls.length > 0 && ctrls.every((c) => c.mode === 'monitor')) return 'Monitor'
+  if (pack.category === 'Governance' || pack.category === 'Cost') return 'Warn'
+  return 'Block'
 }
+
+interface EnforcementRow {
+  pack: PolicyPack
+  controls: number
+  mode: Mode
+  scope: string
+  hits: number
+  last: string
+}
+
+// Composite packs are what customers deploy as enforced bundles; show the live ones.
+const enforcementRows: EnforcementRow[] = policyPacks
+  .filter((p) => p.type === 'composite' && p.status === 'live')
+  .map((pack) => {
+    const h = hash(pack.id)
+    const customers = 1 + (h % 6)
+    const instances = customers + (h % 4)
+    const controls = controlsForPack(pack).length
+    return {
+      pack,
+      controls,
+      mode: modeFor(pack),
+      scope: `${customers} customer${customers > 1 ? 's' : ''} · ${instances} instance${instances > 1 ? 's' : ''}`,
+      hits: 120 + ((h % 47) * controls * 8),
+      last: lastOptions[h % lastOptions.length],
+    }
+  })
+  .sort((a, b) => b.hits - a.hits)
 
 function ModePills({ active }: { active: Mode }) {
   const tone: Record<Mode, string> = {
@@ -161,28 +196,28 @@ export default function Enforcement() {
 
       {/* Rules table */}
       <Card className="mt-6">
-        <CardTitle title="Active Enforcement Rules" subtitle="Per-policy-pack mode, scope, and activity" />
-        <Table columns={['Policy pack', 'Scope', 'Mode', 'Hits (today)', 'Last triggered']}>
-          {published.map((pack) => {
-            const cfg = rowConfig[pack.id]
-            if (!cfg) return null
-            return (
-              <Tr key={pack.id}>
-                <Td>
-                  <div className="font-medium text-ink-900">{pack.name}</div>
-                  <div className="text-xs text-ink-400">
-                    {pack.category} · {pack.version}
-                  </div>
-                </Td>
-                <Td className="text-ink-700">{cfg.scope}</Td>
-                <Td>
-                  <ModePills active={cfg.mode} />
-                </Td>
-                <Td className="font-medium text-ink-900">{fmtNum(cfg.hits)}</Td>
-                <Td className="text-ink-500">{cfg.last}</Td>
-              </Tr>
-            )
-          })}
+        <CardTitle
+          title="Active Enforcement Rules"
+          subtitle="Each row is a live composite pack (framework or industry bundle). Mode, scope, and control count come straight from the policy catalog."
+        />
+        <Table columns={['Policy pack', 'Controls', 'Scope', 'Mode', 'Hits (today)', 'Last triggered']}>
+          {enforcementRows.map(({ pack, controls, mode, scope, hits, last }) => (
+            <Tr key={pack.id}>
+              <Td>
+                <div className="font-medium text-ink-900">{pack.name}</div>
+                <div className="text-xs text-ink-400">
+                  {pack.id} · {pack.category} · {pack.kind === 'industry' ? 'Industry' : 'Framework'} composite
+                </div>
+              </Td>
+              <Td className="text-ink-700">{controls}</Td>
+              <Td className="text-ink-700">{scope}</Td>
+              <Td>
+                <ModePills active={mode} />
+              </Td>
+              <Td className="font-medium text-ink-900">{fmtNum(hits)}</Td>
+              <Td className="text-ink-500">{last}</Td>
+            </Tr>
+          ))}
         </Table>
       </Card>
     </>
