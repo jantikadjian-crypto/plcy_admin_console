@@ -31,6 +31,8 @@ export interface Provision {
   owner: string
   /** Present when created via the onboarding wizard; drives the readiness checklist. */
   onboarding?: OnboardingState
+  /** Per-gate completion overrides, set when a gate is marked done from its page. */
+  gates?: Record<string, boolean>
 }
 
 export const provisions: Provision[] = [
@@ -111,7 +113,18 @@ export function onboardingChecklist(p: Provision): ChecklistItem[] {
     items.push({ key: 'license', label: 'Offline license issued', done: ob ? ob.offlineLicense : at(90), critical: true, to: '/licensing', cta: 'Issue license' })
     items.push({ key: 'escort', label: 'Escorted-access rule configured', done: ob ? ob.escortedAccess : at(90), critical: true, to: '/privileged-access', cta: 'Configure access' })
   }
-  return items
+  // A gate marked done from its own page overrides the derived state.
+  return items.map((it) => ({ ...it, done: p.gates?.[it.key] ?? it.done }))
+}
+
+/** Human label for a checklist gate key — used by the onboarding return banner. */
+export function gateLabel(key: string): string {
+  return {
+    plan: 'Contract & plan', region: 'Region & sovereignty', env: 'Environment / bundle',
+    policies: 'Baseline policy packs', dpa: 'DPA & sub-processors', contacts: 'Notification contacts',
+    byok: 'BYOK / in-region encryption', residency: 'Data residency policy',
+    license: 'Offline license', escort: 'Escorted-access rule',
+  }[key] ?? key
 }
 
 /* ------------------------------------------------------------------ */

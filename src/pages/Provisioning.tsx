@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Cloud, Server, ShieldOff, Plus, RotateCcw, Eye, Clock, CircleCheck, CircleAlert, Boxes, Layers, Check, X, ArrowRight, ArrowLeft, ArrowUpRight, ClipboardCheck } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
-import { provisions as seedProvisions, provisionSteps, provisionStep, onboardingChecklist, opsTotals } from '@/data/ops'
+import { provisionSteps, provisionStep, onboardingChecklist, opsTotals } from '@/data/ops'
 import type { Provision, ProvTemplate, OnboardingState, ChecklistItem } from '@/data/ops'
 import { regionByCode, regions } from '@/data/fleet'
 import { useSession } from '@/context/Session'
+import { useProvisioning } from '@/context/Provisioning'
 import { GatedButton } from '@/components/GatedButton'
 
 const templateTone: Record<ProvTemplate, 'blue' | 'purple' | 'red'> = {
@@ -35,17 +36,29 @@ let provSeq = 0
 
 export default function Provisioning() {
   const { logAction } = useSession()
-  const [rows, setRows] = useState<Provision[]>(seedProvisions)
-  const [sel, setSel] = useState<Provision | null>(null)
+  const { list: rows, add, update } = useProvisioning()
+  const [params, setParams] = useSearchParams()
+  const [selId, setSelId] = useState<string | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
 
-  const retry = (id: string) =>
-    setRows((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'Provisioning', progress: 40 } : p)))
+  // Reopen a specific record when returning from a gate's page (?open=<id>).
+  useEffect(() => {
+    const openId = params.get('open')
+    if (openId) {
+      setSelId(openId)
+      params.delete('open')
+      setParams(params, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const retry = (id: string) => update(id, { status: 'Provisioning', progress: 40 })
 
   const createProvision = (draft: { customer: string; template: ProvTemplate; regionCode: string; onboarding: OnboardingState }) => {
     provSeq += 1
-    const p: Provision = {
-      id: `prov_new_${provSeq}`,
+    const id = `prov_new_${rows.length}_${provSeq}`
+    add({
+      id,
       customer: draft.customer,
       template: draft.template,
       regionCode: draft.regionCode,
@@ -54,14 +67,13 @@ export default function Provisioning() {
       requested: 'just now',
       owner: 'jack@plcy.app',
       onboarding: draft.onboarding,
-    }
-    setRows((prev) => [p, ...prev])
+    })
     logAction({ action: 'provision.request', target: `${draft.customer} · ${draft.template} · ${draft.regionCode}`, category: 'provisioning' })
     setWizardOpen(false)
-    setSel(p)
+    setSelId(id)
   }
 
-  const current = sel ? rows.find((p) => p.id === sel.id) ?? sel : null
+  const current = selId ? rows.find((p) => p.id === selId) ?? null : null
 
   return (
     <>
@@ -128,7 +140,7 @@ export default function Provisioning() {
                 )}
               </Td>
               <Td>
-                <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label={`View ${p.customer}`} onClick={() => setSel(p)}>
+                <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" aria-label={`View ${p.customer}`} onClick={() => setSelId(p.id)}>
                   <Eye className="h-4 w-4" />
                 </button>
               </Td>
@@ -141,13 +153,13 @@ export default function Provisioning() {
       {current && (
         <Modal
           open
-          onClose={() => setSel(null)}
+          onClose={() => setSelId(null)}
           title={current.customer}
           subtitle={`${regionByCode(current.regionCode)?.name} · ${current.regionCode}`}
           headerRight={<Badge tone={templateTone[current.template]}>{current.template}</Badge>}
           footer={
             <>
-              <button className="btn-secondary" onClick={() => setSel(null)}>Close</button>
+              <button className="btn-secondary" onClick={() => setSelId(null)}>Close</button>
               {current.status === 'Failed' && (
                 <button className="btn-primary" onClick={() => retry(current.id)}>
                   <RotateCcw className="h-4 w-4" />Retry
@@ -157,7 +169,7 @@ export default function Provisioning() {
           }
         >
           <div className="space-y-5">
-            <OnboardingReadiness items={onboardingChecklist(current)} linkable />
+            <OnboardingReadiness items={onboardingChecklist(current)} linkable provisionId={current.id} />
 
             <section>
               <h4 className="mb-3 text-sm font-semibold text-ink-900">{current.template === 'Air-gapped' ? 'Air-gapped delivery pipeline' : 'IaC pipeline'}</h4>
@@ -222,7 +234,7 @@ export default function Provisioning() {
 /* ------------------------------------------------------------------ */
 /* Onboarding readiness checklist                                       */
 /* ------------------------------------------------------------------ */
-function OnboardingReadiness({ items, linkable = false }: { items: ChecklistItem[]; linkable?: boolean }) {
+function OnboardingReadiness({ items, linkable = false, provisionId }: { items: ChecklistItem[]; linkable?: boolean; provisionId?: string }) {
   const done = items.filter((i) => i.done).length
   const criticalPending = items.filter((i) => i.critical && !i.done)
   const ready = criticalPending.length === 0 && done === items.length
@@ -234,10 +246,11 @@ function OnboardingReadiness({ items, linkable = false }: { items: ChecklistItem
           {ready ? 'Ready to hand over' : criticalPending.length ? `${criticalPending.length} blocker${criticalPending.length === 1 ? '' : 's'}` : `${done}/${items.length} done`}
         </Badge>
       </div>
-      {linkable && !ready && <p className="mb-2 text-xs text-ink-400">Pending gates link to the page that completes them.</p>}
+      {linkable && !ready && <p className="mb-2 text-xs text-ink-400">Pending gates link to the page that completes them — finish there and mark it done to check it off here.</p>}
       <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
         {items.map((i) => {
           const showLink = linkable && !i.done && i.to
+          const href = provisionId ? `${i.to}?onboard=${provisionId}&gate=${i.key}` : i.to
           return (
             <li key={i.key} className="flex items-center gap-2 text-sm">
               {i.done ? (
@@ -247,7 +260,7 @@ function OnboardingReadiness({ items, linkable = false }: { items: ChecklistItem
               )}
               <span className={i.done ? 'text-ink-700' : i.critical ? 'font-medium text-rose-700' : 'text-ink-500'}>{i.label}</span>
               {showLink ? (
-                <Link to={i.to!} className="ml-auto inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-medium text-brand-600 hover:text-brand-700">
+                <Link to={href!} className="ml-auto inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-medium text-brand-600 hover:text-brand-700">
                   {i.cta ?? 'Set up'}<ArrowUpRight className="h-3 w-3" />
                 </Link>
               ) : (
