@@ -201,41 +201,44 @@ export const packs: PolicyPack[] = [
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
-export const packById = (id: string) => packs.find((p) => p.id === id)
+export const packById = (id: string, allPacks: PolicyPack[] = packs) => allPacks.find((p) => p.id === id)
 
 /** Controls a pack enforces — its own (primitive) or its primitives' (composite, resolved recursively). */
-export function controlsForPack(pack: PolicyPack, seen = new Set<string>()): Control[] {
+export function controlsForPack(pack: PolicyPack, allPacks: PolicyPack[] = packs, allControls: Control[] = controls, seen = new Set<string>()): Control[] {
   if (seen.has(pack.id)) return []
   seen.add(pack.id)
-  if (pack.type === 'primitive') return controls.filter((ct) => ct.packId === pack.id)
+  if (pack.type === 'primitive') return allControls.filter((ct) => ct.packId === pack.id)
   const out: Control[] = []
   for (const depId of pack.dependencies) {
-    const dep = packById(depId)
-    if (dep) out.push(...controlsForPack(dep, seen))
+    const dep = packById(depId, allPacks)
+    if (dep) out.push(...controlsForPack(dep, allPacks, allControls, seen))
   }
   // de-dupe by control id
   return Array.from(new Map(out.map((ct) => [ct.id, ct])).values())
 }
 
-export const controlCount = (pack: PolicyPack) => controlsForPack(pack).length
+export const controlCount = (pack: PolicyPack, allPacks: PolicyPack[] = packs, allControls: Control[] = controls) => controlsForPack(pack, allPacks, allControls).length
 
 /** Primitive packs a composite resolves to (flattened, unique). */
-export function resolvedPrimitives(pack: PolicyPack, seen = new Set<string>()): PolicyPack[] {
+export function resolvedPrimitives(pack: PolicyPack, allPacks: PolicyPack[] = packs, seen = new Set<string>()): PolicyPack[] {
   if (pack.type === 'primitive') return [pack]
   const out: PolicyPack[] = []
   for (const depId of pack.dependencies) {
     if (seen.has(depId)) continue
     seen.add(depId)
-    const dep = packById(depId)
-    if (dep) out.push(...resolvedPrimitives(dep, seen))
+    const dep = packById(depId, allPacks)
+    if (dep) out.push(...resolvedPrimitives(dep, allPacks, seen))
   }
   return Array.from(new Map(out.map((p) => [p.id, p])).values())
 }
 
-export const policyTotals = {
-  packs: packs.length,
-  primitives: packs.filter((p) => p.type === 'primitive').length,
-  frameworks: packs.filter((p) => p.kind === 'framework').length,
-  industries: packs.filter((p) => p.kind === 'industry').length,
-  controls: controls.length,
+export function computePolicyTotals(allPacks: PolicyPack[], allControls: Control[]) {
+  return {
+    packs: allPacks.length,
+    primitives: allPacks.filter((p) => p.type === 'primitive').length,
+    frameworks: allPacks.filter((p) => p.kind === 'framework').length,
+    industries: allPacks.filter((p) => p.kind === 'industry').length,
+    controls: allControls.length,
+  }
 }
+export const policyTotals = computePolicyTotals(packs, controls)

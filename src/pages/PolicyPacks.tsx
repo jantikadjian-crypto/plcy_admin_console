@@ -2,19 +2,22 @@ import { useMemo, useState } from 'react'
 import { clsx } from 'clsx'
 import {
   Package, Boxes, Puzzle, SlidersHorizontal, Search, ShieldCheck, Scale, Lock, Users, Coins, Globe,
-  ArrowUpRight, FileCode2, Layers,
+  ArrowUpRight, FileCode2, Layers, Plus, Pencil, Trash2, Check,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, StatCard, Badge, PageHeader, Modal } from '@/components/ui'
 import type { Tone } from '@/components/ui'
+import { GatedButton } from '@/components/GatedButton'
+import { useSession } from '@/context/Session'
+import { usePolicy } from '@/context/Policy'
 import {
-  packs, controls, controlsForPack, controlCount, resolvedPrimitives, packById,
-  CONTROL_FAMILIES, familyOf, policyTotals,
+  controlsForPack, controlCount, resolvedPrimitives, packById,
+  CONTROL_FAMILIES, familyOf, computePolicyTotals,
 } from '@/data/policy'
-import type { PolicyPack, Control, PackCategory, Decision } from '@/data/policy'
+import type { PolicyPack, Control, PackCategory, PackType, CompositeKind, Decision, DetectorType, ControlMode, Lifecycle } from '@/data/policy'
 
 /* ------------------------------------------------------------------ */
-/* Tones                                                               */
+/* Tones & option lists                                                */
 /* ------------------------------------------------------------------ */
 const categoryStyle: Record<PackCategory, { icon: LucideIcon; tone: Tone }> = {
   Sovereignty: { icon: Globe, tone: 'blue' },
@@ -28,49 +31,110 @@ const categoryStyle: Record<PackCategory, { icon: LucideIcon; tone: Tone }> = {
 const decisionTone: Record<Decision, 'green' | 'red' | 'orange' | 'blue' | 'purple' | 'slate' | 'yellow'> = {
   Allow: 'green', Deny: 'red', Transform: 'orange', Route: 'blue', Review: 'purple', Log: 'slate', Throttle: 'yellow', Emit: 'red',
 }
+const CATEGORIES: PackCategory[] = ['Sovereignty', 'Privacy', 'Security', 'Safety', 'Governance', 'Cost', 'Compliance']
+const DECISIONS: Decision[] = ['Allow', 'Deny', 'Transform', 'Route', 'Review', 'Log', 'Throttle', 'Emit']
+const DETECTORS: DetectorType[] = ['Metadata', 'Classifier', 'Regex', 'LLM', 'Heuristic', 'Policy', 'OTel', 'Event', 'Registry', 'Rate limiter', 'Anomaly', 'Orchestrator']
+const MODES: ControlMode[] = ['enforce', 'monitor']
+const LIFECYCLES: Lifecycle[] = ['live', 'proposed', 'deprecated']
 
 type Tab = 'packs' | 'controls'
 type PackFilter = 'all' | 'primitive' | 'framework' | 'industry'
 
+function suggestPackId(type: PackType, kind: CompositeKind, packs: PolicyPack[]): string {
+  const prefix = type === 'primitive' ? 'P' : kind === 'framework' ? 'F' : 'I'
+  const nums = packs.filter((p) => p.id.startsWith(prefix)).map((p) => parseInt(p.id.slice(prefix.length), 10)).filter((n) => !isNaN(n))
+  return `${prefix}${(nums.length ? Math.max(...nums) : 0) + 1}`
+}
+
 export default function PolicyPacks() {
+  const { logAction } = useSession()
+  const { packs, controls, addPack, updatePack, deletePack, addControl, updateControl, deleteControl } = usePolicy()
   const [tab, setTab] = useState<Tab>('packs')
   const [selPack, setSelPack] = useState<PolicyPack | null>(null)
   const [selControl, setSelControl] = useState<Control | null>(null)
+  const [packForm, setPackForm] = useState<{ mode: 'create' | 'edit'; pack?: PolicyPack } | null>(null)
+  const [controlForm, setControlForm] = useState<{ mode: 'create' | 'edit'; control?: Control } | null>(null)
+
+  const totals = computePolicyTotals(packs, controls)
+  const current = selPack ? packs.find((p) => p.id === selPack.id) ?? null : null
+  const currentControl = selControl ? controls.find((c) => c.id === selControl.id) ?? null : null
+
+  const savePack = (p: PolicyPack, mode: 'create' | 'edit') => {
+    if (mode === 'edit') updatePack(p.id, p)
+    else addPack(p)
+    logAction({ action: mode === 'edit' ? 'policy.pack.update' : 'policy.pack.create', target: `${p.id} · ${p.name}`, category: 'policy' })
+    setPackForm(null)
+    setSelPack(p)
+  }
+  const removePack = (p: PolicyPack) => {
+    deletePack(p.id)
+    logAction({ action: 'policy.pack.delete', target: `${p.id} · ${p.name}`, category: 'policy' })
+    setSelPack(null)
+  }
+  const saveControl = (c: Control, mode: 'create' | 'edit') => {
+    if (mode === 'edit') updateControl(c.id, c)
+    else addControl(c)
+    logAction({ action: mode === 'edit' ? 'policy.control.update' : 'policy.control.create', target: `${c.id} · ${c.name}`, category: 'policy' })
+    setControlForm(null)
+    setSelControl(c)
+  }
+  const removeControl = (c: Control) => {
+    deleteControl(c.id)
+    logAction({ action: 'policy.control.delete', target: `${c.id} · ${c.name}`, category: 'policy' })
+    setSelControl(null)
+  }
 
   return (
     <>
       <PageHeader
         title="Policy Packs"
         description="The governance guardrails PLCY enforces at runtime. Primitive packs are single-purpose controls (residency routing, consent gates, tool firewalls…); composite packs bundle those primitives to satisfy a framework (GDPR, SOC 2, PCI DSS…) or an industry. The Controls tab lists the atomic rules inside them."
+        actions={
+          tab === 'packs' ? (
+            <GatedButton cap="policy.manage" className="btn-primary" onClick={() => setPackForm({ mode: 'create' })}><Plus className="h-4 w-4" />New pack</GatedButton>
+          ) : (
+            <GatedButton cap="policy.manage" className="btn-primary" onClick={() => setControlForm({ mode: 'create' })}><Plus className="h-4 w-4" />New control</GatedButton>
+          )
+        }
       />
 
-      {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Policy packs" value={policyTotals.packs} icon={Package} tone="blue" footer={`${policyTotals.primitives} primitive · ${policyTotals.frameworks + policyTotals.industries} composite`} />
-        <StatCard label="Framework packs" value={policyTotals.frameworks} icon={Scale} tone="green" footer="GDPR, SOC 2, PCI DSS…" />
-        <StatCard label="Industry packs" value={policyTotals.industries} icon={Puzzle} tone="purple" footer="Retail, Gov, HR…" />
-        <StatCard label="Controls" value={policyTotals.controls} icon={SlidersHorizontal} tone="orange" footer="Atomic runtime rules" />
+        <StatCard label="Policy packs" value={totals.packs} icon={Package} tone="blue" footer={`${totals.primitives} primitive · ${totals.frameworks + totals.industries} composite`} />
+        <StatCard label="Framework packs" value={totals.frameworks} icon={Scale} tone="green" footer="GDPR, SOC 2, PCI DSS…" />
+        <StatCard label="Industry packs" value={totals.industries} icon={Puzzle} tone="purple" footer="Retail, Gov, HR…" />
+        <StatCard label="Controls" value={totals.controls} icon={SlidersHorizontal} tone="orange" footer="Atomic runtime rules" />
       </div>
 
-      {/* Section tabs */}
       <div className="mt-6 flex gap-1 border-b border-slate-200">
         {([['packs', 'Packs', Boxes], ['controls', 'Controls', SlidersHorizontal]] as const).map(([key, label, Icon]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={clsx('-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors', tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-800')}
-          >
+          <button key={key} onClick={() => setTab(key)} className={clsx('-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors', tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-800')}>
             <Icon className="h-4 w-4" />{label}
           </button>
         ))}
       </div>
 
       <div className="mt-6">
-        {tab === 'packs' ? <PacksSection onOpen={setSelPack} /> : <ControlsSection onOpen={setSelControl} />}
+        {tab === 'packs'
+          ? <PacksSection packs={packs} controls={controls} onOpen={setSelPack} />
+          : <ControlsSection controls={controls} onOpen={setSelControl} />}
       </div>
 
-      {selPack && <PackDrawer pack={selPack} onClose={() => setSelPack(null)} onOpenPack={setSelPack} onOpenControl={setSelControl} />}
-      {selControl && <ControlDrawer control={selControl} onClose={() => setSelControl(null)} onOpenPack={(p) => { setSelControl(null); setSelPack(p) }} />}
+      {current && (
+        <PackDrawer
+          pack={current} packs={packs} controls={controls}
+          onClose={() => setSelPack(null)} onOpenPack={setSelPack} onOpenControl={setSelControl}
+          onEdit={() => setPackForm({ mode: 'edit', pack: current })} onDelete={() => removePack(current)}
+        />
+      )}
+      {currentControl && (
+        <ControlDrawer
+          control={currentControl} packs={packs}
+          onClose={() => setSelControl(null)} onOpenPack={(p) => { setSelControl(null); setSelPack(p) }}
+          onEdit={() => setControlForm({ mode: 'edit', control: currentControl })} onDelete={() => removeControl(currentControl)}
+        />
+      )}
+      {packForm && <PackForm mode={packForm.mode} initial={packForm.pack} packs={packs} onClose={() => setPackForm(null)} onSave={savePack} />}
+      {controlForm && <ControlForm mode={controlForm.mode} initial={controlForm.control} packs={packs} onClose={() => setControlForm(null)} onSave={saveControl} />}
     </>
   )
 }
@@ -78,10 +142,9 @@ export default function PolicyPacks() {
 /* ------------------------------------------------------------------ */
 /* Packs section                                                       */
 /* ------------------------------------------------------------------ */
-function PacksSection({ onOpen }: { onOpen: (p: PolicyPack) => void }) {
+function PacksSection({ packs, controls, onOpen }: { packs: PolicyPack[]; controls: Control[]; onOpen: (p: PolicyPack) => void }) {
   const [filter, setFilter] = useState<PackFilter>('all')
   const [q, setQ] = useState('')
-
   const query = q.trim().toLowerCase()
   const match = (p: PolicyPack) =>
     (!query || [p.name, p.category, ...p.frameworks, ...p.industries].some((f) => f.toLowerCase().includes(query))) &&
@@ -90,7 +153,6 @@ function PacksSection({ onOpen }: { onOpen: (p: PolicyPack) => void }) {
   const primitives = packs.filter((p) => p.type === 'primitive' && match(p))
   const frameworks = packs.filter((p) => p.kind === 'framework' && match(p))
   const industries = packs.filter((p) => p.kind === 'industry' && match(p))
-
   const FILTERS: { key: PackFilter; label: string }[] = [
     { key: 'all', label: 'All packs' }, { key: 'primitive', label: 'Primitive' }, { key: 'framework', label: 'Framework' }, { key: 'industry', label: 'Industry' },
   ]
@@ -108,10 +170,9 @@ function PacksSection({ onOpen }: { onOpen: (p: PolicyPack) => void }) {
           ))}
         </div>
       </div>
-
-      {primitives.length > 0 && <PackGroup title="Primitive packs" subtitle="Single-purpose, composable runtime guardrails" packs={primitives} onOpen={onOpen} />}
-      {frameworks.length > 0 && <PackGroup title="Framework packs" subtitle="Bundle primitives to satisfy a standard" packs={frameworks} onOpen={onOpen} />}
-      {industries.length > 0 && <PackGroup title="Industry packs" subtitle="Vertical-specific governance bundles" packs={industries} onOpen={onOpen} />}
+      {primitives.length > 0 && <PackGroup title="Primitive packs" subtitle="Single-purpose, composable runtime guardrails" list={primitives} packs={packs} controls={controls} onOpen={onOpen} />}
+      {frameworks.length > 0 && <PackGroup title="Framework packs" subtitle="Bundle primitives to satisfy a standard" list={frameworks} packs={packs} controls={controls} onOpen={onOpen} />}
+      {industries.length > 0 && <PackGroup title="Industry packs" subtitle="Vertical-specific governance bundles" list={industries} packs={packs} controls={controls} onOpen={onOpen} />}
       {primitives.length + frameworks.length + industries.length === 0 && (
         <Card><p className="py-10 text-center text-sm text-ink-400">No packs match your filter.</p></Card>
       )}
@@ -119,7 +180,7 @@ function PacksSection({ onOpen }: { onOpen: (p: PolicyPack) => void }) {
   )
 }
 
-function PackGroup({ title, subtitle, packs: list, onOpen }: { title: string; subtitle: string; packs: PolicyPack[]; onOpen: (p: PolicyPack) => void }) {
+function PackGroup({ title, subtitle, list, packs, controls, onOpen }: { title: string; subtitle: string; list: PolicyPack[]; packs: PolicyPack[]; controls: Control[]; onOpen: (p: PolicyPack) => void }) {
   return (
     <div className="mb-6">
       <div className="mb-3">
@@ -127,13 +188,13 @@ function PackGroup({ title, subtitle, packs: list, onOpen }: { title: string; su
         <p className="text-xs text-ink-500">{subtitle}</p>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {list.map((p) => <PackCard key={p.id} pack={p} onOpen={onOpen} />)}
+        {list.map((p) => <PackCard key={p.id} pack={p} packs={packs} controls={controls} onOpen={onOpen} />)}
       </div>
     </div>
   )
 }
 
-function PackCard({ pack, onOpen }: { pack: PolicyPack; onOpen: (p: PolicyPack) => void }) {
+function PackCard({ pack, packs, controls, onOpen }: { pack: PolicyPack; packs: PolicyPack[]; controls: Control[]; onOpen: (p: PolicyPack) => void }) {
   const cs = categoryStyle[pack.category]
   const Icon = cs.icon
   const tags = pack.type === 'primitive' ? [] : pack.kind === 'framework' ? pack.frameworks : pack.industries
@@ -144,7 +205,7 @@ function PackCard({ pack, onOpen }: { pack: PolicyPack; onOpen: (p: PolicyPack) 
           <Badge tone="slate">{pack.id}</Badge>
           <Badge tone={cs.tone} dot>{pack.category}</Badge>
         </div>
-        <span className="font-mono text-[11px] text-ink-400">{controlCount(pack)} controls</span>
+        <span className="font-mono text-[11px] text-ink-400">{controlCount(pack, packs, controls)} controls</span>
       </div>
       <div className="mt-2 flex items-start gap-2.5">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-ink-600"><Icon className="h-4 w-4" /></div>
@@ -166,10 +227,9 @@ function PackCard({ pack, onOpen }: { pack: PolicyPack; onOpen: (p: PolicyPack) 
 /* ------------------------------------------------------------------ */
 /* Controls section                                                    */
 /* ------------------------------------------------------------------ */
-function ControlsSection({ onOpen }: { onOpen: (c: Control) => void }) {
+function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c: Control) => void }) {
   const [q, setQ] = useState('')
   const [family, setFamily] = useState('All')
-
   const query = q.trim().toLowerCase()
   const families = useMemo(() => ['All', ...CONTROL_FAMILIES.map((f) => f.prefix)], [])
   const filtered = controls.filter((ct) =>
@@ -192,27 +252,19 @@ function ControlsSection({ onOpen }: { onOpen: (c: Control) => void }) {
           </button>
         ))}
       </div>
-
       <Card>
         <CardTitle title="Controls" subtitle={`${filtered.length} of ${controls.length} atomic runtime controls · click for detection, decision & evidence`} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
-                <th className="py-2 pr-3">Control</th>
-                <th className="py-2 pr-3">Family</th>
-                <th className="py-2 pr-3">Detector</th>
-                <th className="py-2 pr-3">Decision</th>
-                <th className="py-2 pr-3">Mode</th>
+                <th className="py-2 pr-3">Control</th><th className="py-2 pr-3">Family</th><th className="py-2 pr-3">Detector</th><th className="py-2 pr-3">Decision</th><th className="py-2 pr-3">Mode</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((ct) => (
                 <tr key={ct.id} className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50" onClick={() => onOpen(ct)}>
-                  <td className="py-2.5 pr-3">
-                    <span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span>
-                    <p className="text-xs text-ink-600">{ct.name}</p>
-                  </td>
+                  <td className="py-2.5 pr-3"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span><p className="text-xs text-ink-600">{ct.name}</p></td>
                   <td className="py-2.5 pr-3"><span className="text-xs text-ink-500">{familyOf(ct.prefix)}</span></td>
                   <td className="py-2.5 pr-3"><Badge tone="slate">{ct.detector}</Badge></td>
                   <td className="py-2.5 pr-3"><Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge></td>
@@ -230,26 +282,35 @@ function ControlsSection({ onOpen }: { onOpen: (c: Control) => void }) {
 /* ------------------------------------------------------------------ */
 /* Pack drawer                                                         */
 /* ------------------------------------------------------------------ */
-function PackDrawer({ pack, onClose, onOpenPack, onOpenControl }: {
-  pack: PolicyPack
-  onClose: () => void
-  onOpenPack: (p: PolicyPack) => void
-  onOpenControl: (c: Control) => void
+function PackDrawer({ pack, packs, controls, onClose, onOpenPack, onOpenControl, onEdit, onDelete }: {
+  pack: PolicyPack; packs: PolicyPack[]; controls: Control[]
+  onClose: () => void; onOpenPack: (p: PolicyPack) => void; onOpenControl: (c: Control) => void
+  onEdit: () => void; onDelete: () => void
 }) {
+  const { can } = useSession()
+  const canManage = can('policy.manage')
   const cs = categoryStyle[pack.category]
-  const packControls = controlsForPack(pack)
-  const primitives = pack.type === 'composite' ? resolvedPrimitives(pack) : []
+  const packControls = controlsForPack(pack, packs, controls)
+  const primitives = pack.type === 'composite' ? resolvedPrimitives(pack, packs) : []
   const tags = [...pack.frameworks, ...pack.industries]
 
   return (
     <Modal
-      open
-      onClose={onClose}
+      open onClose={onClose}
       title={<span className="flex items-center gap-2"><span className="font-mono text-base text-ink-500">{pack.id}</span>{pack.name}</span>}
-      subtitle={pack.description}
-      maxWidth="max-w-3xl"
+      subtitle={pack.description} maxWidth="max-w-3xl"
       headerRight={<Badge tone={cs.tone} dot>{pack.category}</Badge>}
-      footer={<button className="btn-secondary" onClick={onClose}>Close</button>}
+      footer={
+        <div className="flex w-full items-center justify-between">
+          <button className="btn-ghost" onClick={onClose}>Close</button>
+          {canManage && (
+            <div className="flex items-center gap-2">
+              <button className="btn-secondary text-rose-600" onClick={onDelete}><Trash2 className="h-4 w-4" />Delete</button>
+              <button className="btn-primary" onClick={onEdit}><Pencil className="h-4 w-4" />Edit pack</button>
+            </div>
+          )}
+        </div>
+      }
     >
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -258,14 +319,12 @@ function PackDrawer({ pack, onClose, onOpenPack, onOpenControl }: {
           <KV label="Controls" value={String(packControls.length)} />
           <KV label="Status" value={`${pack.status} · v${pack.version}`} />
         </div>
-
         {tags.length > 0 && (
           <div>
             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">{pack.kind === 'industry' ? 'Industries & frameworks' : 'Frameworks'}</p>
             <div className="flex flex-wrap gap-1.5">{tags.map((t) => <Badge key={t} tone="blue">{t}</Badge>)}</div>
           </div>
         )}
-
         {primitives.length > 0 && (
           <section>
             <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-900"><Layers className="h-4 w-4 text-ink-400" />Composes {primitives.length} primitive pack{primitives.length === 1 ? '' : 's'}</p>
@@ -279,17 +338,20 @@ function PackDrawer({ pack, onClose, onOpenPack, onOpenControl }: {
             </div>
           </section>
         )}
-
         <section>
           <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-900"><SlidersHorizontal className="h-4 w-4 text-ink-400" />{packControls.length} control{packControls.length === 1 ? '' : 's'}</p>
-          <div className="overflow-hidden rounded-xl border border-slate-200">
-            {packControls.map((ct) => (
-              <button key={ct.id} onClick={() => onOpenControl(ct)} className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-slate-50">
-                <span className="min-w-0"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span> <span className="text-sm text-ink-700">{ct.name}</span></span>
-                <Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge>
-              </button>
-            ))}
-          </div>
+          {packControls.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-300 px-4 py-4 text-center text-sm text-ink-400">No controls yet{pack.type === 'primitive' ? ' — add one from the Controls tab.' : '.'}</p>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              {packControls.map((ct) => (
+                <button key={ct.id} onClick={() => onOpenControl(ct)} className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-0 hover:bg-slate-50">
+                  <span className="min-w-0"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span> <span className="text-sm text-ink-700">{ct.name}</span></span>
+                  <Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </Modal>
@@ -299,8 +361,12 @@ function PackDrawer({ pack, onClose, onOpenPack, onOpenControl }: {
 /* ------------------------------------------------------------------ */
 /* Control drawer                                                      */
 /* ------------------------------------------------------------------ */
-function ControlDrawer({ control: ct, onClose, onOpenPack }: { control: Control; onClose: () => void; onOpenPack: (p: PolicyPack) => void }) {
-  const pack = packById(ct.packId)
+function ControlDrawer({ control: ct, packs, onClose, onOpenPack, onEdit, onDelete }: {
+  control: Control; packs: PolicyPack[]; onClose: () => void; onOpenPack: (p: PolicyPack) => void; onEdit: () => void; onDelete: () => void
+}) {
+  const { can } = useSession()
+  const canManage = can('policy.manage')
+  const pack = packById(ct.packId, packs)
   const rego = `package plcy.${ct.prefix.toLowerCase()}
 
 # ${ct.id} — ${ct.name}
@@ -310,13 +376,20 @@ decision := "${ct.decision.toLowerCase()}" {
 }`
   return (
     <Modal
-      open
-      onClose={onClose}
-      title={<span className="font-mono text-base">{ct.id}</span>}
-      subtitle={ct.name}
-      maxWidth="max-w-2xl"
+      open onClose={onClose}
+      title={<span className="font-mono text-base">{ct.id}</span>} subtitle={ct.name} maxWidth="max-w-2xl"
       headerRight={<Badge tone={decisionTone[ct.decision]}>{ct.decision}</Badge>}
-      footer={<button className="btn-secondary" onClick={onClose}>Close</button>}
+      footer={
+        <div className="flex w-full items-center justify-between">
+          <button className="btn-ghost" onClick={onClose}>Close</button>
+          {canManage && (
+            <div className="flex items-center gap-2">
+              <button className="btn-secondary text-rose-600" onClick={onDelete}><Trash2 className="h-4 w-4" />Delete</button>
+              <button className="btn-primary" onClick={onEdit}><Pencil className="h-4 w-4" />Edit control</button>
+            </div>
+          )}
+        </div>
+      }
     >
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -325,24 +398,20 @@ decision := "${ct.decision.toLowerCase()}" {
           <KV label="Decision" value={ct.decision} />
           <KV label="Default mode" value={ct.mode} />
         </div>
-
         <div className="rounded-xl border border-slate-200 p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">Enforcement obligation</p>
           <p className="mt-1 text-sm text-ink-800">{ct.obligation}</p>
         </div>
-
         {pack && (
           <button onClick={() => onOpenPack(pack)} className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200 p-3 text-left transition-colors hover:border-brand-300 hover:bg-brand-50/30">
             <span className="text-sm text-ink-700"><span className="text-ink-400">From pack </span><span className="font-mono text-xs">{pack.id}</span> · {pack.name}</span>
             <ArrowUpRight className="h-4 w-4 shrink-0 text-ink-300" />
           </button>
         )}
-
         <div>
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">Evidence fields (OTel)</p>
           <div className="flex flex-wrap gap-1.5">{ct.evidence.map((e) => <span key={e} className="rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs text-ink-700">{e}</span>)}</div>
         </div>
-
         <div>
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400"><FileCode2 className="h-3.5 w-3.5" />OPA / Rego</p>
           <pre className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-900 p-3 font-mono text-[12px] leading-relaxed text-slate-100">{rego}</pre>
@@ -352,11 +421,180 @@ decision := "${ct.decision.toLowerCase()}" {
   )
 }
 
-function KV({ label, value }: { label: string; value: string }) {
+/* ------------------------------------------------------------------ */
+/* Pack form                                                           */
+/* ------------------------------------------------------------------ */
+function PackForm({ mode, initial, packs, onClose, onSave }: {
+  mode: 'create' | 'edit'; initial?: PolicyPack; packs: PolicyPack[]; onClose: () => void; onSave: (p: PolicyPack, mode: 'create' | 'edit') => void
+}) {
+  const [type, setType] = useState<PackType>(initial?.type ?? 'primitive')
+  const [kind, setKind] = useState<CompositeKind>(initial?.kind ?? 'framework')
+  const [id, setId] = useState(initial?.id ?? suggestPackId('primitive', 'framework', packs))
+  const [name, setName] = useState(initial?.name ?? '')
+  const [category, setCategory] = useState<PackCategory>(initial?.category ?? 'Privacy')
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [region, setRegion] = useState(initial?.region ?? 'Global')
+  const [frameworks, setFrameworks] = useState((initial?.frameworks ?? []).join(', '))
+  const [industries, setIndustries] = useState((initial?.industries ?? []).join(', '))
+  const [deps, setDeps] = useState<string[]>(initial?.dependencies ?? [])
+  const [status, setStatus] = useState<Lifecycle>(initial?.status ?? 'live')
+  const [version, setVersion] = useState(initial?.version ?? '1.0')
+
+  const isComposite = type === 'composite'
+  const pickType = (t: PackType) => { setType(t); if (mode === 'create') setId(suggestPackId(t, kind, packs)) }
+  const pickKind = (k: CompositeKind) => { setKind(k); if (mode === 'create') setId(suggestPackId('composite', k, packs)) }
+
+  const idClash = mode === 'create' && packs.some((p) => p.id === id.trim())
+  const valid = id.trim() && name.trim() && !idClash
+  const list = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
+
+  const submit = () => {
+    if (!valid) return
+    onSave({
+      id: id.trim(), name: name.trim(), type,
+      kind: isComposite ? kind : undefined,
+      category, description: description.trim(), region: region.trim() || 'Global',
+      frameworks: isComposite ? list(frameworks) : [],
+      industries: isComposite && kind === 'industry' ? list(industries) : [],
+      dependencies: isComposite ? deps : [],
+      status, version: version.trim() || '1.0',
+    }, mode)
+  }
+
+  const primitivePacks = packs.filter((p) => p.type === 'primitive')
+  const compositePacks = packs.filter((p) => p.type === 'composite' && p.id !== id)
+  const depOptions = [...primitivePacks, ...compositePacks]
+
   return (
-    <div className="rounded-xl border border-slate-200 p-3">
-      <p className="text-xs font-medium text-ink-500">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold capitalize text-ink-900">{value}</p>
-    </div>
+    <Modal
+      open onClose={onClose} title={mode === 'edit' ? `Edit ${initial?.id}` : 'New policy pack'}
+      subtitle={isComposite ? 'A composite bundles primitives to satisfy a framework or industry' : 'A single-purpose, composable runtime guardrail'}
+      maxWidth="max-w-2xl"
+      footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary disabled:opacity-50" onClick={submit} disabled={!valid}><Check className="h-4 w-4" />{mode === 'edit' ? 'Save changes' : 'Create pack'}</button></>}
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Type">
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              {(['primitive', 'composite'] as PackType[]).map((t) => (
+                <button key={t} onClick={() => pickType(t)} className={clsx('flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize', type === t ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500')}>{t}</button>
+              ))}
+            </div>
+          </Field>
+          {isComposite ? (
+            <Field label="Kind">
+              <div className="flex rounded-lg bg-slate-100 p-0.5">
+                {(['framework', 'industry'] as CompositeKind[]).map((k) => (
+                  <button key={k} onClick={() => pickKind(k)} className={clsx('flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize', kind === k ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500')}>{k}</button>
+                ))}
+              </div>
+            </Field>
+          ) : <div />}
+          <Field label="ID">
+            <input className="input font-mono" value={id} onChange={(e) => setId(e.target.value)} disabled={mode === 'edit'} />
+            {idClash && <p className="mt-1 text-xs text-rose-600">ID already exists.</p>}
+          </Field>
+          <Field label="Category">
+            <select className="input" value={category} onChange={(e) => setCategory(e.target.value as PackCategory)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+          </Field>
+        </div>
+        <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Output Validation & Grounding" autoFocus /></Field>
+        <Field label="Description"><textarea className="input min-h-[70px]" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Region"><input className="input" value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
+          <Field label="Status"><select className="input" value={status} onChange={(e) => setStatus(e.target.value as Lifecycle)}>{LIFECYCLES.map((l) => <option key={l}>{l}</option>)}</select></Field>
+          <Field label="Version"><input className="input" value={version} onChange={(e) => setVersion(e.target.value)} /></Field>
+        </div>
+        {isComposite && (
+          <>
+            <Field label="Frameworks (comma-separated)"><input className="input" value={frameworks} onChange={(e) => setFrameworks(e.target.value)} placeholder="GDPR, SOC 2" /></Field>
+            {kind === 'industry' && <Field label="Industries (comma-separated)"><input className="input" value={industries} onChange={(e) => setIndustries(e.target.value)} placeholder="Retail, E-commerce" /></Field>}
+            <Field label="Composes (dependencies)">
+              <div className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 p-2">
+                {depOptions.map((p) => {
+                  const on = deps.includes(p.id)
+                  return (
+                    <button key={p.id} onClick={() => setDeps((prev) => on ? prev.filter((d) => d !== p.id) : [...prev, p.id])}
+                      className={clsx('rounded-lg border px-2 py-1 text-xs transition-colors', on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-slate-200 text-ink-500 hover:border-slate-300')}>
+                      <span className="font-mono">{p.id}</span> {p.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
+          </>
+        )}
+      </div>
+    </Modal>
   )
+}
+
+/* ------------------------------------------------------------------ */
+/* Control form                                                        */
+/* ------------------------------------------------------------------ */
+function ControlForm({ mode, initial, packs, onClose, onSave }: {
+  mode: 'create' | 'edit'; initial?: Control; packs: PolicyPack[]; onClose: () => void; onSave: (c: Control, mode: 'create' | 'edit') => void
+}) {
+  const primitivePacks = packs.filter((p) => p.type === 'primitive')
+  const [packId, setPackId] = useState(initial?.packId ?? primitivePacks[0]?.id ?? '')
+  const [id, setId] = useState(initial?.id ?? '')
+  const [name, setName] = useState(initial?.name ?? '')
+  const [detector, setDetector] = useState<DetectorType>(initial?.detector ?? 'Metadata')
+  const [decision, setDecision] = useState<Decision>(initial?.decision ?? 'Deny')
+  const [obligation, setObligation] = useState(initial?.obligation ?? '')
+  const [evidence, setEvidence] = useState((initial?.evidence ?? []).join(', '))
+  const [modeVal, setModeVal] = useState<ControlMode>(initial?.mode ?? 'enforce')
+
+  const prefix = id.includes('-') ? id.split('-')[0].toUpperCase() : ''
+  const valid = id.trim() && /-/.test(id) && name.trim() && packId
+
+  const submit = () => {
+    if (!valid) return
+    onSave({
+      id: id.trim(), packId, prefix: id.trim().split('-')[0].toUpperCase(),
+      name: name.trim(), detector, decision, obligation: obligation.trim(),
+      evidence: evidence.split(',').map((x) => x.trim()).filter(Boolean),
+      mode: modeVal,
+    }, mode)
+  }
+
+  return (
+    <Modal
+      open onClose={onClose} title={mode === 'edit' ? `Edit ${initial?.id}` : 'New control'}
+      subtitle="An atomic runtime rule enforced at the Policy Enforcement Point"
+      maxWidth="max-w-2xl"
+      footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary disabled:opacity-50" onClick={submit} disabled={!valid}><Check className="h-4 w-4" />{mode === 'edit' ? 'Save changes' : 'Create control'}</button></>}
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Control ID">
+            <input className="input font-mono" value={id} onChange={(e) => setId(e.target.value)} placeholder="e.g. OUT-01" disabled={mode === 'edit'} />
+            {id && !/-/.test(id) && <p className="mt-1 text-xs text-rose-600">Use a PREFIX-NN format (e.g. OUT-01).</p>}
+            {prefix && <p className="mt-1 text-xs text-ink-400">Family: {familyOf(prefix)}</p>}
+          </Field>
+          <Field label="Pack">
+            <select className="input" value={packId} onChange={(e) => setPackId(e.target.value)}>
+              {primitivePacks.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Require grounded citations in output" autoFocus /></Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Detector"><select className="input" value={detector} onChange={(e) => setDetector(e.target.value as DetectorType)}>{DETECTORS.map((d) => <option key={d}>{d}</option>)}</select></Field>
+          <Field label="OPA decision"><select className="input" value={decision} onChange={(e) => setDecision(e.target.value as Decision)}>{DECISIONS.map((d) => <option key={d}>{d}</option>)}</select></Field>
+          <Field label="Default mode"><select className="input" value={modeVal} onChange={(e) => setModeVal(e.target.value as ControlMode)}>{MODES.map((m) => <option key={m}>{m}</option>)}</select></Field>
+        </div>
+        <Field label="Enforcement obligation"><input className="input" value={obligation} onChange={(e) => setObligation(e.target.value)} placeholder="e.g. Strip ungrounded claims from output" /></Field>
+        <Field label="Evidence fields (comma-separated OTel keys)"><input className="input font-mono text-xs" value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="grounded_ratio, citations_count" /></Field>
+      </div>
+    </Modal>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label className="mb-1.5 block text-sm font-medium text-ink-700">{label}</label>{children}</div>
+}
+function KV({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border border-slate-200 p-3"><p className="text-xs font-medium text-ink-500">{label}</p><p className="mt-0.5 text-sm font-semibold capitalize text-ink-900">{value}</p></div>
 }
