@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Cpu,
   ArrowUpRight,
+  FileBarChart,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -82,7 +83,11 @@ export default function Registry() {
 
   return (
     <>
-      <PageHeader title="Container Registry" description="Signed OCI images shipped to registry.plcy.app — tags, SBOMs, and vulnerability posture across the fleet. This is the master catalog of every version of PLCY's software: which version is approved to run, whether it's secure, and which customer clusters are actually running it." />
+      <PageHeader
+        title="Container Registry"
+        description="Signed OCI images shipped to registry.plcy.app — tags, SBOMs, and vulnerability posture across the fleet. This is the master catalog of every version of PLCY's software: which version is approved to run, whether it's secure, and which customer clusters are actually running it."
+        actions={<Link to="/reports/security" className="btn-secondary"><FileBarChart className="h-4 w-4" />Generate report</Link>}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Images" value={images.length} icon={Boxes} tone="blue" footer="In the registry" />

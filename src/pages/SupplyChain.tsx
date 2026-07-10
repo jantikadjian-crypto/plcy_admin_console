@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ResponsiveContainer,
   BarChart,
@@ -9,7 +10,7 @@ import {
   Tooltip,
   Cell,
 } from 'recharts'
-import { Boxes, ShieldCheck, ShieldAlert, CircleAlert, Eye, ScanLine, FileText, Download, AlertTriangle } from 'lucide-react'
+import { Boxes, ShieldCheck, ShieldAlert, CircleAlert, Eye, ScanLine, FileText, Download, AlertTriangle, FileBarChart } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { images, cves, opsTotals } from '@/data/ops'
 import type { Image, PatchStatus, Cve } from '@/data/ops'
@@ -67,13 +68,19 @@ function SevTile({ label, value, tone }: { label: string; value: number; tone: '
 
 export default function SupplyChain() {
   const [sel, setSel] = useState<Image | null>(null)
+  const navigate = useNavigate()
 
   return (
     <>
       <PageHeader
         title="Supply Chain"
         description="SBOM, image signing, and vulnerability posture for platform images. Proof that the software PLCY ships is genuine and safe: a signed inventory of what's inside each image (the SBOM), cryptographic signatures proving it hasn't been tampered with, and any known security vulnerabilities."
-        actions={<button className="btn-primary"><ScanLine className="h-4 w-4" />Run scan</button>}
+        actions={
+          <>
+            <button className="btn-secondary" onClick={() => navigate('/reports/security')}><FileBarChart className="h-4 w-4" />Generate report</button>
+            <button className="btn-primary"><ScanLine className="h-4 w-4" />Run scan</button>
+          </>
+        }
       />
 
       {/* Stat row */}
