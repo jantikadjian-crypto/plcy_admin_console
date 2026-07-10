@@ -71,6 +71,10 @@ export default function PolicyPacks() {
     logAction({ action: 'policy.pack.delete', target: `${p.id} · ${p.name}`, category: 'policy' })
     setSelPack(null)
   }
+  const quickAddPrimitive = (p: PolicyPack) => {
+    addPack(p)
+    logAction({ action: 'policy.pack.create', target: `${p.id} · ${p.name}`, category: 'policy' })
+  }
   const saveControl = (c: Control, mode: 'create' | 'edit') => {
     if (mode === 'edit') updateControl(c.id, c)
     else addControl(c)
@@ -133,7 +137,7 @@ export default function PolicyPacks() {
           onEdit={() => setControlForm({ mode: 'edit', control: currentControl })} onDelete={() => removeControl(currentControl)}
         />
       )}
-      {packForm && <PackForm mode={packForm.mode} initial={packForm.pack} packs={packs} onClose={() => setPackForm(null)} onSave={savePack} />}
+      {packForm && <PackForm mode={packForm.mode} initial={packForm.pack} packs={packs} controls={controls} onClose={() => setPackForm(null)} onSave={savePack} onAddPrimitive={quickAddPrimitive} />}
       {controlForm && <ControlForm mode={controlForm.mode} initial={controlForm.control} packs={packs} onClose={() => setControlForm(null)} onSave={saveControl} />}
     </>
   )
@@ -424,14 +428,15 @@ decision := "${ct.decision.toLowerCase()}" {
 /* ------------------------------------------------------------------ */
 /* Pack form                                                           */
 /* ------------------------------------------------------------------ */
-function PackForm({ mode, initial, packs, onClose, onSave }: {
-  mode: 'create' | 'edit'; initial?: PolicyPack; packs: PolicyPack[]; onClose: () => void; onSave: (p: PolicyPack, mode: 'create' | 'edit') => void
+function PackForm({ mode, initial, packs, controls, onClose, onSave, onAddPrimitive }: {
+  mode: 'create' | 'edit'; initial?: PolicyPack; packs: PolicyPack[]; controls: Control[]
+  onClose: () => void; onSave: (p: PolicyPack, mode: 'create' | 'edit') => void; onAddPrimitive: (p: PolicyPack) => void
 }) {
-  const [type, setType] = useState<PackType>(initial?.type ?? 'primitive')
+  const [type, setType] = useState<PackType>(initial?.type ?? 'composite')
   const [kind, setKind] = useState<CompositeKind>(initial?.kind ?? 'framework')
-  const [id, setId] = useState(initial?.id ?? suggestPackId('primitive', 'framework', packs))
+  const [id, setId] = useState(initial?.id ?? suggestPackId('composite', 'framework', packs))
   const [name, setName] = useState(initial?.name ?? '')
-  const [category, setCategory] = useState<PackCategory>(initial?.category ?? 'Privacy')
+  const [category, setCategory] = useState<PackCategory>(initial?.category ?? 'Compliance')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [region, setRegion] = useState(initial?.region ?? 'Global')
   const [frameworks, setFrameworks] = useState((initial?.frameworks ?? []).join(', '))
@@ -439,14 +444,27 @@ function PackForm({ mode, initial, packs, onClose, onSave }: {
   const [deps, setDeps] = useState<string[]>(initial?.dependencies ?? [])
   const [status, setStatus] = useState<Lifecycle>(initial?.status ?? 'live')
   const [version, setVersion] = useState(initial?.version ?? '1.0')
+  // Inline "new primitive" creator
+  const [newPrim, setNewPrim] = useState<{ name: string; category: PackCategory } | null>(null)
 
   const isComposite = type === 'composite'
   const pickType = (t: PackType) => { setType(t); if (mode === 'create') setId(suggestPackId(t, kind, packs)) }
   const pickKind = (k: CompositeKind) => { setKind(k); if (mode === 'create') setId(suggestPackId('composite', k, packs)) }
 
+  const applyTemplate = (srcId: string) => {
+    const src = packs.find((p) => p.id === srcId)
+    if (!src) return
+    setType(src.type); setKind(src.kind ?? 'framework'); setCategory(src.category)
+    setName(`${src.name} (copy)`); setDescription(src.description); setRegion(src.region)
+    setFrameworks(src.frameworks.join(', ')); setIndustries(src.industries.join(', '))
+    setDeps([...src.dependencies]); setStatus(src.status); setVersion(src.version)
+    setId(suggestPackId(src.type, src.kind ?? 'framework', packs))
+  }
+
   const idClash = mode === 'create' && packs.some((p) => p.id === id.trim())
   const valid = id.trim() && name.trim() && !idClash
   const list = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean)
+  const toggleDep = (pid: string) => setDeps((prev) => prev.includes(pid) ? prev.filter((d) => d !== pid) : [...prev, pid])
 
   const submit = () => {
     if (!valid) return
@@ -461,9 +479,16 @@ function PackForm({ mode, initial, packs, onClose, onSave }: {
     }, mode)
   }
 
+  const createInlinePrimitive = () => {
+    if (!newPrim || !newPrim.name.trim()) return
+    const pid = suggestPackId('primitive', 'framework', packs)
+    onAddPrimitive({ id: pid, name: newPrim.name.trim(), type: 'primitive', category: newPrim.category, description: '', frameworks: [], industries: [], region: 'Global', dependencies: [], status: 'live', version: '1.0' })
+    setDeps((prev) => [...prev, pid])
+    setNewPrim(null)
+  }
+
   const primitivePacks = packs.filter((p) => p.type === 'primitive')
   const compositePacks = packs.filter((p) => p.type === 'composite' && p.id !== id)
-  const depOptions = [...primitivePacks, ...compositePacks]
 
   return (
     <Modal
@@ -473,10 +498,20 @@ function PackForm({ mode, initial, packs, onClose, onSave }: {
       footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary disabled:opacity-50" onClick={submit} disabled={!valid}><Check className="h-4 w-4" />{mode === 'edit' ? 'Save changes' : 'Create pack'}</button></>}
     >
       <div className="space-y-4">
+        {mode === 'create' && (
+          <Field label="Start from (optional)">
+            <select className="input" defaultValue="" onChange={(e) => { if (e.target.value) applyTemplate(e.target.value); e.target.value = '' }}>
+              <option value="">Blank pack…</option>
+              <optgroup label="Framework packs">{packs.filter((p) => p.kind === 'framework').map((p) => <option key={p.id} value={p.id}>Clone {p.id} · {p.name}</option>)}</optgroup>
+              <optgroup label="Industry packs">{packs.filter((p) => p.kind === 'industry').map((p) => <option key={p.id} value={p.id}>Clone {p.id} · {p.name}</option>)}</optgroup>
+            </select>
+          </Field>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Type">
             <div className="flex rounded-lg bg-slate-100 p-0.5">
-              {(['primitive', 'composite'] as PackType[]).map((t) => (
+              {(['composite', 'primitive'] as PackType[]).map((t) => (
                 <button key={t} onClick={() => pickType(t)} className={clsx('flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize', type === t ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500')}>{t}</button>
               ))}
             </div>
@@ -498,30 +533,77 @@ function PackForm({ mode, initial, packs, onClose, onSave }: {
             <select className="input" value={category} onChange={(e) => setCategory(e.target.value as PackCategory)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
           </Field>
         </div>
-        <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Output Validation & Grounding" autoFocus /></Field>
-        <Field label="Description"><textarea className="input min-h-[70px]" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+        <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. HIPAA PHI Protection Pack" autoFocus /></Field>
+        <Field label="Description"><textarea className="input min-h-[64px]" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Region"><input className="input" value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
           <Field label="Status"><select className="input" value={status} onChange={(e) => setStatus(e.target.value as Lifecycle)}>{LIFECYCLES.map((l) => <option key={l}>{l}</option>)}</select></Field>
           <Field label="Version"><input className="input" value={version} onChange={(e) => setVersion(e.target.value)} /></Field>
         </div>
+
         {isComposite && (
           <>
-            <Field label="Frameworks (comma-separated)"><input className="input" value={frameworks} onChange={(e) => setFrameworks(e.target.value)} placeholder="GDPR, SOC 2" /></Field>
-            {kind === 'industry' && <Field label="Industries (comma-separated)"><input className="input" value={industries} onChange={(e) => setIndustries(e.target.value)} placeholder="Retail, E-commerce" /></Field>}
-            <Field label="Composes (dependencies)">
-              <div className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 p-2">
-                {depOptions.map((p) => {
+            <Field label="Frameworks (comma-separated)"><input className="input" value={frameworks} onChange={(e) => setFrameworks(e.target.value)} placeholder="HIPAA, SOC 2" /></Field>
+            {kind === 'industry' && <Field label="Industries (comma-separated)"><input className="input" value={industries} onChange={(e) => setIndustries(e.target.value)} placeholder="Healthcare" /></Field>}
+
+            {/* Primitive checklist */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-sm font-medium text-ink-700">Primitives in this pack <span className="text-ink-400">· {deps.filter((d) => primitivePacks.some((p) => p.id === d)).length} selected</span></label>
+                <div className="flex items-center gap-2 text-xs">
+                  <button className="text-brand-600 hover:text-brand-700" onClick={() => setDeps((prev) => Array.from(new Set([...prev, ...primitivePacks.map((p) => p.id)])))}>Select all</button>
+                  <span className="text-ink-300">·</span>
+                  <button className="text-ink-500 hover:text-ink-700" onClick={() => setDeps((prev) => prev.filter((d) => !primitivePacks.some((p) => p.id === d)))}>Clear</button>
+                </div>
+              </div>
+              <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-1.5">
+                {primitivePacks.map((p) => {
                   const on = deps.includes(p.id)
                   return (
-                    <button key={p.id} onClick={() => setDeps((prev) => on ? prev.filter((d) => d !== p.id) : [...prev, p.id])}
-                      className={clsx('rounded-lg border px-2 py-1 text-xs transition-colors', on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-slate-200 text-ink-500 hover:border-slate-300')}>
-                      <span className="font-mono">{p.id}</span> {p.name}
+                    <button key={p.id} onClick={() => toggleDep(p.id)} className={clsx('flex w-full items-start gap-2.5 rounded-lg p-2 text-left transition-colors', on ? 'bg-brand-50' : 'hover:bg-slate-50')}>
+                      <span className={clsx('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border', on ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300')}>{on && <Check className="h-3 w-3" />}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2"><span className="font-mono text-xs text-ink-500">{p.id}</span><span className="text-sm font-medium text-ink-900">{p.name}</span><span className="ml-auto shrink-0 text-[11px] text-ink-400">{controlCount(p, packs, controls)} controls</span></span>
+                        {p.description && <span className="mt-0.5 block truncate text-xs text-ink-500">{p.description}</span>}
+                      </span>
                     </button>
                   )
                 })}
+                {/* Inline new-primitive creator */}
+                {newPrim ? (
+                  <div className="rounded-lg border border-dashed border-brand-300 bg-brand-50/40 p-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input className="input h-8 flex-1 py-1 text-sm" placeholder="New primitive name" value={newPrim.name} onChange={(e) => setNewPrim({ ...newPrim, name: e.target.value })} autoFocus />
+                      <select className="input h-8 w-full py-1 text-sm sm:w-40" value={newPrim.category} onChange={(e) => setNewPrim({ ...newPrim, category: e.target.value as PackCategory })}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+                      <div className="flex gap-1">
+                        <button className="btn-primary h-8 px-2.5 py-1 text-xs" onClick={createInlinePrimitive} disabled={!newPrim.name.trim()}><Check className="h-3.5 w-3.5" />Add</button>
+                        <button className="btn-ghost h-8 px-2 py-1 text-xs" onClick={() => setNewPrim(null)}>Cancel</button>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-[11px] text-ink-400">Creates a new primitive (id auto-assigned) and selects it. Add its controls later from the Controls tab.</p>
+                  </div>
+                ) : (
+                  <button className="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-300 p-2 text-left text-sm text-brand-600 hover:bg-brand-50/40" onClick={() => setNewPrim({ name: '', category: 'Security' })}>
+                    <Plus className="h-4 w-4" />New primitive…
+                  </button>
+                )}
               </div>
-            </Field>
+            </div>
+
+            {compositePacks.length > 0 && (
+              <Field label="Also compose other composites (optional)">
+                <div className="flex flex-wrap gap-1.5 rounded-xl border border-slate-200 p-2">
+                  {compositePacks.map((p) => {
+                    const on = deps.includes(p.id)
+                    return (
+                      <button key={p.id} onClick={() => toggleDep(p.id)} className={clsx('rounded-lg border px-2 py-1 text-xs transition-colors', on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-slate-200 text-ink-500 hover:border-slate-300')}>
+                        <span className="font-mono">{p.id}</span> {p.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+            )}
           </>
         )}
       </div>
