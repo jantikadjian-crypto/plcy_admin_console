@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Bot,
   ShieldCheck,
@@ -152,6 +152,7 @@ function SignalCard({ s }: { s: Signal }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const promoted = useRegistryPromoted()
   // Clusters running an image tag behind what's been promoted in the registry.
   const imageDriftItems: AttentionItem[] = deployments
@@ -185,7 +186,7 @@ export default function Dashboard() {
         title="AI Governance Dashboard"
         description="Live posture across every PLCY customer, cluster, and control"
         actions={
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={() => navigate('/reports/posture')}>
             <TrendingUp className="h-4 w-4" />
             Generate report
           </button>
