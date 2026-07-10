@@ -109,6 +109,8 @@ export default function PolicyPacks() {
         <StatCard label="Controls" value={totals.controls} icon={SlidersHorizontal} tone="orange" footer="Atomic runtime rules" />
       </div>
 
+      <HierarchyLegend />
+
       <div className="mt-6 flex gap-1 border-b border-slate-200">
         {([['packs', 'Packs', Boxes], ['controls', 'Controls', SlidersHorizontal]] as const).map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)} className={clsx('-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors', tab === key ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-800')}>
@@ -174,9 +176,9 @@ function PacksSection({ packs, controls, onOpen }: { packs: PolicyPack[]; contro
           ))}
         </div>
       </div>
-      {primitives.length > 0 && <PackGroup title="Primitive packs" subtitle="Single-purpose, composable runtime guardrails" list={primitives} packs={packs} controls={controls} onOpen={onOpen} />}
-      {frameworks.length > 0 && <PackGroup title="Framework packs" subtitle="Bundle primitives to satisfy a standard" list={frameworks} packs={packs} controls={controls} onOpen={onOpen} />}
-      {industries.length > 0 && <PackGroup title="Industry packs" subtitle="Vertical-specific governance bundles" list={industries} packs={packs} controls={controls} onOpen={onOpen} />}
+      {primitives.length > 0 && <PackGroup title="Primitive packs" subtitle="Single-purpose guardrails — each is a bundle of controls" list={primitives} packs={packs} controls={controls} onOpen={onOpen} />}
+      {frameworks.length > 0 && <PackGroup title="Framework packs" subtitle="Composites — bundle primitives to satisfy a standard (GDPR, SOC 2…)" list={frameworks} packs={packs} controls={controls} onOpen={onOpen} />}
+      {industries.length > 0 && <PackGroup title="Industry packs" subtitle="Composites — bundle primitives for a vertical (Retail, Gov…)" list={industries} packs={packs} controls={controls} onOpen={onOpen} />}
       {primitives.length + frameworks.length + industries.length === 0 && (
         <Card><p className="py-10 text-center text-sm text-ink-400">No packs match your filter.</p></Card>
       )}
@@ -207,7 +209,7 @@ function PackCard({ pack, packs, controls, onOpen }: { pack: PolicyPack; packs: 
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <Badge tone="slate">{pack.id}</Badge>
-          <Badge tone={cs.tone} dot>{pack.category}</Badge>
+          <Badge tone={pack.type === 'primitive' ? 'blue' : 'green'}>{pack.type === 'primitive' ? 'Primitive' : `Composite · ${pack.kind}`}</Badge>
         </div>
         <span className="font-mono text-[11px] text-ink-400">{controlCount(pack, packs, controls)} controls</span>
       </div>
@@ -249,6 +251,9 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
           <input className="input pl-9" placeholder="Search controls by id, name, detector, or decision…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
+      <p className="mb-2 text-xs text-ink-500">
+        Each control ID reads <span className="font-mono text-ink-700">FAMILY-NUMBER</span> — the prefix names its control family (e.g. <span className="font-mono text-ink-700">DR-01</span> = 1st control in <span className="font-medium text-ink-700">Data Residency &amp; Sovereignty</span>). Filter by family:
+      </p>
       <div className="mb-4 flex flex-wrap gap-1.5">
         {families.map((f) => (
           <button key={f} onClick={() => setFamily(f)} className={clsx('rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset transition-colors', family === f ? 'bg-brand-50 text-brand-700 ring-brand-600/20' : 'bg-slate-100 text-ink-700 ring-slate-500/10 hover:bg-slate-200/70')} title={f === 'All' ? 'All families' : familyOf(f)}>
@@ -257,7 +262,7 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
         ))}
       </div>
       <Card>
-        <CardTitle title="Controls" subtitle={`${filtered.length} of ${controls.length} atomic runtime controls · click for detection, decision & evidence`} />
+        <CardTitle title="Controls" subtitle={`${family !== 'All' ? `${family} · ${familyOf(family)} — ` : ''}${filtered.length} of ${controls.length} atomic runtime controls · click for detection, decision & evidence`} />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead>
@@ -317,6 +322,11 @@ function PackDrawer({ pack, packs, controls, onClose, onOpenPack, onOpenControl,
       }
     >
       <div className="space-y-5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-ink-600">
+          {pack.type === 'primitive'
+            ? <><span className="font-semibold text-ink-800">Primitive pack</span> — a single-purpose guardrail made of the controls listed below. Composites reuse it.</>
+            : <><span className="font-semibold text-ink-800">Composite pack</span> — it doesn't define controls itself; it <span className="font-medium">composes primitives</span> and inherits their controls.</>}
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KV label="Type" value={pack.type === 'primitive' ? 'Primitive' : `Composite · ${pack.kind}`} />
           <KV label="Region" value={pack.region} />
@@ -396,6 +406,9 @@ decision := "${ct.decision.toLowerCase()}" {
       }
     >
       <div className="space-y-5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-ink-600">
+          <span className="font-semibold text-ink-800">Control</span> — a single atomic rule enforced at runtime. Its ID <span className="font-mono text-ink-800">{ct.id}</span> means control <span className="font-mono">{ct.id.split('-')[1]}</span> in the <span className="font-medium text-ink-800">{familyOf(ct.prefix)}</span> family (<span className="font-mono">{ct.prefix}</span>).
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KV label="Family" value={familyOf(ct.prefix)} />
           <KV label="Detector" value={ct.detector} />
@@ -674,6 +687,29 @@ function ControlForm({ mode, initial, packs, onClose, onSave }: {
 }
 
 /* ------------------------------------------------------------------ */
+/* Hierarchy legend                                                    */
+/* ------------------------------------------------------------------ */
+function HierarchyLegend() {
+  const items: { label: string; tone: Tone; def: string }[] = [
+    { label: 'Control', tone: 'orange', def: 'A single runtime rule (e.g. DR-01) — one detector, one decision, one obligation.' },
+    { label: 'Primitive', tone: 'blue', def: 'A single-purpose guardrail = a bundle of related controls (e.g. P1 · Data Residency).' },
+    { label: 'Composite', tone: 'green', def: 'Primitives bundled to satisfy a framework or industry (e.g. GDPR, SOC 2).' },
+  ]
+  return (
+    <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+      <p className="mb-2.5 text-xs font-semibold text-ink-700">How policy is structured — <span className="font-mono text-ink-900">Control ⊂ Primitive ⊂ Composite</span> <span className="font-normal text-ink-400">(each level contains the one before it)</span></p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {items.map((i) => (
+          <div key={i.label} className="flex items-start gap-2">
+            <Badge tone={i.tone}>{i.label}</Badge>
+            <p className="text-xs text-ink-600">{i.def}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="mb-1.5 block text-sm font-medium text-ink-700">{label}</label>{children}</div>
 }
