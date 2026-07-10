@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { clsx } from 'clsx'
-import { Activity, Users, ShieldOff, Archive, Search, Eye, Download } from 'lucide-react'
+import { Activity, Users, ShieldOff, Archive, Search, Eye, Download, FileJson } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui'
 import { useSession } from '@/context/Session'
 import type { AuditItem } from '@/context/Session'
+import { downloadCSV, downloadJSON, reportStem } from '@/lib/download'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -42,19 +43,20 @@ const eventsByHour = [
 
 const isSystemActor = (actor: string) => !actor.includes('@')
 
-function exportAudit(entries: AuditItem[]) {
-  const data = JSON.stringify(entries, null, 2)
-  const href = `data:application/json;charset=utf-8,${encodeURIComponent(data)}`
-  const a = document.createElement('a')
-  a.href = href
-  a.download = `plcy-audit-log-${entries.length}-events.json`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+function exportAuditCSV(entries: AuditItem[]) {
+  downloadCSV(
+    `${reportStem('audit-log')}.csv`,
+    ['Time', 'Actor', 'Action', 'Target', 'Category', 'Result', 'Source IP'],
+    entries.map((e) => [e.time, e.actor, e.action, e.target, e.category, e.result, e.ip ?? '']),
+  )
+}
+
+function exportAuditJSON(entries: AuditItem[]) {
+  downloadJSON(`${reportStem('audit-log')}.json`, entries)
 }
 
 export default function AuditLog() {
-  const { audit } = useSession()
+  const { audit, logAction } = useSession()
   const [sel, setSel] = useState<AuditItem | null>(null)
   const [query, setQuery] = useState('')
   const [cat, setCat] = useState('All')
@@ -88,10 +90,28 @@ export default function AuditLog() {
         title="Audit Log"
         description="Immutable record of every privileged action across the PLCY platform"
         actions={
-          <button className="btn-secondary" onClick={() => exportAudit(filtered)}>
-            <Download className="h-4 w-4" />
-            Export log
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn-primary"
+              onClick={() => {
+                exportAuditCSV(filtered)
+                logAction({ action: 'Exported audit log (CSV)', target: `${filtered.length} events`, category: 'report' })
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                exportAuditJSON(filtered)
+                logAction({ action: 'Exported audit log (JSON)', target: `${filtered.length} events`, category: 'report' })
+              }}
+            >
+              <FileJson className="h-4 w-4" />
+              JSON
+            </button>
+          </div>
         }
       />
 

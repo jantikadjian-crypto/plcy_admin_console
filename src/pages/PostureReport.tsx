@@ -1,22 +1,19 @@
 import { useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Printer, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
+import { Download, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react'
 import { Badge } from '@/components/ui'
+import { ReportShell, ReportSection } from '@/components/ReportShell'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useSession } from '@/context/Session'
 import { useRegistryPromoted } from '@/data/registryStore'
 import { currentUser } from '@/data/roles'
 import { buildPostureReport } from '@/data/report'
-import type { Rag, Sev } from '@/data/report'
+import type { Rag, Sev, PostureReport as PostureReportData } from '@/data/report'
+import { downloadMarkdown, reportStem } from '@/lib/download'
 
 const ragDot: Record<Rag, string> = { green: 'bg-emerald-500', amber: 'bg-amber-500', red: 'bg-rose-500' }
 const sevBadge: Record<Sev, 'red' | 'orange' | 'yellow'> = { critical: 'red', high: 'orange', medium: 'yellow' }
+const bannerTone: Record<Rag, 'green' | 'amber' | 'red'> = { green: 'green', amber: 'amber', red: 'red' }
 const overallIcon: Record<Rag, typeof ShieldCheck> = { green: ShieldCheck, amber: ShieldAlert, red: ShieldX }
-const overallBand: Record<Rag, string> = {
-  green: 'from-emerald-600 to-emerald-500',
-  amber: 'from-amber-600 to-amber-500',
-  red: 'from-rose-600 to-rose-500',
-}
 
 function stamp(): string {
   const d = new Date()
@@ -25,17 +22,51 @@ function stamp(): string {
   return `${date} · ${time}`
 }
 
-/** Small labelled section wrapper with a print-friendly card frame. */
-function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-6 break-inside-avoid rounded-2xl border border-slate-200 bg-white p-5 print:mt-4 print:border-slate-300 print:shadow-none">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-700">{title}</h2>
-        {note && <span className="text-xs text-ink-400">{note}</span>}
-      </div>
-      {children}
-    </section>
-  )
+/** Render the posture report as Markdown for the Download action. */
+function toMarkdown(r: PostureReportData): string {
+  const L: string[] = []
+  L.push(`# Fleet Governance Posture Report`)
+  L.push('')
+  L.push(`**Scope:** ${r.isAll ? 'All customers · entire estate' : r.scope}  `)
+  L.push(`**Status:** ${r.overallLabel}  `)
+  L.push(`**Generated:** ${r.generatedAt} · **Prepared by:** ${r.generatedBy}  `)
+  L.push(`_Source: live control-plane metadata (no customer content)._`)
+  L.push('')
+  L.push(`## Executive summary`)
+  L.push('')
+  L.push(`| Metric | Value | |`)
+  L.push(`| --- | --- | --- |`)
+  r.kpis.forEach((k) => L.push(`| ${k.label} | ${k.value} | ${k.sub} |`))
+  L.push('')
+  L.push(`## Posture by domain`)
+  L.push('')
+  L.push(`| Domain | Status | Value | Note |`)
+  L.push(`| --- | --- | --- | --- |`)
+  r.signals.forEach((s) => L.push(`| ${s.label}${s.platform ? ' (platform-wide)' : ''} | ${s.rag.toUpperCase()} | ${s.value} | ${s.note} |`))
+  L.push('')
+  L.push(`## Risk & attention register (${r.risks.length} open)`)
+  L.push('')
+  if (r.risks.length === 0) {
+    L.push(`_No open risks in scope._`)
+  } else {
+    L.push(`| Severity | Item | Detail | Domain |`)
+    L.push(`| --- | --- | --- | --- |`)
+    r.risks.forEach((x) => L.push(`| ${x.sev} | ${x.title} | ${x.detail} | ${x.domain} |`))
+  }
+  L.push('')
+  L.push(`## Compliance by domain`)
+  L.push('')
+  r.compliance.forEach((c) => L.push(`- ${c.name}: ${c.score}%`))
+  L.push('')
+  L.push(`## Control coverage`)
+  L.push('')
+  L.push(`- Policy packs: ${r.coverage.packs}`)
+  L.push(`- Atomic controls: ${r.coverage.controls}`)
+  L.push(`- Primitives: ${r.coverage.primitives} · Frameworks: ${r.coverage.frameworks} · Industry packs: ${r.coverage.industries}`)
+  L.push('')
+  L.push(`---`)
+  L.push(`_PLCY Admin Console · Confidential — Internal use only._`)
+  return L.join('\n')
 }
 
 export default function PostureReport() {
@@ -53,65 +84,48 @@ export default function PostureReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, isAll])
 
-  const OverallIcon = overallIcon[report.overall]
   const maxScore = 100
 
   return (
-    <div className="mx-auto max-w-4xl print:max-w-none">
-      {/* Action bar — hidden when printing */}
-      <div className="mb-5 flex items-center justify-between print:hidden">
-        <Link to="/" className="btn-ghost -ml-2">
-          <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
-        </Link>
-        <button className="btn-primary" onClick={() => window.print()}>
-          <Printer className="h-4 w-4" />
-          Print / Save as PDF
+    <ReportShell
+      title="Fleet Governance Posture Report"
+      subtitle={report.isAll ? 'All customers · entire estate' : `Customer scope · ${report.scope}`}
+      tone={bannerTone[report.overall]}
+      statusLabel={report.overallLabel}
+      statusIcon={overallIcon[report.overall]}
+      meta={[`Generated ${report.generatedAt}`, `Prepared by ${report.generatedBy}`, 'Source: live control-plane metadata (no customer content)']}
+      footer={`PLCY Admin Console · Fleet Governance Posture Report · ${report.generatedAt} · Confidential — Internal use only. Figures are point-in-time control-plane metadata; no customer prompt or payload data is included.`}
+      actions={
+        <button
+          className="btn-secondary"
+          onClick={() => {
+            downloadMarkdown(`${reportStem(isAll ? 'posture' : `posture-${report.scope.toLowerCase().replace(/\s+/g, '-')}`)}.md`, toMarkdown(report))
+            logAction({ action: 'Downloaded posture report (Markdown)', target: isAll ? 'Fleet' : report.scope, category: 'report' })
+          }}
+        >
+          <Download className="h-4 w-4" />
+          Download Markdown
         </button>
-      </div>
-
-      {/* Report banner */}
-      <div className={`rounded-2xl bg-gradient-to-r ${overallBand[report.overall]} px-6 py-6 text-white print:rounded-xl`}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-widest text-white/70">PLCY · Confidential — Internal</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Fleet Governance Posture Report</h1>
-            <p className="mt-1 text-sm text-white/80">
-              {report.isAll ? 'All customers · entire estate' : `Customer scope · ${report.scope}`}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-sm font-semibold ring-1 ring-inset ring-white/30">
-              <OverallIcon className="h-4 w-4" />
-              {report.overallLabel}
-            </span>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-1 text-xs text-white/80">
-          <span>Generated {report.generatedAt}</span>
-          <span>Prepared by {report.generatedBy}</span>
-          <span>Source: live control-plane metadata (no customer content)</span>
-        </div>
-      </div>
-
+      }
+    >
       {/* Executive summary KPIs */}
-      <Section title="Executive summary">
+      <ReportSection title="Executive summary">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {report.kpis.map((k) => (
-            <div key={k.label} className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 ">
+            <div key={k.label} className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
               <p className="text-xs font-medium text-ink-500">{k.label}</p>
               <p className="mt-0.5 text-2xl font-bold tracking-tight text-ink-900">{k.value}</p>
               <p className="text-[11px] text-ink-400">{k.sub}</p>
             </div>
           ))}
         </div>
-      </Section>
+      </ReportSection>
 
       {/* Posture by domain */}
-      <Section title="Posture by domain" note="Red / Amber / Green per control area">
+      <ReportSection title="Posture by domain" note="Red / Amber / Green per control area">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {report.signals.map((s) => (
-            <div key={s.key} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 ">
+            <div key={s.key} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
               <div className="flex items-center gap-2.5">
                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${ragDot[s.rag]}`} />
                 <div>
@@ -126,10 +140,10 @@ export default function PostureReport() {
             </div>
           ))}
         </div>
-      </Section>
+      </ReportSection>
 
       {/* Risk & attention register */}
-      <Section title="Risk & attention register" note={`${report.risks.length} open`}>
+      <ReportSection title="Risk & attention register" note={`${report.risks.length} open`}>
         {report.risks.length === 0 ? (
           <p className="py-6 text-center text-sm text-ink-400">No open risks in scope — posture is clear.</p>
         ) : (
@@ -156,10 +170,10 @@ export default function PostureReport() {
             </tbody>
           </table>
         )}
-      </Section>
+      </ReportSection>
 
       {/* Compliance by domain (platform-wide) */}
-      <Section title="Compliance by domain" note={report.isAll ? 'Fleet aggregate' : 'Platform-wide'}>
+      <ReportSection title="Compliance by domain" note={report.isAll ? 'Fleet aggregate' : 'Platform-wide'}>
         <div className="space-y-2.5">
           {report.compliance.map((c) => (
             <div key={c.name} className="flex items-center gap-3">
@@ -174,11 +188,11 @@ export default function PostureReport() {
             </div>
           ))}
         </div>
-      </Section>
+      </ReportSection>
 
       {/* Coverage + risk mix */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Section title="Control coverage" note="Policy catalog">
+        <ReportSection title="Control coverage" note="Policy catalog">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Cov label="Policy packs" value={report.coverage.packs} />
             <Cov label="Atomic controls" value={report.coverage.controls} />
@@ -186,8 +200,8 @@ export default function PostureReport() {
             <Cov label="Frameworks" value={report.coverage.frameworks} />
             <Cov label="Industry packs" value={report.coverage.industries} />
           </div>
-        </Section>
-        <Section title="Model risk mix" note={report.isAll ? 'Fleet aggregate' : 'Platform-wide'}>
+        </ReportSection>
+        <ReportSection title="Model risk mix" note={report.isAll ? 'Fleet aggregate' : 'Platform-wide'}>
           <div className="space-y-2">
             {report.riskMix.map((r) => (
               <div key={r.name} className="flex items-center gap-3">
@@ -197,21 +211,15 @@ export default function PostureReport() {
               </div>
             ))}
           </div>
-        </Section>
+        </ReportSection>
       </div>
-
-      {/* Footer */}
-      <p className="mt-6 border-t border-slate-200 pt-4 text-center text-[11px] text-ink-400">
-        PLCY Admin Console · Fleet Governance Posture Report · {report.generatedAt} · Confidential — Internal use only.
-        Figures are point-in-time control-plane metadata; no customer prompt or payload data is included.
-      </p>
-    </div>
+    </ReportShell>
   )
 }
 
 function Cov({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-slate-200 px-3 py-2 ">
+    <div className="rounded-lg border border-slate-200 px-3 py-2">
       <p className="text-xs text-ink-500">{label}</p>
       <p className="text-xl font-bold text-ink-900">{value}</p>
     </div>
