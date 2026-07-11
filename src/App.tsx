@@ -25,6 +25,7 @@ import Provisioning from './pages/Provisioning'
 import BulkOps from './pages/BulkOps'
 import Sla from './pages/Sla'
 import Billing from './pages/Billing'
+import BillingIntegration from './pages/BillingIntegration'
 import FinOps from './pages/FinOps'
 import Backups from './pages/Backups'
 import SupplyChain from './pages/SupplyChain'
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="/bulk-ops" element={<BulkOps />} />
         <Route path="/sla" element={<Sla />} />
         <Route path="/billing" element={<Billing />} />
+        <Route path="/billing-integration" element={<BillingIntegration />} />
         <Route path="/finops" element={<FinOps />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/supply-chain" element={<SupplyChain />} />

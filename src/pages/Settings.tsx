@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import {
   Settings as SettingsIcon,
@@ -299,6 +300,7 @@ const swatches = [
 ]
 
 const integrations = [
+  { name: 'Stripe', desc: 'Subscriptions, invoices & payments.', connected: true, to: '/billing-integration' },
   { name: 'Slack', desc: 'Send alerts to your workspace channels.', connected: true },
   { name: 'PagerDuty', desc: 'Page on-call for critical incidents.', connected: true },
   { name: 'Datadog', desc: 'Stream metrics and traces.', connected: false },
@@ -307,6 +309,7 @@ const integrations = [
 
 export default function Settings() {
   const { logAction } = useSession()
+  const navigate = useNavigate()
   const [active, setActive] = useState<TabKey>('General')
   const [accent, setAccent] = useState('#1f47f5')
   const [toggles, setToggles] = useState<Record<string, boolean>>({
@@ -545,7 +548,9 @@ export default function Settings() {
                   </div>
                   <div className="mt-4">
                     {it.connected ? (
-                      <button className="btn-secondary w-full">Manage</button>
+                      <button className="btn-secondary w-full" onClick={() => it.to && navigate(it.to)}>
+                        {it.to ? 'Configure' : 'Manage'}
+                      </button>
                     ) : (
                       <button className="btn-primary w-full">Connect</button>
                     )}

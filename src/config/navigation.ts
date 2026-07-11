@@ -39,6 +39,7 @@ import {
   UserCog,
   Radar,
   Wallet,
+  CreditCard,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -67,6 +68,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Customers', to: '/customers', icon: Users },
       { label: 'Instances', to: '/instances', icon: Server },
       { label: 'Billing & Usage', to: '/billing', icon: Receipt },
+      { label: 'Billing Integration', to: '/billing-integration', icon: CreditCard },
       { label: 'Cost & Margin', to: '/finops', icon: Wallet },
     ],
   },
