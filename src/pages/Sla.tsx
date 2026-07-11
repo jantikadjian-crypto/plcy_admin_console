@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Gauge,
   CalendarPlus,
@@ -6,6 +7,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   CircleDollarSign,
+  FileBarChart,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -96,6 +98,7 @@ function breachLedger(t: SlaTarget): { date: string; duration: string; credit: n
 export default function Sla() {
   const { can, logAction } = useSession()
   const { scope, isAll } = useCustomerScope()
+  const navigate = useNavigate()
 
   const [windows, setWindows] = useState<MaintenanceWindow[]>(maintenanceWindows)
   const [open, setOpen] = useState(false)
@@ -183,10 +186,16 @@ export default function Sla() {
         title="SLA & Maintenance"
         description="Uptime commitments by customer and planned changes across the fleet"
         actions={
-          <GatedButton cap="provision.manage" className="btn-primary" onClick={openScheduler}>
-            <CalendarPlus className="h-4 w-4" />
-            Schedule window
-          </GatedButton>
+          <>
+            <button className="btn-secondary" onClick={() => navigate('/reports/sla')}>
+              <FileBarChart className="h-4 w-4" />
+              Generate report
+            </button>
+            <GatedButton cap="provision.manage" className="btn-primary" onClick={openScheduler}>
+              <CalendarPlus className="h-4 w-4" />
+              Schedule window
+            </GatedButton>
+          </>
         }
       />
 
