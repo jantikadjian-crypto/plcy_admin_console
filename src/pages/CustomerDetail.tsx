@@ -54,6 +54,8 @@ import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useCustomers } from '@/context/Customers'
+import { useDeploymentConfig, AWS_REGIONS, CONNECTIVITY_OPTIONS, FIELD_META } from '@/context/DeploymentConfig'
+import type { CustomerConfig, ChangeRequest } from '@/context/DeploymentConfig'
 import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum, customerChannels } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 import { ContactChannels } from '@/components/ContactChannels'
@@ -68,6 +70,16 @@ const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
 import { deploymentByCustomer } from '@/data/fleet'
 import { slaByCustomer, maintenanceWindows } from '@/data/sla'
 import { transfers, dsarRequests, accessRequests } from '@/data/privacy'
+import { currentUser } from '@/data/roles'
+
+/** Map a customer's coarse region label to a default AWS region for config seeding. */
+const AWS_FROM_REGION: Record<string, string> = {
+  'US-East': 'us-east-1',
+  'US-West': 'us-west-2',
+  'EU-Central': 'eu-central-1',
+  'EU-West': 'eu-west-1',
+  APAC: 'ap-southeast-1',
+}
 
 const planTone: Record<Customer['plan'], 'purple' | 'blue' | 'green' | 'slate'> = {
   Enterprise: 'purple',
@@ -123,7 +135,9 @@ export default function CustomerDetail() {
   const { audit, can, logAction } = useSession()
   const { setScope } = useCustomerScope()
   const { get, update } = useCustomers()
+  const { getConfig, requestsFor, requestChanges, applyRequest, cancelRequest } = useDeploymentConfig()
   const [tab, setTab] = useState<Tab>('overview')
+  const [cfgOpen, setCfgOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Customer>>({})
   const [methods, setMethods] = useState<PaymentMethod[]>(() => paymentByCustomer(get(id ?? '')?.name ?? ''))
@@ -179,6 +193,25 @@ export default function CustomerDetail() {
   const avgUptime = upInstances.length ? upInstances.reduce((s, i) => s + i.uptime, 0) / upInstances.length : 0
   const openIncidents = custIncidents.filter((i) => i.status !== 'Resolved').length
   const openDsar = custDsar.filter((d) => d.status !== 'Completed').length
+
+  // Deployment configuration (editable desired state) + its change requests.
+  const config = getConfig(name, AWS_FROM_REGION[c.region] ?? 'us-east-1')
+  const changeReqs = requestsFor(name)
+  const pendingReqs = changeReqs.filter((r) => r.status !== 'Applied')
+  const canProvision = can('provision.manage')
+  const submitConfig = (patch: Partial<CustomerConfig>) => {
+    const created = requestChanges(name, patch, currentUser.name)
+    created.forEach((r) => logAction({ action: 'config.change.request', target: `${name} · ${r.label} → ${r.to}`, category: 'provision' }))
+    setCfgOpen(false)
+  }
+  const doApply = (r: ChangeRequest) => {
+    applyRequest(r.id)
+    logAction({ action: 'config.change.apply', target: `${name} · ${r.label} → ${r.to}`, category: 'provision' })
+  }
+  const doCancel = (r: ChangeRequest) => {
+    cancelRequest(r.id)
+    logAction({ action: 'config.change.cancel', target: `${name} · ${r.label}`, category: 'provision', result: 'Success' })
+  }
 
   const canEdit = can('customer.manage')
   const setField = (patch: Partial<Customer>) => setDraft((d) => ({ ...d, ...patch }))
@@ -442,6 +475,63 @@ export default function CustomerDetail() {
                 </Table>
               )}
             </Card>
+
+            {/* Editable desired-state configuration */}
+            <Card>
+              <CardTitle
+                title="Configuration"
+                subtitle="Desired state — region, compute & seats. Changes apply through a provisioning request."
+                action={
+                  <GatedButton cap="provision.manage" className="btn-secondary px-2.5 py-1 text-xs" onClick={() => setCfgOpen(true)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit configuration
+                  </GatedButton>
+                }
+              />
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Fact label="AWS region" value={<span className="font-mono text-sm">{config.regionCode}</span>} />
+                <Fact label="Connectivity" value={<Badge tone={config.connectivity === 'Air-gapped' ? 'purple' : 'blue'}>{config.connectivity}</Badge>} />
+                <Fact label="Licensed seats" value={fmtNum(config.seats)} />
+                <Fact label="Cluster nodes" value={`${config.nodes} (${config.gpuNodes} GPU)`} />
+                <Fact label="Cluster memory" value={`${fmtNum(config.memoryGb)} GB`} />
+                <Fact label="Pending changes" value={pendingReqs.length > 0 ? <span className="text-orange-600">{pendingReqs.length}</span> : '—'} />
+              </dl>
+            </Card>
+
+            {/* Change requests */}
+            {changeReqs.length > 0 && (
+              <Card>
+                <CardTitle title="Configuration change requests" subtitle="Region & connectivity moves may require a maintenance window" />
+                <div className="space-y-2">
+                  {changeReqs.map((r) => (
+                    <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-ink-900">{r.label}</span>
+                          <span className="font-mono text-xs text-ink-500">{r.from} → <span className="text-ink-900">{r.to}</span></span>
+                          {r.needsWindow && <Badge tone="orange">Needs window</Badge>}
+                        </div>
+                        <p className="mt-0.5 text-xs text-ink-400">Requested {r.requested} by {r.requestedBy}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Badge tone={r.status === 'Applied' ? 'green' : r.status === 'Applying' ? 'orange' : 'slate'} dot>{r.status}</Badge>
+                        {r.status === 'Pending' && canProvision && (
+                          <>
+                            <button className="btn-primary px-2.5 py-1 text-xs" onClick={() => doApply(r)}>
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Apply
+                            </button>
+                            <button className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600" aria-label="Cancel change" onClick={() => doCancel(r)}>
+                              <X className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
           </div>
         )}
 
@@ -807,7 +897,90 @@ export default function CustomerDetail() {
       </div>
 
       <AddCardModal open={payOpen} onClose={() => setPayOpen(false)} onAdd={addCard} />
+      <EditConfigModal open={cfgOpen} onClose={() => setCfgOpen(false)} config={config} onSubmit={submitConfig} />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Deployment configuration editor                                     */
+/* ------------------------------------------------------------------ */
+function EditConfigModal({
+  open,
+  onClose,
+  config,
+  onSubmit,
+}: {
+  open: boolean
+  onClose: () => void
+  config: CustomerConfig
+  onSubmit: (patch: Partial<CustomerConfig>) => void
+}) {
+  const [draft, setDraft] = useState<CustomerConfig>(config)
+  // Re-sync the form to the live config whenever the modal opens.
+  useEffect(() => {
+    if (open) setDraft(config)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const set = (patch: Partial<CustomerConfig>) => setDraft((d) => ({ ...d, ...patch }))
+  const num = (v: string) => Math.max(0, Number(v) || 0)
+
+  // Which fields changed vs current — drives the "will file N requests" preview.
+  const changed = (Object.keys(FIELD_META) as (keyof CustomerConfig)[]).filter((k) => draft[k] !== config[k])
+  const anyWindow = changed.some((k) => FIELD_META[k].window)
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Edit configuration"
+      subtitle="Changes are filed as provisioning change requests, then applied"
+      maxWidth="max-w-lg"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={() => onSubmit(draft)} disabled={changed.length === 0}>
+            <Save className="h-4 w-4" />
+            {changed.length === 0 ? 'No changes' : `Request ${changed.length} change${changed.length === 1 ? '' : 's'}`}
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <EditField label="AWS region">
+          <select className="input" value={draft.regionCode} onChange={(e) => set({ regionCode: e.target.value })}>
+            {AWS_REGIONS.map((r) => <option key={r}>{r}</option>)}
+          </select>
+        </EditField>
+        <EditField label="Connectivity">
+          <select className="input" value={draft.connectivity} onChange={(e) => set({ connectivity: e.target.value })}>
+            {CONNECTIVITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+          </select>
+        </EditField>
+        <EditField label="Cluster nodes">
+          <input type="number" min={1} className="input" value={draft.nodes} onChange={(e) => set({ nodes: num(e.target.value) })} />
+        </EditField>
+        <EditField label="GPU nodes">
+          <input type="number" min={0} className="input" value={draft.gpuNodes} onChange={(e) => set({ gpuNodes: num(e.target.value) })} />
+        </EditField>
+        <EditField label="Cluster memory (GB)">
+          <input type="number" min={0} step={64} className="input" value={draft.memoryGb} onChange={(e) => set({ memoryGb: num(e.target.value) })} />
+        </EditField>
+        <EditField label="Licensed seats">
+          <input type="number" min={0} className="input" value={draft.seats} onChange={(e) => set({ seats: num(e.target.value) })} />
+        </EditField>
+      </div>
+      {changed.length > 0 && (
+        <div className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-sm ${anyWindow ? 'border-orange-200 bg-orange-50 text-orange-900' : 'border-blue-200 bg-blue-50 text-blue-900'}`}>
+          <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {changed.length} change{changed.length === 1 ? '' : 's'} will be filed as request{changed.length === 1 ? '' : 's'}.
+            {anyWindow ? ' A region or connectivity move may require a scheduled maintenance window before it applies.' : ' These scale operations can be applied immediately.'}
+          </span>
+        </div>
+      )}
+    </Modal>
   )
 }
 

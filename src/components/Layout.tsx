@@ -8,6 +8,7 @@ import { EmployeesProvider } from '@/context/Employees'
 import { SessionProvider } from '@/context/Session'
 import { ProvisioningProvider } from '@/context/Provisioning'
 import { PolicyProvider } from '@/context/Policy'
+import { DeploymentConfigProvider } from '@/context/DeploymentConfig'
 import OnboardingReturnBanner from './OnboardingReturnBanner'
 
 /** Reset scroll to the top of the page on every route change. */
@@ -28,6 +29,7 @@ export default function Layout() {
     <EmployeesProvider>
     <ProvisioningProvider>
     <PolicyProvider>
+    <DeploymentConfigProvider>
     <CustomerScopeProvider>
       <ScrollToTop />
       <div className="flex min-h-screen bg-slate-50">
@@ -43,6 +45,7 @@ export default function Layout() {
         </div>
       </div>
     </CustomerScopeProvider>
+    </DeploymentConfigProvider>
     </PolicyProvider>
     </ProvisioningProvider>
     </EmployeesProvider>
