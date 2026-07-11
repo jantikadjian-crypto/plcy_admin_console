@@ -35,6 +35,9 @@ export interface ChangeRequest {
   requested: string
   requestedBy: string
   needsWindow: boolean
+  /** Set when a windowed change has been scheduled into a maintenance window. */
+  scheduledStart?: string
+  windowId?: string
 }
 
 export const AWS_REGIONS = ['us-east-1', 'us-west-2', 'eu-central-1', 'eu-west-1', 'ap-southeast-1', 'de-sov-1']
@@ -59,6 +62,7 @@ interface DeployConfigValue {
   getConfig: (customer: string, fallbackRegion?: string) => CustomerConfig
   requestsFor: (customer: string) => ChangeRequest[]
   requestChanges: (customer: string, patch: Partial<CustomerConfig>, requestedBy: string) => ChangeRequest[]
+  scheduleRequest: (id: string, windowId: string, scheduledStart: string) => void
   applyRequest: (id: string) => void
   cancelRequest: (id: string) => void
 }
@@ -169,6 +173,16 @@ export function DeploymentConfigProvider({ children }: { children: ReactNode }) 
     [store, commit],
   )
 
+  const scheduleRequest = useCallback(
+    (id: string, windowId: string, scheduledStart: string) => {
+      commit({
+        ...store,
+        requests: store.requests.map((r) => (r.id === id ? { ...r, status: 'Applying', windowId, scheduledStart } : r)),
+      })
+    },
+    [store, commit],
+  )
+
   const applyRequest = useCallback(
     (id: string) => {
       const req = store.requests.find((r) => r.id === id)
@@ -193,7 +207,7 @@ export function DeploymentConfigProvider({ children }: { children: ReactNode }) 
   )
 
   return (
-    <Ctx.Provider value={{ getConfig, requestsFor, requestChanges, applyRequest, cancelRequest }}>
+    <Ctx.Provider value={{ getConfig, requestsFor, requestChanges, scheduleRequest, applyRequest, cancelRequest }}>
       {children}
     </Ctx.Provider>
   )

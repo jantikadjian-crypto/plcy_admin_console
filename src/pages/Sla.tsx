@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Gauge,
@@ -13,8 +13,9 @@ import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, 
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useMaintenanceWindows } from '@/context/MaintenanceWindows'
 import { useCreateIntent } from '@/hooks/useCreateIntent'
-import { slaTargets, maintenanceWindows, slaTotals } from '@/data/sla'
+import { slaTargets, slaTotals } from '@/data/sla'
 import type {
   SlaTarget,
   SlaTier,
@@ -99,12 +100,11 @@ export default function Sla() {
   const { can, logAction } = useSession()
   const { scope, isAll } = useCustomerScope()
   const navigate = useNavigate()
+  const { windows, schedule, toggleNotified: storeToggleNotified } = useMaintenanceWindows()
 
-  const [windows, setWindows] = useState<MaintenanceWindow[]>(maintenanceWindows)
   const [open, setOpen] = useState(false)
   const [detailCustomer, setDetailCustomer] = useState<SlaTarget | null>(null)
   const [detailWindow, setDetailWindow] = useState<MaintenanceWindow | null>(null)
-  const counter = useRef(0)
 
   const canNotify = can('settings.modify')
 
@@ -135,7 +135,7 @@ export default function Sla() {
     if (!canNotify) return
     const w = windows.find((x) => x.id === id)
     if (!w) return
-    setWindows((prev) => prev.map((x) => (x.id === id ? { ...x, notified: !x.notified } : x)))
+    storeToggleNotified(id)
     logAction({ action: 'maintenance.notify', target: w.title, category: 'operations' })
   }
 
@@ -152,9 +152,7 @@ export default function Sla() {
 
   const scheduleWindow = () => {
     const title = fTitle.trim() || 'Untitled window'
-    counter.current += 1
-    const next: MaintenanceWindow = {
-      id: `mw_new_${counter.current}`,
+    schedule({
       title,
       customer: fCustomer === FLEET_WIDE ? 'All' : fCustomer,
       region: fRegion.trim() || '—',
@@ -163,10 +161,7 @@ export default function Sla() {
       type: fType,
       impact: fImpact,
       noticeDays: Number.isFinite(fNotice) ? fNotice : 0,
-      notified: false,
-      status: 'Scheduled',
-    }
-    setWindows((prev) => [next, ...prev])
+    })
     logAction({ action: 'maintenance.schedule', target: title, category: 'operations' })
     setOpen(false)
     resetForm()

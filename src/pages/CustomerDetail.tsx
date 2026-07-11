@@ -34,6 +34,7 @@ import {
   MapPin,
   Lock,
   FileBarChart,
+  CalendarPlus,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -56,6 +57,7 @@ import { useCustomerScope } from '@/context/CustomerScope'
 import { useCustomers } from '@/context/Customers'
 import { useDeploymentConfig, AWS_REGIONS, CONNECTIVITY_OPTIONS, FIELD_META } from '@/context/DeploymentConfig'
 import type { CustomerConfig, ChangeRequest } from '@/context/DeploymentConfig'
+import { useMaintenanceWindows } from '@/context/MaintenanceWindows'
 import { instances, models, incidents, fmtMoney, fmtCompact, fmtNum, customerChannels } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 import { ContactChannels } from '@/components/ContactChannels'
@@ -135,11 +137,13 @@ export default function CustomerDetail() {
   const { audit, can, logAction } = useSession()
   const { setScope } = useCustomerScope()
   const { get, update } = useCustomers()
-  const { getConfig, requestsFor, requestChanges, applyRequest, cancelRequest } = useDeploymentConfig()
+  const { getConfig, requestsFor, requestChanges, scheduleRequest, applyRequest, cancelRequest } = useDeploymentConfig()
+  const { schedule: scheduleMaintWindow, complete: completeMaintWindow } = useMaintenanceWindows()
   const location = useLocation()
   const initialTab = (location.state as { tab?: Tab } | null)?.tab ?? 'overview'
   const [tab, setTab] = useState<Tab>(initialTab)
   const [cfgOpen, setCfgOpen] = useState(false)
+  const [schedReq, setSchedReq] = useState<ChangeRequest | null>(null)
   // Deep-link from the Customers list "Edit configuration" opens the config editor.
   useEffect(() => {
     if ((location.state as { openConfig?: boolean } | null)?.openConfig) {
@@ -214,8 +218,32 @@ export default function CustomerDetail() {
     created.forEach((r) => logAction({ action: 'config.change.request', target: `${name} · ${r.label} → ${r.to}`, category: 'provision' }))
     setCfgOpen(false)
   }
-  const doApply = (r: ChangeRequest) => {
+  // Apply a scale change immediately; a windowed change must be scheduled first.
+  const startApply = (r: ChangeRequest) => {
+    if (r.needsWindow) { setSchedReq(r); return }
     applyRequest(r.id)
+    logAction({ action: 'config.change.apply', target: `${name} · ${r.label} → ${r.to}`, category: 'provision' })
+  }
+  // Schedule a maintenance window for a windowed change and move it to Applying.
+  const confirmSchedule = (r: ChangeRequest, start: string, duration: string) => {
+    const win = scheduleMaintWindow({
+      title: `${r.label} change → ${r.to}`,
+      customer: name,
+      region: config.regionCode,
+      start: start.trim() || 'TBD',
+      duration: duration.trim() || '2 h',
+      type: 'Infra',
+      impact: r.field === 'regionCode' ? 'Brief downtime' : 'No downtime',
+      noticeDays: 5,
+    })
+    scheduleRequest(r.id, win.id, start.trim() || 'TBD')
+    logAction({ action: 'config.change.schedule', target: `${name} · ${r.label} → ${r.to} @ ${start.trim() || 'TBD'}`, category: 'provision' })
+    setSchedReq(null)
+  }
+  // Simulate the window completing: commit the config and close the window.
+  const markApplied = (r: ChangeRequest) => {
+    applyRequest(r.id)
+    if (r.windowId) completeMaintWindow(r.windowId)
     logAction({ action: 'config.change.apply', target: `${name} · ${r.label} → ${r.to}`, category: 'provision' })
   }
   const doCancel = (r: ChangeRequest) => {
@@ -521,20 +549,29 @@ export default function CustomerDetail() {
                           <span className="font-mono text-xs text-ink-500">{r.from} → <span className="text-ink-900">{r.to}</span></span>
                           {r.needsWindow && <Badge tone="orange">Needs window</Badge>}
                         </div>
-                        <p className="mt-0.5 text-xs text-ink-400">Requested {r.requested} by {r.requestedBy}</p>
+                        <p className="mt-0.5 text-xs text-ink-400">
+                          Requested {r.requested} by {r.requestedBy}
+                          {r.status === 'Applying' && r.scheduledStart && <span className="text-orange-600"> · window {r.scheduledStart}</span>}
+                        </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <Badge tone={r.status === 'Applied' ? 'green' : r.status === 'Applying' ? 'orange' : 'slate'} dot>{r.status}</Badge>
                         {r.status === 'Pending' && canProvision && (
                           <>
-                            <button className="btn-primary px-2.5 py-1 text-xs" onClick={() => doApply(r)}>
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              Apply
+                            <button className="btn-primary px-2.5 py-1 text-xs" onClick={() => startApply(r)}>
+                              {r.needsWindow ? <CalendarPlus className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                              {r.needsWindow ? 'Schedule window' : 'Apply'}
                             </button>
                             <button className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-rose-50 hover:text-rose-600" aria-label="Cancel change" onClick={() => doCancel(r)}>
                               <X className="h-4 w-4" />
                             </button>
                           </>
+                        )}
+                        {r.status === 'Applying' && canProvision && (
+                          <button className="btn-primary px-2.5 py-1 text-xs" onClick={() => markApplied(r)}>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Mark applied
+                          </button>
                         )}
                       </div>
                     </div>
@@ -908,7 +945,59 @@ export default function CustomerDetail() {
 
       <AddCardModal open={payOpen} onClose={() => setPayOpen(false)} onAdd={addCard} />
       <EditConfigModal open={cfgOpen} onClose={() => setCfgOpen(false)} config={config} onSubmit={submitConfig} />
+      <ScheduleWindowModal req={schedReq} onClose={() => setSchedReq(null)} onConfirm={confirmSchedule} />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Maintenance-window scheduler for a windowed config change           */
+/* ------------------------------------------------------------------ */
+function ScheduleWindowModal({
+  req,
+  onClose,
+  onConfirm,
+}: {
+  req: ChangeRequest | null
+  onClose: () => void
+  onConfirm: (r: ChangeRequest, start: string, duration: string) => void
+}) {
+  const [start, setStart] = useState('')
+  const [duration, setDuration] = useState('2 h')
+  useEffect(() => {
+    if (req) { setStart(''); setDuration('2 h') }
+  }, [req])
+  if (!req) return null
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Schedule maintenance window"
+      subtitle={`${req.label}: ${req.from} → ${req.to}`}
+      maxWidth="max-w-md"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={() => onConfirm(req, start, duration)}>
+            <CalendarPlus className="h-4 w-4" />
+            Schedule window
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+          <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>A {req.field === 'regionCode' ? 'region move' : 'connectivity change'} is applied inside a maintenance window. It appears on the SLA &amp; Maintenance page and the customer's SLA tab until completed.</span>
+        </div>
+        <EditField label="Window start (UTC)">
+          <input className="input" value={start} onChange={(e) => setStart(e.target.value)} placeholder="2026-07-20 02:00 UTC" />
+        </EditField>
+        <EditField label="Duration">
+          <input className="input" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="2 h" />
+        </EditField>
+      </div>
+    </Modal>
   )
 }
 
