@@ -33,6 +33,7 @@ import {
   Phone,
   MapPin,
   Lock,
+  FileBarChart,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -285,6 +286,10 @@ export default function CustomerDetail() {
             </>
           ) : (
             <>
+              <button className="btn-secondary" onClick={() => navigate(`/reports/customer/${c.id}`)}>
+                <FileBarChart className="h-4 w-4" />
+                Generate report
+              </button>
               <button className="btn-secondary" onClick={() => { setScope(name); navigate('/instances') }}>
                 <Building2 className="h-4 w-4" />
                 Set as current customer
