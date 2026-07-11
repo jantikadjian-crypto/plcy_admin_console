@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCreateIntent } from '@/hooks/useCreateIntent'
-import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck } from 'lucide-react'
+import { Search, Plus, Eye, Users, UserCheck, DollarSign, ShieldCheck, MoreVertical, FileBarChart, Settings2, Building2, ExternalLink, X, Server, AlertOctagon, Gauge } from 'lucide-react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -31,8 +31,16 @@ import {
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomers } from '@/context/Customers'
-import { fmtMoney } from '@/data/mock'
+import { useCustomerScope } from '@/context/CustomerScope'
+import { useDeploymentConfig } from '@/context/DeploymentConfig'
+import { fmtMoney, instances, incidents } from '@/data/mock'
 import type { Customer } from '@/data/mock'
+import { slaByCustomer } from '@/data/sla'
+
+const AWS_FROM_REGION: Record<string, string> = {
+  'US-East': 'us-east-1', 'US-West': 'us-west-2', 'EU-Central': 'eu-central-1', 'EU-West': 'eu-west-1', APAC: 'ap-southeast-1',
+}
+const slaTone: Record<string, 'green' | 'orange' | 'red'> = { Meeting: 'green', 'At risk': 'orange', Breached: 'red' }
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -68,11 +76,17 @@ export default function Customers() {
   const { logAction } = useSession()
   const navigate = useNavigate()
   const { list: rows, add } = useCustomers()
+  const { setScope } = useCustomerScope()
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<'All' | Customer['plan']>('All')
   const [adding, setAdding] = useState(false)
+  const [peek, setPeek] = useState<Customer | null>(null)
+  const [menuFor, setMenuFor] = useState<string | null>(null)
   useCreateIntent(() => setAdding(true))
   const openCustomer = (c: Customer) => navigate(`/customers/${c.id}`)
+  const openReport = (c: Customer) => navigate(`/reports/customer/${c.id}`)
+  const editConfig = (c: Customer) => navigate(`/customers/${c.id}`, { state: { tab: 'deployment', openConfig: true } })
+  const setCurrent = (c: Customer) => { setScope(c.name); logAction({ action: 'customer.set-scope', target: c.name, category: 'customer' }) }
 
   const q = query.trim().toLowerCase()
   const filtered = rows.filter((c) => {
@@ -190,9 +204,33 @@ export default function Customers() {
                 </Td>
                 <Td>{c.csm}</Td>
                 <Td className="text-right">
-                  <button className="btn-ghost px-2" aria-label={`View ${c.name}`} onClick={() => openCustomer(c)}>
-                    <Eye className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button className="btn-ghost px-2" aria-label={`Quick view ${c.name}`} title="Quick view" onClick={() => setPeek(c)}>
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <div className="relative">
+                      <button
+                        className="btn-ghost px-2"
+                        aria-label={`Actions for ${c.name}`}
+                        aria-haspopup="menu"
+                        onClick={() => setMenuFor((m) => (m === c.id ? null : c.id))}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                      {menuFor === c.id && (
+                        <>
+                          <div className="fixed inset-0 z-30" onClick={() => setMenuFor(null)} />
+                          <div className="absolute right-0 top-full z-40 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-cardhover">
+                            <RowMenuItem icon={ExternalLink} label="Open profile" onClick={() => { setMenuFor(null); openCustomer(c) }} />
+                            <RowMenuItem icon={Eye} label="Quick view" onClick={() => { setMenuFor(null); setPeek(c) }} />
+                            <RowMenuItem icon={FileBarChart} label="Generate report" onClick={() => { setMenuFor(null); openReport(c) }} />
+                            <RowMenuItem icon={Settings2} label="Edit configuration" onClick={() => { setMenuFor(null); editConfig(c) }} />
+                            <RowMenuItem icon={Building2} label="Set as current customer" onClick={() => { setMenuFor(null); setCurrent(c) }} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </Td>
               </Tr>
             ))}
@@ -212,7 +250,125 @@ export default function Customers() {
           navigate(`/customers/${c.id}`)
         }}
       />
+
+      {peek && (
+        <CustomerPeek
+          c={peek}
+          onClose={() => setPeek(null)}
+          onOpen={() => { const c = peek; setPeek(null); openCustomer(c) }}
+          onReport={() => { const c = peek; setPeek(null); openReport(c) }}
+          onEditConfig={() => { const c = peek; setPeek(null); editConfig(c) }}
+          onSetCurrent={() => { setCurrent(peek); setPeek(null) }}
+        />
+      )}
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Row actions menu item                                               */
+/* ------------------------------------------------------------------ */
+function RowMenuItem({ icon: Icon, label, onClick }: { icon: typeof Eye; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-ink-800 transition-colors hover:bg-slate-100"
+    >
+      <Icon className="h-4 w-4 shrink-0 text-ink-500" />
+      {label}
+    </button>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Customer peek panel — quick stats + actions without leaving the list*/
+/* ------------------------------------------------------------------ */
+function CustomerPeek({
+  c,
+  onClose,
+  onOpen,
+  onReport,
+  onEditConfig,
+  onSetCurrent,
+}: {
+  c: Customer
+  onClose: () => void
+  onOpen: () => void
+  onReport: () => void
+  onEditConfig: () => void
+  onSetCurrent: () => void
+}) {
+  const { getConfig } = useDeploymentConfig()
+  const config = getConfig(c.name, AWS_FROM_REGION[c.region] ?? 'us-east-1')
+  const sla = slaByCustomer(c.name)
+  const custInstances = instances.filter((i) => i.customer === c.name)
+  const up = custInstances.filter((i) => i.uptime > 0)
+  const avgUptime = up.length ? up.reduce((s, i) => s + i.uptime, 0) / up.length : 0
+  const openIncidents = incidents.filter((i) => i.customer === c.name && i.status !== 'Resolved').length
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-sm" onClick={onClose} />
+      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
+          <div className="flex items-center gap-3">
+            <Avatar name={c.name} className="h-12 w-12 text-base" />
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-bold text-ink-900">{c.name}</h2>
+                <Badge tone={planTone[c.plan]}>{c.plan}</Badge>
+                <StatusBadge status={c.status} />
+              </div>
+              <p className="mt-0.5 text-xs text-ink-500">{c.domain} · {c.region} · CSM {c.csm}</p>
+            </div>
+          </div>
+          <button className="rounded-md p-1.5 text-ink-400 transition-colors hover:bg-slate-100 hover:text-ink-800" aria-label="Close" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 p-5">
+          {/* Stat grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <PeekStat icon={DollarSign} label="MRR" value={fmtMoney(c.mrr)} />
+            <PeekStat icon={ShieldCheck} label="Compliance" value={`${c.complianceScore}%`} tone={complianceTone(c.complianceScore) === 'red' ? 'text-rose-600' : undefined} />
+            <PeekStat icon={Gauge} label="Uptime MTD" value={avgUptime ? `${avgUptime.toFixed(2)}%` : '—'} />
+            <PeekStat icon={Server} label="Instances" value={String(custInstances.length)} />
+            <PeekStat icon={ShieldCheck} label="SLA" value={sla ? sla.status : '—'} tone={sla ? (slaTone[sla.status] === 'red' ? 'text-rose-600' : slaTone[sla.status] === 'orange' ? 'text-orange-600' : undefined) : undefined} />
+            <PeekStat icon={AlertOctagon} label="Open incidents" value={String(openIncidents)} tone={openIncidents ? 'text-rose-600' : undefined} />
+          </div>
+
+          {/* Config summary */}
+          <div className="rounded-xl border border-slate-200 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Deployment configuration</p>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div><dt className="text-xs text-ink-500">AWS region</dt><dd className="font-mono font-semibold text-ink-900">{config.regionCode}</dd></div>
+              <div><dt className="text-xs text-ink-500">Connectivity</dt><dd className="font-semibold text-ink-900">{config.connectivity}</dd></div>
+              <div><dt className="text-xs text-ink-500">Nodes</dt><dd className="font-semibold text-ink-900">{config.nodes} ({config.gpuNodes} GPU)</dd></div>
+              <div><dt className="text-xs text-ink-500">Memory</dt><dd className="font-semibold text-ink-900">{config.memoryGb} GB</dd></div>
+            </dl>
+          </div>
+        </div>
+
+        {/* Action bar */}
+        <div className="grid grid-cols-2 gap-2 border-t border-slate-100 p-4">
+          <button className="btn-secondary" onClick={onReport}><FileBarChart className="h-4 w-4" />Generate report</button>
+          <button className="btn-secondary" onClick={onEditConfig}><Settings2 className="h-4 w-4" />Edit configuration</button>
+          <button className="btn-secondary" onClick={onSetCurrent}><Building2 className="h-4 w-4" />Set as current</button>
+          <button className="btn-primary" onClick={onOpen}><ExternalLink className="h-4 w-4" />Open profile</button>
+        </div>
+      </aside>
+    </>
+  )
+}
+
+function PeekStat({ icon: Icon, label, value, tone }: { icon: typeof Eye; label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <Icon className="h-4 w-4 text-ink-400" />
+      <p className={`mt-1.5 text-lg font-bold ${tone ?? 'text-ink-900'}`}>{value}</p>
+      <p className="text-xs text-ink-500">{label}</p>
+    </div>
   )
 }
 

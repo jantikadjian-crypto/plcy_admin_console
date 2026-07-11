@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
   Server,
@@ -136,8 +136,18 @@ export default function CustomerDetail() {
   const { setScope } = useCustomerScope()
   const { get, update } = useCustomers()
   const { getConfig, requestsFor, requestChanges, applyRequest, cancelRequest } = useDeploymentConfig()
-  const [tab, setTab] = useState<Tab>('overview')
+  const location = useLocation()
+  const initialTab = (location.state as { tab?: Tab } | null)?.tab ?? 'overview'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [cfgOpen, setCfgOpen] = useState(false)
+  // Deep-link from the Customers list "Edit configuration" opens the config editor.
+  useEffect(() => {
+    if ((location.state as { openConfig?: boolean } | null)?.openConfig) {
+      setTab('deployment')
+      setCfgOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Partial<Customer>>({})
   const [methods, setMethods] = useState<PaymentMethod[]>(() => paymentByCustomer(get(id ?? '')?.name ?? ''))
