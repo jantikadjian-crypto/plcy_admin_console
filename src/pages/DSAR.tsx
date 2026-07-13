@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { FilePlus2, Eye, FolderOpen, AlertTriangle, CircleCheck, Clock, ArrowRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { FilePlus2, Eye, FolderOpen, AlertTriangle, CircleCheck, Clock, ArrowRight, FileBarChart } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
@@ -38,6 +39,7 @@ function nextStatus(status: DSARStatus): DSARStatus | null {
 }
 
 export default function DSAR() {
+  const navigate = useNavigate()
   const { scope, isAll } = useCustomerScope()
   const { logAction } = useSession()
   const [rows, setRows] = useState<DSARRow[]>(dsarRequests)
@@ -70,10 +72,16 @@ export default function DSAR() {
         title="Data Requests"
         description="Data-subject requests (DSAR) across jurisdictions"
         actions={
-          <button className="btn-primary">
-            <FilePlus2 className="h-4 w-4" />
-            New request
-          </button>
+          <>
+            <button className="btn-secondary" onClick={() => navigate('/reports/dsar')}>
+              <FileBarChart className="h-4 w-4" />
+              Generate report
+            </button>
+            <button className="btn-primary">
+              <FilePlus2 className="h-4 w-4" />
+              New request
+            </button>
+          </>
         }
       />
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Gauge, FileCheck2, ShieldAlert, Timer, Building2, Wallet, ArrowRight, FileBarChart } from 'lucide-react'
+import { Gauge, FileCheck2, ShieldAlert, Timer, Building2, Wallet, Siren, Inbox, ArrowRight, FileBarChart } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, PageHeader, Badge } from '@/components/ui'
 import { useCustomerScope, ALL } from '@/context/CustomerScope'
@@ -15,6 +15,8 @@ const ICONS: Record<ReportDef['icon'], LucideIcon> = {
   timer: Timer,
   building: Building2,
   wallet: Wallet,
+  siren: Siren,
+  inbox: Inbox,
 }
 
 export default function Reports() {

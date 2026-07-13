@@ -19,7 +19,7 @@ export interface ReportDef {
   /** Where the report is also launchable from, for the hint line. */
   launchedFrom: string
   /** lucide icon name (resolved in the page to avoid importing icons here). */
-  icon: 'gauge' | 'file-check' | 'shield-alert' | 'timer' | 'building' | 'wallet'
+  icon: 'gauge' | 'file-check' | 'shield-alert' | 'timer' | 'building' | 'wallet' | 'siren' | 'inbox'
 }
 
 export const reports: ReportDef[] = [
@@ -72,6 +72,26 @@ export const reports: ReportDef[] = [
     to: '/reports/finops',
     launchedFrom: 'Cost & Margin',
     icon: 'wallet',
+  },
+  {
+    key: 'incidents',
+    title: 'Incident Post-Mortem',
+    description: 'AI-governance incident review — severity mix, root-cause & remediation write-ups, and the regulatory obligations triggered.',
+    scope: 'Fleet · scope-aware',
+    category: 'Governance',
+    to: '/reports/incidents',
+    launchedFrom: 'Incident Management',
+    icon: 'siren',
+  },
+  {
+    key: 'dsar',
+    title: 'DSAR Fulfilment',
+    description: 'Data-subject requests against their statutory SLA — overdue and at-risk queue, by type and jurisdiction.',
+    scope: 'Fleet · scope-aware',
+    category: 'Compliance',
+    to: '/reports/dsar',
+    launchedFrom: 'Data Requests',
+    icon: 'inbox',
   },
   {
     key: 'customer',
