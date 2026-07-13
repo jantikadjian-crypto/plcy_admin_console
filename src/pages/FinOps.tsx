@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Wallet, TrendingUp, TrendingDown, Server, AlertTriangle, ArrowUpRight, Receipt } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { TrendingUp, TrendingDown, Server, AlertTriangle, ArrowUpRight, Receipt, FileBarChart } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, PieChart, Pie } from 'recharts'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Modal, Progress } from '@/components/ui'
 import { finopsRows, finopsTotals, costByComponent } from '@/data/finops'
@@ -24,6 +24,7 @@ const COST_LABELS: { key: keyof CostBreakdown; label: string; tone: 'blue' | 'pu
 ]
 
 export default function FinOps() {
+  const navigate = useNavigate()
   const { scope, isAll } = useCustomerScope()
   const [sel, setSel] = useState<FinOpsRow | null>(null)
 
@@ -42,6 +43,12 @@ export default function FinOps() {
         description={isAll
           ? 'What each single-tenant deployment costs to run, next to the revenue it pays — so margin per customer is visible. Monthly figures; worst margin first.'
           : `Cost & margin for ${scope}`}
+        actions={
+          <button className="btn-secondary" onClick={() => navigate('/reports/finops')}>
+            <FileBarChart className="h-4 w-4" />
+            Generate report
+          </button>
+        }
       />
 
       {/* Stat row */}

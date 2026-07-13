@@ -19,7 +19,7 @@ export interface ReportDef {
   /** Where the report is also launchable from, for the hint line. */
   launchedFrom: string
   /** lucide icon name (resolved in the page to avoid importing icons here). */
-  icon: 'gauge' | 'file-check' | 'shield-alert' | 'timer' | 'building'
+  icon: 'gauge' | 'file-check' | 'shield-alert' | 'timer' | 'building' | 'wallet'
 }
 
 export const reports: ReportDef[] = [
@@ -62,6 +62,16 @@ export const reports: ReportDef[] = [
     to: '/reports/sla',
     launchedFrom: 'SLA & Maintenance',
     icon: 'timer',
+  },
+  {
+    key: 'finops',
+    title: 'Cost & Margin',
+    description: 'Infrastructure run-rate vs recurring revenue per customer, money-losers first — the FinOps margin review.',
+    scope: 'Fleet · scope-aware',
+    category: 'Commercial',
+    to: '/reports/finops',
+    launchedFrom: 'Cost & Margin',
+    icon: 'wallet',
   },
   {
     key: 'customer',

@@ -42,6 +42,7 @@ import PostureReport from './pages/PostureReport'
 import ComplianceReport from './pages/ComplianceReport'
 import SecurityReport from './pages/SecurityReport'
 import SlaReport from './pages/SlaReport'
+import FinopsReport from './pages/FinopsReport'
 import CustomerReport from './pages/CustomerReport'
 import Observability from './pages/Observability'
 import Compliance from './pages/Compliance'
@@ -100,6 +101,7 @@ export default function App() {
         <Route path="/reports/compliance" element={<ComplianceReport />} />
         <Route path="/reports/security" element={<SecurityReport />} />
         <Route path="/reports/sla" element={<SlaReport />} />
+        <Route path="/reports/finops" element={<FinopsReport />} />
         <Route path="/reports/customer/:id" element={<CustomerReport />} />
         <Route path="/observability" element={<Observability />} />
         <Route path="/compliance" element={<Compliance />} />
