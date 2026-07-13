@@ -61,6 +61,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', to: '/', icon: LayoutDashboard },
       { label: 'Fleet Overview', to: '/fleet', icon: LayoutGrid },
+      { label: 'Reports', to: '/reports', icon: FileBarChart },
     ],
   },
   {

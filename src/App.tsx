@@ -37,6 +37,7 @@ import DataClassification from './pages/DataClassification'
 import PolicyPacks from './pages/PolicyPacks'
 import PolicyEditor from './pages/PolicyEditor'
 import Enforcement from './pages/Enforcement'
+import Reports from './pages/Reports'
 import PostureReport from './pages/PostureReport'
 import ComplianceReport from './pages/ComplianceReport'
 import SecurityReport from './pages/SecurityReport'
@@ -94,6 +95,7 @@ export default function App() {
         <Route path="/policy-packs" element={<PolicyPacks />} />
         <Route path="/policy-editor" element={<PolicyEditor />} />
         <Route path="/enforcement" element={<Enforcement />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="/reports/posture" element={<PostureReport />} />
         <Route path="/reports/compliance" element={<ComplianceReport />} />
         <Route path="/reports/security" element={<SecurityReport />} />
