@@ -40,6 +40,7 @@ import {
   Radar,
   Wallet,
   CreditCard,
+  HeartPulse,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -69,6 +70,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Instances', to: '/instances', icon: Server },
       { label: 'Billing & Usage', to: '/billing', icon: Receipt },
       { label: 'Billing Integration', to: '/billing-integration', icon: CreditCard },
+      { label: 'Billing Health', to: '/billing-health', icon: HeartPulse },
       { label: 'Cost & Margin', to: '/finops', icon: Wallet },
     ],
   },
