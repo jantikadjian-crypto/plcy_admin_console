@@ -25,6 +25,7 @@ export interface SecurityPolicy {
   allowlistMode: AllowlistMode
   blockAnonymizers: boolean
   requireManagedDevice: boolean
+  requireCompanyVpn: boolean
   // API access
   tokenMaxLifetimeDays: number // 30 | 60 | 90 | 365
   autoExpireUnusedDays: number // 0 = off
@@ -61,6 +62,7 @@ export const defaultSecurityPolicy: SecurityPolicy = {
   allowlistMode: 'Off',
   blockAnonymizers: true,
   requireManagedDevice: false,
+  requireCompanyVpn: true,
   tokenMaxLifetimeDays: 90,
   autoExpireUnusedDays: 60,
   requireScopedTokens: true,
@@ -113,6 +115,7 @@ export const securityChecks: SecurityCheck[] = [
   { id: 'allowlist', label: 'IP allowlist enforced', group: 'Network & devices', weight: 12, ok: (p) => p.allowlistMode === 'Enforce' && p.ipAllowlist.trim().length > 0, fix: 'Add CIDR ranges and set the allowlist to Enforce.' },
   { id: 'anon', label: 'Anonymizers / Tor blocked', group: 'Network & devices', weight: 5, ok: (p) => p.blockAnonymizers, fix: 'Block access from anonymizing networks and Tor exit nodes.' },
   { id: 'device', label: 'Managed devices required', group: 'Network & devices', weight: 6, ok: (p) => p.requireManagedDevice, fix: 'Require a managed / compliant device for console access.' },
+  { id: 'vpn', label: 'Company VPN required', group: 'Network & devices', weight: 6, ok: (p) => p.requireCompanyVpn, fix: 'Require devices to reach the console through the company VPN.' },
   { id: 'tokenlife', label: 'API token lifetime ≤ 90 days', group: 'API access', weight: 4, ok: (p) => p.tokenMaxLifetimeDays <= 90, fix: 'Cap token lifetime at 90 days to force rotation.' },
   { id: 'tokenexpire', label: 'Unused tokens auto-expire', group: 'API access', weight: 5, ok: (p) => p.autoExpireUnusedDays > 0, fix: 'Auto-expire tokens that go unused for a set period.' },
   { id: 'tokenscope', label: 'Scoped tokens required', group: 'API access', weight: 5, ok: (p) => p.requireScopedTokens, fix: 'Require least-privilege scopes on every API token.' },

@@ -529,11 +529,14 @@ function SecuritySettings({ policy, onChange }: { policy: SecurityPolicy; onChan
           <SecRow title="Block anonymizers & Tor" desc="Reject sign-ins from anonymizing networks and Tor exit nodes.">
             <Toggle on={policy.blockAnonymizers} onClick={() => set({ blockAnonymizers: !policy.blockAnonymizers })} />
           </SecRow>
+          <SecRow title="Require company VPN" desc="Console is reachable only through the corporate VPN — enrollment and every session must originate there.">
+            <Toggle on={policy.requireCompanyVpn} onClick={() => set({ requireCompanyVpn: !policy.requireCompanyVpn })} />
+          </SecRow>
           <SecRow title="Require managed devices" desc="Only allow console access from enrolled, compliant devices.">
             <Toggle on={policy.requireManagedDevice} onClick={() => set({ requireManagedDevice: !policy.requireManagedDevice })} />
           </SecRow>
         </div>
-        <ManagedDevices enforcing={policy.requireManagedDevice} />
+        <ManagedDevices enforcing={policy.requireManagedDevice} requireVpn={policy.requireCompanyVpn} />
       </SecGroup>
 
       {/* API access */}

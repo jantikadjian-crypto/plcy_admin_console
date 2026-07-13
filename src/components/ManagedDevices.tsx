@@ -10,6 +10,9 @@ import {
   ShieldCheck,
   X,
   Terminal,
+  Cpu,
+  TriangleAlert,
+  Network,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, Badge, Modal } from '@/components/ui'
@@ -29,6 +32,10 @@ import {
   newDeviceId,
   enrollmentCode,
   enrollCommand,
+  hardwareUuid,
+  boardSerial,
+  deviceFingerprint,
+  serialLooksWeak,
 } from '@/data/devices'
 import type { ManagedDevice, DevicePlatform, PostureChecks } from '@/data/devices'
 
@@ -39,8 +46,8 @@ const platformIcon: Record<DevicePlatform, LucideIcon> = {
   iOS: Smartphone,
   Android: Smartphone,
 }
-const ALL_PASS: PostureChecks = { encryption: true, osCurrent: true, screenLock: true, notJailbroken: true, mdmManaged: true }
-const ALL_FAIL: PostureChecks = { encryption: false, osCurrent: false, screenLock: false, notJailbroken: false, mdmManaged: false }
+const ALL_PASS: PostureChecks = { encryption: true, osCurrent: true, screenLock: true, notJailbroken: true, mdmManaged: true, vpn: true }
+const ALL_FAIL: PostureChecks = { encryption: false, osCurrent: false, screenLock: false, notJailbroken: false, mdmManaged: false, vpn: false }
 const today = () => new Date().toISOString().slice(0, 10)
 
 /* Decorative QR — deterministic from the enrollment code, with corner finders. */
@@ -99,7 +106,7 @@ interface EnrollState {
   deviceId: string
 }
 
-export default function ManagedDevices({ enforcing }: { enforcing: boolean }) {
+export default function ManagedDevices({ enforcing, requireVpn }: { enforcing: boolean; requireVpn: boolean }) {
   const { can, logAction } = useSession()
   const canManage = can('settings.modify')
   const [devices, setDevices] = useState<ManagedDevice[]>(loadDevices)
@@ -129,6 +136,8 @@ export default function ManagedDevices({ enforcing }: { enforcing: boolean }) {
       lastSeen: 'never',
       enrolledAt: '—',
       checks: { ...ALL_FAIL },
+      hardwareUuid: '',
+      boardSerial: '',
     }
     setDevices((prev) => [pending, ...prev])
     setEnroll({ ...enroll, step: 'code', code, deviceId: id })
@@ -137,11 +146,14 @@ export default function ManagedDevices({ enforcing }: { enforcing: boolean }) {
 
   const checkIn = (id: string, platform: DevicePlatform) => {
     setDevices((prev) =>
-      prev.map((d) =>
-        d.id === id
-          ? { ...d, status: 'Trusted', checks: { ...ALL_PASS }, mdm: defaultMdm(platform), osVersion: currentOsVersion(platform), lastSeen: 'just now', enrolledAt: today(), name: d.name.startsWith('New ') ? `${platform} device` : d.name }
-          : d,
-      ),
+      prev.map((d) => {
+        if (d.id !== id) return d
+        // The enrollment client reports its firmware Hardware UUID + board serial;
+        // combined they form the stable, hardware-bound device identity.
+        const uuid = d.hardwareUuid || hardwareUuid(platform)
+        const serial = d.boardSerial || boardSerial(platform)
+        return { ...d, status: 'Trusted', checks: { ...ALL_PASS }, mdm: defaultMdm(platform), osVersion: currentOsVersion(platform), lastSeen: 'just now', enrolledAt: today(), name: d.name.startsWith('New ') ? `${platform} device` : d.name, hardwareUuid: uuid, boardSerial: serial }
+      }),
     )
     logAction({ action: 'device.enroll.complete', target: id, category: 'settings' })
   }
@@ -174,8 +186,8 @@ export default function ManagedDevices({ enforcing }: { enforcing: boolean }) {
           <p className="text-sm font-semibold text-ink-900">Managed devices</p>
           <p className="text-xs text-ink-500">
             {enforcing
-              ? 'Enforcement on — only Trusted devices can reach the console.'
-              : 'Enforcement off — devices are tracked but not yet required.'}
+              ? `Enforcement on — only Trusted devices${requireVpn ? ' on the company VPN' : ''} can reach the console.`
+              : `Enforcement off — devices are tracked but not yet required${requireVpn ? ' (company VPN is enforced)' : ''}.`}
           </p>
         </div>
         <GatedButton cap="settings.modify" className="btn-primary px-3 py-1.5 text-sm" onClick={startEnroll}>
@@ -324,6 +336,16 @@ export default function ManagedDevices({ enforcing }: { enforcing: boolean }) {
                   <CopyButton text={enrollCommand(enroll.platform, enroll.code)} />
                 </div>
               </div>
+              <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-ink-500">
+                <Cpu className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
+                <span>On check-in the client reports the device's <strong>Hardware UUID</strong> and <strong>motherboard serial</strong>, combined into one stable Device ID (<code className="rounded bg-white px-1 font-mono text-[11px]">UUID_Serial</code>). It survives reboots, updates, and reformats — so the device keeps its identity for life.</span>
+              </p>
+              {requireVpn && (
+                <p className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-xs text-brand-700">
+                  <Network className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Company VPN is required — enrollment must originate from the corporate network, and the device stays Trusted only while it holds the VPN posture.</span>
+                </p>
+              )}
             </div>
           )}
         </Modal>
@@ -357,8 +379,45 @@ export default function ManagedDevices({ enforcing }: { enforcing: boolean }) {
               <KV label="MDM" value={detail.mdm} />
               <KV label="Enrolled" value={detail.enrolledAt} />
               <KV label="Last seen" value={detail.lastSeen} />
-              <KV label="Device ID" value={detail.id} mono />
+              <KV label="Record ID" value={detail.id} mono />
             </div>
+
+            {/* Hardware identity — the stable, hardware-bound Device ID */}
+            {detail.hardwareUuid && detail.boardSerial ? (
+              <section>
+                <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink-900"><Cpu className="h-4 w-4 text-ink-400" />Hardware identity</h4>
+                <div className="space-y-2 rounded-xl border border-slate-200 p-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">Hardware UUID</p>
+                      <p className="break-all font-mono text-xs text-ink-700">{detail.hardwareUuid}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">Motherboard serial</p>
+                      <p className="break-all font-mono text-xs text-ink-700">{detail.boardSerial}</p>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-100 pt-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">Device ID · UUID_Serial (stable across reformats)</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] text-slate-100">{deviceFingerprint(detail.hardwareUuid, detail.boardSerial)}</code>
+                      <CopyButton text={deviceFingerprint(detail.hardwareUuid, detail.boardSerial)} />
+                    </div>
+                  </div>
+                  {serialLooksWeak(detail.boardSerial) && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>Motherboard serial is generic (<code className="font-mono">{detail.boardSerial}</code>) — common on VMs and some consumer boards, so the hardware binding is weak. Rely on the certificate / MDM attestation, not the serial alone, to trust this device.</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : (
+              <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-ink-400">
+                Hardware identity is captured on first check-in (Hardware UUID + motherboard serial).
+              </p>
+            )}
+
             <section>
               <h4 className="mb-2 text-sm font-semibold text-ink-900">Posture checks</h4>
               <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">

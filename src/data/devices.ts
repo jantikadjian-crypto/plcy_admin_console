@@ -16,6 +16,8 @@ export interface PostureChecks {
   screenLock: boolean
   notJailbroken: boolean
   mdmManaged: boolean
+  /** Currently reaching the console over the company VPN. */
+  vpn: boolean
 }
 
 export interface ManagedDevice {
@@ -29,6 +31,29 @@ export interface ManagedDevice {
   lastSeen: string
   enrolledAt: string
   checks: PostureChecks
+  /** Firmware Hardware UUID — survives OS reformat. */
+  hardwareUuid: string
+  /** Motherboard / logic-board serial. */
+  boardSerial: string
+}
+
+/**
+ * Stable, hardware-bound device identifier: the firmware Hardware UUID joined to
+ * the motherboard serial. The enrollment client reports both; combined they
+ * survive reboots, OS updates, and reformats, so a device keeps the same identity
+ * across its life. It *names* a device — the certificate / MDM attestation is what
+ * *proves* it, since a plaintext fingerprint can be read and replayed.
+ */
+export function deviceFingerprint(uuid: string, serial: string): string {
+  return `${uuid}_${serial}`
+}
+
+/** Flags board serials that can't be trusted for binding (blank / generic / VM). */
+export function serialLooksWeak(serial: string): boolean {
+  const s = serial.trim().toLowerCase()
+  if (!s) return true
+  if (/^0+$/.test(s.replace(/[-\s]/g, ''))) return true
+  return ['default string', 'to be filled by o.e.m.', 'none', 'system serial number', 'not specified', 'n/a'].includes(s)
 }
 
 export const ADMIN_EMAILS = ['dana.cole@plcy.app', 'marcus.ihde@plcy.app', 'priya.nair@plcy.app', 'jack@plcy.app']
@@ -40,6 +65,7 @@ export const POSTURE_LABELS: { key: keyof PostureChecks; label: string }[] = [
   { key: 'screenLock', label: 'Screen lock / passcode set' },
   { key: 'notJailbroken', label: 'Not jailbroken / rooted' },
   { key: 'mdmManaged', label: 'MDM-enrolled' },
+  { key: 'vpn', label: 'Connected via company VPN' },
 ]
 
 export const deviceStatusTone: Record<DeviceStatus, 'green' | 'orange' | 'slate' | 'red'> = {
@@ -49,14 +75,14 @@ export const deviceStatusTone: Record<DeviceStatus, 'green' | 'orange' | 'slate'
   Blocked: 'red',
 }
 
-const allPass: PostureChecks = { encryption: true, osCurrent: true, screenLock: true, notJailbroken: true, mdmManaged: true }
+const allPass: PostureChecks = { encryption: true, osCurrent: true, screenLock: true, notJailbroken: true, mdmManaged: true, vpn: true }
 
 const seedDevices: ManagedDevice[] = [
-  { id: 'dev_mac01', name: "Dana's MacBook Pro", owner: 'dana.cole@plcy.app', platform: 'macOS', osVersion: '15.5', mdm: 'Jamf', status: 'Trusted', lastSeen: '2m ago', enrolledAt: '2026-03-11', checks: { ...allPass } },
-  { id: 'dev_win01', name: "Priya's ThinkPad X1", owner: 'priya.nair@plcy.app', platform: 'Windows', osVersion: '11 23H2', mdm: 'Intune', status: 'Trusted', lastSeen: '18m ago', enrolledAt: '2026-02-02', checks: { ...allPass } },
-  { id: 'dev_mac02', name: "Jack's MacBook Air", owner: 'jack@plcy.app', platform: 'macOS', osVersion: '15.5', mdm: 'Kandji', status: 'Trusted', lastSeen: '5m ago', enrolledAt: '2026-01-20', checks: { ...allPass } },
-  { id: 'dev_ios01', name: "Marcus's iPhone 15", owner: 'marcus.ihde@plcy.app', platform: 'iOS', osVersion: '18.1', mdm: 'Intune', status: 'At risk', lastSeen: '1h ago', enrolledAt: '2026-04-08', checks: { encryption: true, osCurrent: false, screenLock: true, notJailbroken: true, mdmManaged: true } },
-  { id: 'dev_lnx01', name: 'Unmanaged Linux host', owner: 'priya.nair@plcy.app', platform: 'Linux', osVersion: 'Ubuntu 22.04', mdm: 'None', status: 'Blocked', lastSeen: '3d ago', enrolledAt: '—', checks: { encryption: false, osCurrent: true, screenLock: false, notJailbroken: true, mdmManaged: false } },
+  { id: 'dev_mac01', name: "Dana's MacBook Pro", owner: 'dana.cole@plcy.app', platform: 'macOS', osVersion: '15.5', mdm: 'Jamf', status: 'Trusted', lastSeen: '2m ago', enrolledAt: '2026-03-11', checks: { ...allPass }, hardwareUuid: 'A1B2C3D4-5E6F-4A7B-8C9D-0E1F2A3B4C5D', boardSerial: 'C02FL2ABQ6L4' },
+  { id: 'dev_win01', name: "Priya's ThinkPad X1", owner: 'priya.nair@plcy.app', platform: 'Windows', osVersion: '11 23H2', mdm: 'Intune', status: 'Trusted', lastSeen: '18m ago', enrolledAt: '2026-02-02', checks: { ...allPass }, hardwareUuid: 'F7E6D5C4-B3A2-4190-8877-66554433221A', boardSerial: 'PF3K-9Q2M-7RT4' },
+  { id: 'dev_mac02', name: "Jack's MacBook Air", owner: 'jack@plcy.app', platform: 'macOS', osVersion: '15.5', mdm: 'Kandji', status: 'Trusted', lastSeen: '5m ago', enrolledAt: '2026-01-20', checks: { ...allPass }, hardwareUuid: '9C8B7A6D-5E4F-4321-90AB-CDEF01234567', boardSerial: 'C02GH7XKQ1M9' },
+  { id: 'dev_ios01', name: "Marcus's iPhone 15", owner: 'marcus.ihde@plcy.app', platform: 'iOS', osVersion: '18.1', mdm: 'Intune', status: 'At risk', lastSeen: '1h ago', enrolledAt: '2026-04-08', checks: { encryption: true, osCurrent: false, screenLock: true, notJailbroken: true, mdmManaged: true, vpn: true }, hardwareUuid: '00008120-000C1D2E3F401A22', boardSerial: 'F2LX9KJ7Q1HG' },
+  { id: 'dev_lnx01', name: 'Unmanaged Linux host', owner: 'priya.nair@plcy.app', platform: 'Linux', osVersion: 'Ubuntu 22.04', mdm: 'None', status: 'Blocked', lastSeen: '3d ago', enrolledAt: '—', checks: { encryption: false, osCurrent: true, screenLock: false, notJailbroken: true, mdmManaged: false, vpn: false }, hardwareUuid: '03000200-0400-0500-0006-000700080009', boardSerial: 'Default string' },
 ]
 
 const STORAGE_KEY = 'plcy_managed_devices'
@@ -113,6 +139,23 @@ export function currentOsVersion(platform: DevicePlatform): string {
 
 export function newDeviceId(): string {
   return 'dev_' + Math.random().toString(36).slice(2, 8)
+}
+
+/** Firmware Hardware UUID the enrollment client reports (macOS uses a compact form). */
+export function hardwareUuid(platform: DevicePlatform): string {
+  const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase()
+  if (platform === 'iOS' || platform === 'Android') return `000${hex(5)}-00${hex(14)}`
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${'89AB'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}`
+}
+
+/** Motherboard / logic-board serial, formatted per platform. */
+export function boardSerial(platform: DevicePlatform): string {
+  const alnum = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789'
+  const r = (n: number) => Array.from({ length: n }, () => alnum[Math.floor(Math.random() * alnum.length)]).join('')
+  if (platform === 'macOS') return `C02${r(9)}`
+  if (platform === 'iOS') return `F${r(11)}`
+  if (platform === 'Windows') return `${r(4)}-${r(4)}-${r(4)}`
+  return r(12)
 }
 
 /** Readable one-time enrollment code, e.g. K7QP-3MRT-9XZ2. */
