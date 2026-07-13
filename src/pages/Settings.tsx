@@ -26,6 +26,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
+import ManagedDevices from '@/components/ManagedDevices'
 import { useSession } from '@/context/Session'
 import {
   MFA_METHODS,
@@ -532,6 +533,7 @@ function SecuritySettings({ policy, onChange }: { policy: SecurityPolicy; onChan
             <Toggle on={policy.requireManagedDevice} onClick={() => set({ requireManagedDevice: !policy.requireManagedDevice })} />
           </SecRow>
         </div>
+        <ManagedDevices enforcing={policy.requireManagedDevice} />
       </SecGroup>
 
       {/* API access */}
