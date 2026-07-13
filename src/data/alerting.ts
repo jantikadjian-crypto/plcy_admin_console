@@ -9,11 +9,15 @@
  */
 import { deployments } from './fleet'
 import { slaTargets } from './sla'
-import { customerBilling } from './billing'
+import { dunningQueue, failedPayments, disputes } from './billingHealth'
+import type { DunningStage } from './billingHealth'
 import { terraformFor, imageDriftForDeployment } from './clusters'
 import { registryImages, currentTagOf } from './registry'
 import { channels as defaultChannels, onCall } from './notifications'
 import type { RoutingRule, ChannelType, AlertSeverity, ChannelConfig } from './notifications'
+
+/** Dunning escalates severity as retries are exhausted. */
+const DUNNING_SEV: Record<DunningStage, AlertSeverity> = { Retrying: 'Medium', 'Final notice': 'High', Uncollectible: 'Critical' }
 
 export interface LiveSignal {
   id: string
@@ -78,9 +82,41 @@ export function collectLiveSignals(promoted: Record<string, string>): LiveSignal
     }
   }
 
-  for (const b of customerBilling) {
-    if (b.status === 'Past due') {
-      out.push({ id: `bill-${b.customer}`, event: `${b.customer} billing past due`, category: 'Billing', severity: 'High', target: b.customer, to: '/billing' })
+  // Billing health → operational signals: recurring charges being retried
+  // (dunning), discrete failed payments, and open disputes with a hard
+  // evidence deadline. This closes the billing↔ops loop — money problems now
+  // flow through the same routing rules as cluster and CVE signals.
+  for (const d of dunningQueue) {
+    out.push({
+      id: `dun-${d.id}`,
+      event: `${d.customer} dunning · ${d.stage.toLowerCase()} (${d.attempts}/${d.maxAttempts})`,
+      category: 'Billing',
+      severity: DUNNING_SEV[d.stage],
+      target: d.customer,
+      to: '/billing-health',
+    })
+  }
+  for (const f of failedPayments) {
+    out.push({
+      id: `pay-${f.id}`,
+      event: `${f.customer} payment failed · ${f.reason.replace(/_/g, ' ')}`,
+      // A declined charge on real revenue is High; a $0 trial card is Low.
+      category: 'Billing',
+      severity: f.amount === 0 ? 'Low' : 'High',
+      target: f.customer,
+      to: '/billing-health',
+    })
+  }
+  for (const dp of disputes) {
+    if (dp.status === 'Needs response') {
+      out.push({
+        id: `dsp-${dp.id}`,
+        event: `${dp.customer} chargeback · needs response by ${dp.evidenceDue}`,
+        category: 'Disputes',
+        severity: 'High',
+        target: dp.customer,
+        to: '/billing-health',
+      })
     }
   }
 

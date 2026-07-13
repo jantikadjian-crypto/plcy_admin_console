@@ -341,7 +341,7 @@ export default function Notifications() {
 /* ------------------------------------------------------------------ */
 /* New routing rule                                                    */
 /* ------------------------------------------------------------------ */
-const RULE_CATEGORIES = ['Cluster', 'Supply chain', 'Reliability', 'Billing', 'License', 'Backup', 'Access', 'DSAR', 'Sovereignty']
+const RULE_CATEGORIES = ['Cluster', 'Supply chain', 'Reliability', 'Billing', 'Disputes', 'License', 'Backup', 'Access', 'DSAR', 'Sovereignty']
 const SEVERITIES: AlertSeverity[] = ['Critical', 'High', 'Medium', 'Low']
 const ALL_CHANNELS: ChannelType[] = ['Slack', 'PagerDuty', 'Email', 'Webhook']
 
