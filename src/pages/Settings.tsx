@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import {
   Settings as SettingsIcon,
@@ -611,7 +611,9 @@ const integrations = [
 export default function Settings() {
   const { logAction } = useSession()
   const navigate = useNavigate()
-  const [active, setActive] = useState<TabKey>('General')
+  const [searchParams] = useSearchParams()
+  const initialTab = tabs.find((t) => t.key === searchParams.get('tab'))?.key ?? 'General'
+  const [active, setActive] = useState<TabKey>(initialTab)
   const [accent, setAccent] = useState('#1f47f5')
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     notifyIncidents: true,

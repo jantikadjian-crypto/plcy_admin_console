@@ -11,6 +11,7 @@ import { deployments } from './fleet'
 import { slaTargets } from './sla'
 import { dunningQueue, failedPayments, disputes } from './billingHealth'
 import type { DunningStage } from './billingHealth'
+import { loadDevices, postureSummary } from './devices'
 import { terraformFor, imageDriftForDeployment } from './clusters'
 import { registryImages, currentTagOf } from './registry'
 import { channels as defaultChannels, onCall } from './notifications'
@@ -117,6 +118,17 @@ export function collectLiveSignals(promoted: Record<string, string>): LiveSignal
         target: dp.customer,
         to: '/billing-health',
       })
+    }
+  }
+
+  // Device trust → a non-compliant device that is blocked, or a Trusted device
+  // that has drifted out of posture (stale OS, off the VPN, encryption off).
+  for (const d of loadDevices()) {
+    if (d.status === 'Blocked') {
+      out.push({ id: `dev-${d.id}`, event: `${d.name} blocked — non-compliant device (${d.owner})`, category: 'Device', severity: 'High', target: d.owner, to: '/settings?tab=Security' })
+    } else if (d.status === 'At risk') {
+      const fail = postureSummary(d).failing[0]
+      out.push({ id: `dev-${d.id}`, event: `${d.name} failing posture${fail ? ` · ${fail.toLowerCase()}` : ''}`, category: 'Device', severity: 'Medium', target: d.owner, to: '/settings?tab=Security' })
     }
   }
 
