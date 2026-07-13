@@ -9,6 +9,11 @@ import {
   CreditCard,
   ChevronLeft,
   ChevronRight,
+  FileCheck2,
+  Send,
+  Copy,
+  Link as LinkIcon,
+  Check,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -46,6 +51,7 @@ const invoiceTone: Record<InvoiceStatus, 'green' | 'blue' | 'red' | 'slate'> = {
   Open: 'blue',
   'Past due': 'red',
   Draft: 'slate',
+  Void: 'slate',
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,9 +187,27 @@ export default function Billing() {
   const from = scopedInvoices.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const to = Math.min(page * PAGE_SIZE, scopedInvoices.length)
 
+  const patchInvoice = (id: string, patch: Partial<Invoice>) =>
+    setInvoiceList((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+
   const markPaid = (inv: Invoice) => {
-    setInvoiceList((prev) => prev.map((i) => (i.id === inv.id ? { ...i, status: 'Paid' } : i)))
+    patchInvoice(inv.id, { status: 'Paid' })
     logAction({ action: 'invoice.mark-paid', target: inv.id, category: 'billing' })
+  }
+  // Draft → Open: finalize the invoice so it can be sent / collected.
+  const finalizeInvoice = (inv: Invoice) => {
+    patchInvoice(inv.id, { status: 'Open', issued: '2026-07-11' })
+    logAction({ action: 'invoice.finalize', target: inv.id, category: 'billing' })
+  }
+  // Attach a hosted-invoice payment link and "send" it to the customer.
+  const sendInvoice = (inv: Invoice) => {
+    const link = inv.paymentLink ?? `https://pay.plcy.app/i/${inv.id.toLowerCase()}`
+    patchInvoice(inv.id, { paymentLink: link, status: inv.status === 'Draft' ? 'Open' : inv.status })
+    logAction({ action: 'invoice.send', target: inv.id, category: 'billing' })
+  }
+  const voidInvoice = (inv: Invoice) => {
+    patchInvoice(inv.id, { status: 'Void' })
+    logAction({ action: 'invoice.void', target: inv.id, category: 'billing' })
   }
 
   /* Drill-down drawers. */
@@ -210,18 +234,20 @@ export default function Billing() {
   const submitIssue = () => {
     const amount = Number(issueAmount) || 0
     const id = `INV-NEW-${issueCounter.current++}`
+    // New invoices start as a Draft — finalize, then send, from the drawer.
     const newInvoice: Invoice = {
       id,
       customer: issueCustomer,
       period: issuePeriod,
       amount,
-      status: 'Open',
-      issued: '2026-07-08',
-      due: '2026-08-07',
+      status: 'Draft',
+      issued: '2026-07-11',
+      due: '2026-08-10',
     }
     setInvoiceList((prev) => [newInvoice, ...prev])
-    logAction({ action: 'invoice.issue', target: `${id} · ${issueCustomer}`, category: 'billing' })
+    logAction({ action: 'invoice.create-draft', target: `${id} · ${issueCustomer}`, category: 'billing' })
     setIssueOpen(false)
+    setDetailInvoice(newInvoice)
   }
 
   return (
@@ -328,14 +354,20 @@ export default function Billing() {
                 <Td><Badge tone={invoiceTone[inv.status]} dot>{inv.status}</Badge></Td>
                 <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{inv.due}</Td>
                 <Td className="text-right">
+                  {inv.status === 'Draft' && (
+                    <GatedButton
+                      cap="license.manage"
+                      className="btn-secondary px-2.5 py-1 text-xs"
+                      onClick={(e) => { e.stopPropagation(); finalizeInvoice(inv) }}
+                    >
+                      Finalize
+                    </GatedButton>
+                  )}
                   {actionable && (
                     <GatedButton
                       cap="license.manage"
                       className="btn-secondary px-2.5 py-1 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        markPaid(inv)
-                      }}
+                      onClick={(e) => { e.stopPropagation(); markPaid(inv) }}
                     >
                       Mark paid
                     </GatedButton>
@@ -349,7 +381,14 @@ export default function Billing() {
       </Card>
 
       {/* Invoice detail drawer */}
-      <InvoiceDrawer invoice={liveInvoice} onClose={() => setDetailInvoice(null)} onMarkPaid={markPaid} />
+      <InvoiceDrawer
+        invoice={liveInvoice}
+        onClose={() => setDetailInvoice(null)}
+        onMarkPaid={markPaid}
+        onFinalize={finalizeInvoice}
+        onSend={sendInvoice}
+        onVoid={voidInvoice}
+      />
 
       {/* Customer billing drill-down */}
       <CustomerDrawer
@@ -418,14 +457,54 @@ export default function Billing() {
 /* ------------------------------------------------------------------ */
 /* Invoice detail drawer                                               */
 /* ------------------------------------------------------------------ */
+/** Draft → Open → Paid stepper. Void collapses to a single terminal state. */
+function LifecycleBar({ status }: { status: InvoiceStatus }) {
+  if (status === 'Void') {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-ink-500">
+        <span className="h-2 w-2 rounded-full bg-slate-400" /> Voided — no longer collectible
+      </div>
+    )
+  }
+  const steps = ['Draft', 'Open', 'Paid'] as const
+  const activeIdx = status === 'Draft' ? 0 : status === 'Paid' ? 2 : 1
+  const pastDue = status === 'Past due'
+  return (
+    <div className="flex items-center">
+      {steps.map((s, i) => {
+        const done = i < activeIdx
+        const active = i === activeIdx
+        const label = active && pastDue ? 'Past due' : s
+        return (
+          <div key={s} className="flex flex-1 items-center last:flex-none">
+            <div className="flex items-center gap-1.5">
+              <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${done ? 'bg-emerald-500 text-white' : active ? (pastDue ? 'bg-rose-500 text-white' : 'bg-brand-600 text-white') : 'bg-slate-200 text-slate-500'}`}>
+                {done ? <Check className="h-3 w-3" /> : i + 1}
+              </span>
+              <span className={`text-xs font-medium ${active ? 'text-ink-900' : 'text-ink-400'}`}>{label}</span>
+            </div>
+            {i < steps.length - 1 && <div className={`mx-2 h-px flex-1 ${done ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function InvoiceDrawer({
   invoice,
   onClose,
   onMarkPaid,
+  onFinalize,
+  onSend,
+  onVoid,
 }: {
   invoice: Invoice | null
   onClose: () => void
   onMarkPaid: (inv: Invoice) => void
+  onFinalize: (inv: Invoice) => void
+  onSend: (inv: Invoice) => void
+  onVoid: (inv: Invoice) => void
 }) {
   if (!invoice) return null
   const cust = billingByCustomer(invoice.customer)
@@ -435,7 +514,9 @@ function InvoiceDrawer({
     { label: `${cust?.plan ?? 'Platform'} subscription`, detail: invoice.period, amount: base },
     ...(overage > 0 ? [{ label: 'Usage overage', detail: 'Metered above plan', amount: overage }] : []),
   ]
-  const actionable = invoice.status === 'Open' || invoice.status === 'Past due'
+  const isDraft = invoice.status === 'Draft'
+  const isOpen = invoice.status === 'Open' || invoice.status === 'Past due'
+  const terminal = invoice.status === 'Paid' || invoice.status === 'Void'
 
   return (
     <Modal
@@ -446,17 +527,45 @@ function InvoiceDrawer({
       maxWidth="max-w-lg"
       headerRight={<Badge tone={invoiceTone[invoice.status]} dot>{invoice.status}</Badge>}
       footer={
-        <>
-          <button className="btn-ghost" onClick={onClose}>Close</button>
-          {actionable && (
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <button className="btn-ghost mr-auto" onClick={onClose}>Close</button>
+          {!terminal && (
+            <GatedButton cap="license.manage" className="btn-ghost text-rose-600 hover:bg-rose-50" onClick={() => onVoid(invoice)}>
+              Void
+            </GatedButton>
+          )}
+          {isDraft && (
+            <GatedButton cap="license.manage" className="btn-secondary" onClick={() => onFinalize(invoice)}>
+              <FileCheck2 className="h-4 w-4" /> Finalize
+            </GatedButton>
+          )}
+          {(isOpen || isDraft) && (
+            <GatedButton cap="license.manage" className="btn-secondary" onClick={() => onSend(invoice)}>
+              <Send className="h-4 w-4" /> {invoice.paymentLink ? 'Resend' : 'Send invoice'}
+            </GatedButton>
+          )}
+          {isOpen && (
             <GatedButton cap="license.manage" className="btn-primary" onClick={() => onMarkPaid(invoice)}>
               Mark paid
             </GatedButton>
           )}
-        </>
+        </div>
       }
     >
       <div className="space-y-5">
+        {/* Lifecycle stepper */}
+        <LifecycleBar status={invoice.status} />
+
+        {invoice.paymentLink && (
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <LinkIcon className="h-4 w-4 shrink-0 text-ink-400" />
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-brand-700">{invoice.paymentLink}</span>
+            <button className="shrink-0 rounded-md p-1 text-ink-400 hover:bg-slate-200 hover:text-ink-700" aria-label="Copy payment link" onClick={() => navigator.clipboard?.writeText(invoice.paymentLink!)}>
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-3">
           {[
             { k: 'Issued', v: invoice.issued },

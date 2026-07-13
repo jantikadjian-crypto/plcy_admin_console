@@ -207,7 +207,7 @@ export const billingContacts: Record<string, BillingContact> = {
 
 export const billingContactByCustomer = (customer: string): BillingContact | undefined => billingContacts[customer]
 
-export type InvoiceStatus = 'Paid' | 'Open' | 'Past due' | 'Draft'
+export type InvoiceStatus = 'Paid' | 'Open' | 'Past due' | 'Draft' | 'Void'
 
 export interface Invoice {
   id: string
@@ -217,6 +217,8 @@ export interface Invoice {
   status: InvoiceStatus
   issued: string
   due: string
+  /** Hosted-invoice payment link, set when the invoice is sent. */
+  paymentLink?: string
 }
 
 export const invoices: Invoice[] = [
