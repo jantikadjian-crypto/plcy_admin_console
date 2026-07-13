@@ -23,6 +23,7 @@ import {
   billingTotals,
 } from '@/data/billing'
 import type { Plan, BillingStatus, UsageMeter, Invoice, InvoiceStatus, CustomerBilling } from '@/data/billing'
+import { subscriptions, subStatusTone, subStatusLabel, collectionLabel, subscriptionTotals } from '@/data/subscriptions'
 
 /* ------------------------------------------------------------------ */
 /* Tone maps                                                           */
@@ -157,6 +158,11 @@ export default function Billing() {
   )
   const single = !isAll && scopedCustomers.length === 1
 
+  const scopedSubs = useMemo(
+    () => (isAll ? subscriptions : subscriptions.filter((s) => s.customer === scope)),
+    [isAll, scope],
+  )
+
   /* Invoices are mutable locally (mark paid / issue). */
   const [invoiceList, setInvoiceList] = useState<Invoice[]>(seedInvoices)
   const scopedInvoices = useMemo(
@@ -238,6 +244,27 @@ export default function Billing() {
         <StatCard label="Open invoices" value={money(billingTotals.openInvoices)} icon={Wallet} tone="purple" footer="Awaiting payment" />
         <StatCard label="Past due" value={money(billingTotals.pastDue)} icon={AlertCircle} tone="red" footer={`${billingTotals.pastDueCount} invoices`} />
       </div>
+
+      {/* Subscriptions */}
+      <Card className="mt-6">
+        <CardTitle
+          title="Stripe Subscriptions"
+          subtitle={`Collection motion per customer · ${subscriptionTotals.autoCharge} auto-charge (SaaS) · ${subscriptionTotals.sendInvoice} send-invoice (Enterprise)`}
+        />
+        <Table columns={['Customer', 'Plan', 'Status', 'Collection', 'Price', 'MRR', 'Current period']}>
+          {scopedSubs.map((s) => (
+            <Tr key={s.customer}>
+              <Td className="font-medium text-ink-900">{s.customer}</Td>
+              <Td><Badge tone={planTone[s.plan as Plan]}>{s.plan}</Badge></Td>
+              <Td><Badge tone={subStatusTone[s.status]} dot>{subStatusLabel[s.status]}</Badge></Td>
+              <Td><Badge tone={s.collection === 'send_invoice' ? 'purple' : 'green'}>{collectionLabel[s.collection]}</Badge></Td>
+              <Td className="font-mono text-xs text-ink-500">{s.priceId}</Td>
+              <Td className="font-medium text-ink-900">{money(s.mrr)}</Td>
+              <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{s.currentPeriodStart} → {s.currentPeriodEnd}</Td>
+            </Tr>
+          ))}
+        </Table>
+      </Card>
 
       {/* Usage metering */}
       <Card className="mt-6">

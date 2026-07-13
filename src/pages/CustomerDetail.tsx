@@ -64,6 +64,8 @@ import { ContactChannels } from '@/components/ContactChannels'
 import type { ChannelConfig } from '@/data/notifications'
 import { billingByCustomer, invoices, paymentByCustomer, billingContactByCustomer } from '@/data/billing'
 import type { PaymentMethod, PaymentType, PaymentStatus, BillingContact } from '@/data/billing'
+import { subscriptionByCustomer, subStatusTone, subStatusLabel, collectionLabel } from '@/data/subscriptions'
+import { ExternalLink } from 'lucide-react'
 
 const PLANS: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
 const STATUSES: Customer['status'][] = ['Active', 'Trial', 'Suspended', 'Churned']
@@ -196,6 +198,7 @@ export default function CustomerDetail() {
   const sla = slaByCustomer(name)
   const windows = maintenanceWindows.filter((w) => w.customer === name || w.customer === 'All')
   const billing = billingByCustomer(name)
+  const sub = subscriptionByCustomer(name)
   const custInvoices = invoices.filter((i) => i.customer === name)
   const custIncidents = incidents.filter((i) => i.customer === name)
   const custTransfers = transfers.filter((t) => t.customer === name)
@@ -661,6 +664,37 @@ export default function CustomerDetail() {
         {/* -------------------- Billing -------------------- */}
         {tab === 'billing' && (
           <div className="space-y-6">
+            {sub && (
+              <Card>
+                <CardTitle
+                  title="Stripe Subscription"
+                  subtitle={sub.collection === 'send_invoice' ? 'Enterprise — billed by sent invoice on net terms' : 'SaaS — charged automatically to the default card'}
+                  action={
+                    <a className="btn-ghost px-2 py-1 text-xs" href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open in Stripe
+                    </a>
+                  }
+                />
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <Badge tone={subStatusTone[sub.status]} dot>{subStatusLabel[sub.status]}</Badge>
+                  <Badge tone={sub.collection === 'send_invoice' ? 'purple' : 'green'}>{collectionLabel[sub.collection]}</Badge>
+                  {sub.cancelAtPeriodEnd && <Badge tone="orange">Cancels at period end</Badge>}
+                </div>
+                <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <Fact label="Customer" value={<span className="font-mono text-xs">{sub.stripeCustomerId}</span>} />
+                  <Fact label="Subscription" value={<span className="font-mono text-xs">{sub.subscriptionId}</span>} />
+                  <Fact label="Price" value={<span className="font-mono text-xs">{sub.priceId}</span>} />
+                  <Fact label="Plan · MRR" value={`${sub.plan} · ${money(sub.mrr)}`} />
+                  <Fact label="Current period" value={`${sub.currentPeriodStart} → ${sub.currentPeriodEnd}`} />
+                  {sub.collection === 'send_invoice' ? (
+                    <Fact label="Terms" value={`${sub.poNumber} · Net ${sub.netTermsDays}`} />
+                  ) : (
+                    <Fact label="Next charge" value={sub.currentPeriodEnd} />
+                  )}
+                </dl>
+              </Card>
+            )}
             <Card>
               <CardTitle
                 title="Payment Methods"
