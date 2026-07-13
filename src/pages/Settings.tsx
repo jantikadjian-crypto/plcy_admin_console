@@ -8,17 +8,39 @@ import {
   CreditCard,
   Plug,
   Shield,
+  ShieldCheck,
+  ShieldAlert,
   Save,
   Check,
   KeyRound,
   RotateCcw,
   Lock,
   ChevronDown,
+  Fingerprint,
+  Clock,
+  Network,
+  KeySquare,
+  DatabaseZap,
+  AlertTriangle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
+import {
+  MFA_METHODS,
+  SESSION_TIMEOUTS,
+  IDLE_LOCK_OPTIONS,
+  REMEMBER_DEVICE_OPTIONS,
+  TOKEN_LIFETIME_OPTIONS,
+  AUTO_EXPIRE_OPTIONS,
+  ROTATION_OPTIONS,
+  defaultSecurityPolicy,
+  loadSecurityPolicy,
+  saveSecurityPolicy,
+  scoreSecurity,
+} from '@/data/security'
+import type { SecurityPolicy, MfaMethod, AllowlistMode, PostureRag } from '@/data/security'
 import {
   roleDefs,
   assignedCount,
@@ -290,6 +312,278 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/* Security policy tab                                                  */
+/* ------------------------------------------------------------------ */
+const postureBand: Record<PostureRag, string> = {
+  green: 'from-emerald-500 to-emerald-600',
+  amber: 'from-amber-500 to-orange-500',
+  red: 'from-rose-500 to-rose-600',
+}
+const postureIcon: Record<PostureRag, LucideIcon> = { green: ShieldCheck, amber: ShieldAlert, red: ShieldAlert }
+
+function SecGroup({ icon: Icon, title, subtitle, children }: { icon: LucideIcon; title: string; subtitle: string; children: ReactNode }) {
+  return (
+    <Card>
+      <div className="mb-1 flex items-center gap-2.5">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-ink-600">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-[15px] font-semibold text-ink-900">{title}</p>
+          <p className="text-xs text-ink-500">{subtitle}</p>
+        </div>
+      </div>
+      <div className="mt-2">{children}</div>
+    </Card>
+  )
+}
+
+function SecRow({ title, desc, children }: { title: string; desc: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-ink-900">{title}</p>
+        <p className="text-xs text-ink-500">{desc}</p>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  )
+}
+
+function SecuritySettings({ policy, onChange }: { policy: SecurityPolicy; onChange: (p: SecurityPolicy) => void }) {
+  const { can } = useSession()
+  const canManage = can('settings.modify')
+  const posture = scoreSecurity(policy)
+  const PostureIcon = postureIcon[posture.rag]
+
+  const set = (patch: Partial<SecurityPolicy>) => canManage && onChange({ ...policy, ...patch })
+  const toggleMethod = (m: MfaMethod) =>
+    set({ mfaMethods: policy.mfaMethods.includes(m) ? policy.mfaMethods.filter((x) => x !== m) : [...policy.mfaMethods, m] })
+
+  const dirty = JSON.stringify(policy) !== JSON.stringify(defaultSecurityPolicy)
+
+  return (
+    <div className="space-y-6">
+      {/* Posture banner */}
+      <div className={`rounded-2xl bg-gradient-to-r ${postureBand[posture.rag]} p-5 text-white shadow-sm`}>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-4">
+            <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/15">
+              <PostureIcon className="h-7 w-7" />
+            </span>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-white/80">Security posture</p>
+              <p className="text-3xl font-bold leading-tight">{posture.score}<span className="text-lg font-medium text-white/70">/100</span></p>
+              <p className="text-sm font-medium">{posture.label} · {posture.passed}/{posture.total} controls</p>
+            </div>
+          </div>
+          <div className="flex-1 rounded-xl bg-white/10 p-3 text-sm">
+            {posture.findings.length === 0 ? (
+              <p className="flex items-center gap-2 font-medium"><Check className="h-4 w-4" /> Every hardening control is enabled.</p>
+            ) : (
+              <>
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/80">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Top gaps to close
+                </p>
+                <ul className="space-y-1">
+                  {posture.findings.slice(0, 3).map((f) => (
+                    <li key={f.label} className="flex gap-2">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-white/70" />
+                      <span><span className="font-medium">{f.label}.</span> <span className="text-white/85">{f.fix}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {!canManage && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <Lock className="h-4 w-4 shrink-0" /> Your role can view the security policy but not change it.
+        </div>
+      )}
+
+      {/* Authentication */}
+      <SecGroup icon={Fingerprint} title="Authentication" subtitle="How admins prove who they are">
+        <div className="divide-y divide-slate-100">
+          <SecRow title="Enforce MFA" desc="Require a second factor for every admin sign-in.">
+            <Toggle on={policy.enforceMfa} onClick={() => set({ enforceMfa: !policy.enforceMfa })} />
+          </SecRow>
+          <div className="py-4">
+            <p className="text-sm font-semibold text-ink-900">Allowed MFA methods</p>
+            <p className="mb-2.5 text-xs text-ink-500">Prefer phishing-resistant factors. SMS is the weakest.</p>
+            <div className="flex flex-wrap gap-2">
+              {MFA_METHODS.map((m) => {
+                const on = policy.mfaMethods.includes(m.id)
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => toggleMethod(m.id)}
+                    disabled={!canManage}
+                    aria-pressed={on}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors disabled:cursor-not-allowed ${
+                      on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-slate-200 text-ink-500 hover:border-slate-300'
+                    } ${m.id === 'SMS' && on ? 'border-amber-300 bg-amber-50 text-amber-700' : ''}`}
+                  >
+                    {m.label}
+                    <span className="text-[10px] font-normal opacity-70">{m.note}</span>
+                    {on && <Check className="h-3.5 w-3.5" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <SecRow title="Enforce SSO" desc="Require SAML sign-in and disable local password login.">
+            <Toggle on={policy.enforceSso} onClick={() => set({ enforceSso: !policy.enforceSso })} />
+          </SecRow>
+          <SecRow title="Step-up re-authentication" desc="Re-verify identity before high-risk actions (key rotation, break-glass).">
+            <Toggle on={policy.stepUpReauth} onClick={() => set({ stepUpReauth: !policy.stepUpReauth })} />
+          </SecRow>
+          <div className="py-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-ink-900">Password policy</p>
+                <p className="text-xs text-ink-500">Applies to local password login.</p>
+              </div>
+              {policy.enforceSso && <Badge tone="slate">Managed by IdP</Badge>}
+            </div>
+            <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${policy.enforceSso ? 'pointer-events-none opacity-50' : ''}`}>
+              <Field label={`Minimum length · ${policy.passwordMinLength}`}>
+                <input
+                  type="range"
+                  min={8}
+                  max={24}
+                  value={policy.passwordMinLength}
+                  onChange={(e) => set({ passwordMinLength: Number(e.target.value) })}
+                  disabled={!canManage || policy.enforceSso}
+                  className="w-full accent-brand-600"
+                />
+              </Field>
+              <Field label="Rotation">
+                <select className="input" value={policy.passwordRotationDays} onChange={(e) => set({ passwordRotationDays: Number(e.target.value) })} disabled={!canManage || policy.enforceSso}>
+                  {ROTATION_OPTIONS.map((d) => <option key={d} value={d}>{d === 0 ? 'Never' : `Every ${d} days`}</option>)}
+                </select>
+              </Field>
+            </div>
+          </div>
+        </div>
+      </SecGroup>
+
+      {/* Sessions */}
+      <SecGroup icon={Clock} title="Sessions" subtitle="How long access stays live">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label="Session timeout">
+            <select className="input" value={policy.sessionTimeoutHours} onChange={(e) => set({ sessionTimeoutHours: Number(e.target.value) })} disabled={!canManage}>
+              {SESSION_TIMEOUTS.map((h) => <option key={h} value={h}>{h === 1 ? '1 hour' : `${h} hours`}</option>)}
+            </select>
+          </Field>
+          <Field label="Idle lock">
+            <select className="input" value={policy.idleLockMinutes} onChange={(e) => set({ idleLockMinutes: Number(e.target.value) })} disabled={!canManage}>
+              {IDLE_LOCK_OPTIONS.map((m) => <option key={m} value={m}>{m === 0 ? 'Off' : `After ${m} min`}</option>)}
+            </select>
+          </Field>
+          <Field label="Max concurrent sessions / admin">
+            <select className="input" value={policy.maxConcurrentSessions} onChange={(e) => set({ maxConcurrentSessions: Number(e.target.value) })} disabled={!canManage}>
+              {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </Field>
+          <Field label="Remember this device">
+            <select className="input" value={policy.rememberDeviceDays} onChange={(e) => set({ rememberDeviceDays: Number(e.target.value) })} disabled={!canManage}>
+              {REMEMBER_DEVICE_OPTIONS.map((d) => <option key={d} value={d}>{d === 0 ? 'Off — MFA every time' : `${d} days`}</option>)}
+            </select>
+          </Field>
+        </div>
+      </SecGroup>
+
+      {/* Network & devices */}
+      <SecGroup icon={Network} title="Network & devices" subtitle="Where the console can be reached from">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label="IP allowlist (CIDR)">
+            <input className="input" placeholder="10.4.0.0/16, 52.9.44.0/24" value={policy.ipAllowlist} onChange={(e) => set({ ipAllowlist: e.target.value })} disabled={!canManage} />
+          </Field>
+          <Field label="Allowlist enforcement">
+            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+              {(['Off', 'Audit', 'Enforce'] as AllowlistMode[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => set({ allowlistMode: m })}
+                  disabled={!canManage}
+                  aria-pressed={policy.allowlistMode === m}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
+                    policy.allowlistMode === m ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <div className="mt-1 divide-y divide-slate-100">
+          <SecRow title="Block anonymizers & Tor" desc="Reject sign-ins from anonymizing networks and Tor exit nodes.">
+            <Toggle on={policy.blockAnonymizers} onClick={() => set({ blockAnonymizers: !policy.blockAnonymizers })} />
+          </SecRow>
+          <SecRow title="Require managed devices" desc="Only allow console access from enrolled, compliant devices.">
+            <Toggle on={policy.requireManagedDevice} onClick={() => set({ requireManagedDevice: !policy.requireManagedDevice })} />
+          </SecRow>
+        </div>
+      </SecGroup>
+
+      {/* API access */}
+      <SecGroup icon={KeySquare} title="API access" subtitle="Governance for programmatic tokens">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label="Max token lifetime">
+            <select className="input" value={policy.tokenMaxLifetimeDays} onChange={(e) => set({ tokenMaxLifetimeDays: Number(e.target.value) })} disabled={!canManage}>
+              {TOKEN_LIFETIME_OPTIONS.map((d) => <option key={d} value={d}>{d === 365 ? '1 year' : `${d} days`}</option>)}
+            </select>
+          </Field>
+          <Field label="Auto-expire unused tokens">
+            <select className="input" value={policy.autoExpireUnusedDays} onChange={(e) => set({ autoExpireUnusedDays: Number(e.target.value) })} disabled={!canManage}>
+              {AUTO_EXPIRE_OPTIONS.map((d) => <option key={d} value={d}>{d === 0 ? 'Never' : `After ${d} days idle`}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div className="mt-1 divide-y divide-slate-100">
+          <SecRow title="Require scoped tokens" desc="Every token must declare least-privilege scopes — no full-access keys.">
+            <Toggle on={policy.requireScopedTokens} onClick={() => set({ requireScopedTokens: !policy.requireScopedTokens })} />
+          </SecRow>
+        </div>
+      </SecGroup>
+
+      {/* Data protection */}
+      <SecGroup icon={DatabaseZap} title="Data protection" subtitle="Encryption and key custody">
+        <div className="divide-y divide-slate-100">
+          <SecRow title="Customer-managed keys (BYOK / HSM)" desc="Encryption keys stay under customer control via a dedicated HSM.">
+            <Toggle on={policy.customerManagedKeys} onClick={() => set({ customerManagedKeys: !policy.customerManagedKeys })} />
+          </SecRow>
+          <div className="flex items-center justify-between py-4">
+            <div>
+              <p className="text-sm font-semibold text-ink-900">Encryption at rest</p>
+              <p className="text-xs text-ink-500">AES-256 on all volumes and backups — always on.</p>
+            </div>
+            <Badge tone="green" dot>Always on</Badge>
+          </div>
+        </div>
+      </SecGroup>
+
+      {canManage && (
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+          <span className="text-ink-500">
+            {dirty ? 'Policy differs from PLCY recommended defaults.' : 'Matches PLCY recommended defaults.'}
+          </span>
+          <button className="btn-ghost" onClick={() => onChange({ ...defaultSecurityPolicy })} disabled={!dirty} title="Restore recommended defaults">
+            <RotateCcw className="h-4 w-4" />
+            Restore defaults
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const swatches = [
   { name: 'Brand Blue', hex: '#1f47f5' },
   { name: 'Violet', hex: '#8b5cf6' },
@@ -318,11 +612,12 @@ export default function Settings() {
     notifyBilling: false,
     notifyDigest: true,
     notifyReleases: false,
-    enforceMfa: true,
-    ipAllowlist: false,
   })
 
   const flip = (k: string) => setToggles((p) => ({ ...p, [k]: !p[k] }))
+
+  // Org-wide security policy (persisted); the posture score reacts live.
+  const [securityPolicy, setSecurityPolicy] = useState<SecurityPolicy>(loadSecurityPolicy)
 
   // Editable + persisted access matrix, with a change log
   const [accessMap, setAccessMap] = useState<AccessMap>(() => effectiveAccessMap())
@@ -355,7 +650,8 @@ export default function Settings() {
 
   const saveChanges = () => {
     saveAccessMap(accessMap)
-    logAction({ action: 'settings.save', target: 'roles & permissions', category: 'settings' })
+    saveSecurityPolicy(securityPolicy)
+    logAction({ action: 'settings.save', target: active === 'Security' ? 'security policy' : 'roles & permissions', category: 'settings' })
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2000)
   }
@@ -614,38 +910,7 @@ export default function Settings() {
           )}
 
           {active === 'Security' && (
-            <Card>
-              <CardTitle title="Security" subtitle="Access controls and authentication" />
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <Field label="Session timeout">
-                  <select className="input" defaultValue="8 hours">
-                    <option>1 hour</option>
-                    <option>4 hours</option>
-                    <option>8 hours</option>
-                    <option>24 hours</option>
-                  </select>
-                </Field>
-                <Field label="IP allowlist (CIDR)">
-                  <input className="input" placeholder="10.4.0.0/16, 52.9.44.0/24" />
-                </Field>
-              </div>
-              <div className="mt-5 divide-y divide-slate-100">
-                <div className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="text-sm font-semibold text-ink-900">Enforce MFA</p>
-                    <p className="text-xs text-ink-500">Require a second factor for every admin sign-in.</p>
-                  </div>
-                  <Toggle on={toggles.enforceMfa} onClick={() => flip('enforceMfa')} />
-                </div>
-                <div className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="text-sm font-semibold text-ink-900">Restrict to IP allowlist</p>
-                    <p className="text-xs text-ink-500">Block console access from outside allowed ranges.</p>
-                  </div>
-                  <Toggle on={toggles.ipAllowlist} onClick={() => flip('ipAllowlist')} />
-                </div>
-              </div>
-            </Card>
+            <SecuritySettings policy={securityPolicy} onChange={setSecurityPolicy} />
           )}
         </div>
       </div>
