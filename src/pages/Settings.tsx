@@ -443,14 +443,16 @@ function SecuritySettings({ policy, onChange }: { policy: SecurityPolicy; onChan
             <Toggle on={policy.stepUpReauth} onClick={() => set({ stepUpReauth: !policy.stepUpReauth })} />
           </SecRow>
           <div className="py-4">
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-ink-900">Password policy</p>
-                <p className="text-xs text-ink-500">Applies to local password login.</p>
+                <p className="text-xs text-ink-500">
+                  {policy.enforceSso ? 'Fallback for local login — applies if SSO is ever disabled.' : 'Applies to local password login.'}
+                </p>
               </div>
-              {policy.enforceSso && <Badge tone="slate">Managed by IdP</Badge>}
+              {policy.enforceSso && <Badge tone="slate">SSO active</Badge>}
             </div>
-            <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${policy.enforceSso ? 'pointer-events-none opacity-50' : ''}`}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label={`Minimum length · ${policy.passwordMinLength}`}>
                 <input
                   type="range"
@@ -458,12 +460,12 @@ function SecuritySettings({ policy, onChange }: { policy: SecurityPolicy; onChan
                   max={24}
                   value={policy.passwordMinLength}
                   onChange={(e) => set({ passwordMinLength: Number(e.target.value) })}
-                  disabled={!canManage || policy.enforceSso}
+                  disabled={!canManage}
                   className="w-full accent-brand-600"
                 />
               </Field>
               <Field label="Rotation">
-                <select className="input" value={policy.passwordRotationDays} onChange={(e) => set({ passwordRotationDays: Number(e.target.value) })} disabled={!canManage || policy.enforceSso}>
+                <select className="input" value={policy.passwordRotationDays} onChange={(e) => set({ passwordRotationDays: Number(e.target.value) })} disabled={!canManage}>
                   {ROTATION_OPTIONS.map((d) => <option key={d} value={d}>{d === 0 ? 'Never' : `Every ${d} days`}</option>)}
                 </select>
               </Field>
