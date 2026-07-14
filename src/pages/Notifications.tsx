@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
+import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight, Pencil, Trash2, ArrowUp, ArrowDown, CalendarClock } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -10,11 +10,13 @@ import {
   routingRules as seedRules,
   loadOnCall,
   saveOnCall,
-  rotation,
-  escalation,
+  loadRotation,
+  saveRotation,
+  loadEscalation,
+  saveEscalation,
   recentAlerts,
 } from '@/data/notifications'
-import type { ChannelType, ChannelConfig, RoutingRule, AlertSeverity, DeliveryStatus, OnCallShift } from '@/data/notifications'
+import type { ChannelType, ChannelConfig, RoutingRule, AlertSeverity, DeliveryStatus, OnCallShift, RotationWeek } from '@/data/notifications'
 import { employeesSeed } from '@/data/team'
 import { useRegistryPromoted } from '@/data/registryStore'
 import { collectLiveSignals, evaluateRouting, routingSummary } from '@/data/alerting'
@@ -51,6 +53,14 @@ const routingStatusLabel: Record<RoutingStatus, string> = {
   unrouted: 'No route',
 }
 
+function moveItem<T>(list: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir
+  if (j < 0 || j >= list.length) return list
+  const next = list.slice()
+  ;[next[i], next[j]] = [next[j], next[i]]
+  return next
+}
+
 function ChannelBadges({ list }: { list: ChannelType[] }) {
   return (
     <div className="flex flex-wrap gap-1">
@@ -70,11 +80,20 @@ export default function Notifications() {
   const [channelList, setChannelList] = useState<ChannelConfig[]>(seedChannels)
   const [onCallList, setOnCallList] = useState<OnCallShift[]>(loadOnCall)
   const [onCallOpen, setOnCallOpen] = useState(false)
+  const [rotationList, setRotationList] = useState<RotationWeek[]>(loadRotation)
+  const [escalationList, setEscalationList] = useState<string[]>(loadEscalation)
   const canManage = can('settings.modify')
+  const roster = useMemo(() => employeesSeed.map((e) => e.name), [])
 
   useEffect(() => {
     saveOnCall(onCallList)
   }, [onCallList])
+  useEffect(() => {
+    saveRotation(rotationList)
+  }, [rotationList])
+  useEffect(() => {
+    saveEscalation(escalationList)
+  }, [escalationList])
 
   const signals = collectLiveSignals(promoted)
   const summary = routingSummary(signals, rules, channelList)
@@ -120,6 +139,38 @@ export default function Notifications() {
     logAction({ action: 'notification.oncall.update', target: `Primary ${list.find((o) => o.role === 'Primary')?.name ?? '—'}`, category: 'notifications' })
     setOnCallOpen(false)
   }
+
+  // Rotation editing
+  const setRotationRow = (i: number, patch: Partial<RotationWeek>) =>
+    setRotationList((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  const addWeek = () => {
+    setRotationList((prev) => [...prev, { week: `Week ${prev.length + 1}`, primary: roster[0] ?? '', secondary: roster[1] ?? '' }])
+    logAction({ action: 'notification.rotation.add', target: 'rotation week', category: 'notifications' })
+  }
+  const removeWeek = (i: number) => {
+    const wk = rotationList[i]?.week
+    setRotationList((prev) => prev.filter((_, idx) => idx !== i))
+    logAction({ action: 'notification.rotation.remove', target: wk ?? 'week', category: 'notifications' })
+  }
+  const moveWeek = (i: number, dir: -1 | 1) => setRotationList((prev) => moveItem(prev, i, dir))
+  const applyRotationToOnCall = (r: RotationWeek) => {
+    setOnCallList((prev) =>
+      prev.map((o) =>
+        o.role === 'Primary'
+          ? { ...o, name: r.primary, window: r.week, active: true }
+          : o.role === 'Secondary'
+            ? { ...o, name: r.secondary, window: r.week, active: true }
+            : o,
+      ),
+    )
+    logAction({ action: 'notification.oncall.rotate', target: `${r.week} → ${r.primary} / ${r.secondary}`, category: 'notifications' })
+  }
+
+  // Escalation editing
+  const setStep = (i: number, val: string) => setEscalationList((prev) => prev.map((s, idx) => (idx === i ? val : s)))
+  const addStep = () => setEscalationList((prev) => [...prev, 'New escalation step'])
+  const removeStep = (i: number) => setEscalationList((prev) => prev.filter((_, idx) => idx !== i))
+  const moveStep = (i: number, dir: -1 | 1) => setEscalationList((prev) => moveItem(prev, i, dir))
 
   return (
     <>
@@ -301,12 +352,35 @@ export default function Notifications() {
             ))}
           </div>
           <div className="mt-4">
-            <p className="mb-2 text-sm font-semibold text-ink-900">Escalation policy</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-ink-900">Escalation policy</p>
+              {canManage && (
+                <button className="btn-ghost px-2 py-1 text-xs" onClick={addStep}>
+                  <Plus className="h-3.5 w-3.5" />Step
+                </button>
+              )}
+            </div>
             <ol className="space-y-1.5">
-              {escalation.map((step, i) => (
+              {escalationList.map((step, i) => (
                 <li key={i} className="flex items-center gap-2 text-sm text-ink-700">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-ink-500">{i + 1}</span>
-                  {step}
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-ink-500">{i + 1}</span>
+                  {canManage ? (
+                    <>
+                      <input
+                        className="input h-8 flex-1 py-1 text-sm"
+                        value={step}
+                        onChange={(e) => setStep(i, e.target.value)}
+                        aria-label={`Escalation step ${i + 1}`}
+                      />
+                      <div className="flex shrink-0 items-center">
+                        <button className="rounded p-1 text-ink-400 hover:bg-slate-100 hover:text-ink-700 disabled:opacity-30" onClick={() => moveStep(i, -1)} disabled={i === 0} aria-label="Move up"><ArrowUp className="h-3.5 w-3.5" /></button>
+                        <button className="rounded p-1 text-ink-400 hover:bg-slate-100 hover:text-ink-700 disabled:opacity-30" onClick={() => moveStep(i, 1)} disabled={i === escalationList.length - 1} aria-label="Move down"><ArrowDown className="h-3.5 w-3.5" /></button>
+                        <button className="rounded p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => removeStep(i)} aria-label="Remove step"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    </>
+                  ) : (
+                    <span>{step}</span>
+                  )}
                 </li>
               ))}
             </ol>
@@ -316,16 +390,69 @@ export default function Notifications() {
 
       {/* Rotation */}
       <Card className="mt-6">
-        <CardTitle title="Upcoming Rotation" subtitle="Primary & secondary on-call by week" />
-        <Table columns={['Week', 'Primary', 'Secondary']}>
-          {rotation.map((r) => (
-            <Tr key={r.week}>
-              <Td className="font-medium text-ink-900">{r.week}</Td>
-              <Td className="text-ink-700">{r.primary}</Td>
-              <Td className="text-ink-700">{r.secondary}</Td>
-            </Tr>
-          ))}
-        </Table>
+        <CardTitle
+          title="Upcoming Rotation"
+          subtitle="Primary & secondary on-call by week · apply any week to the live assignment"
+          action={canManage ? (
+            <button className="btn-ghost px-2 py-1 text-xs" onClick={addWeek}>
+              <Plus className="h-3.5 w-3.5" />Add week
+            </button>
+          ) : undefined}
+        />
+        {canManage ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
+                  <th className="py-2 pr-3">Week</th>
+                  <th className="py-2 pr-3">Primary</th>
+                  <th className="py-2 pr-3">Secondary</th>
+                  <th className="py-2 pr-3 text-right">Order / actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rotationList.map((r, i) => (
+                  <tr key={i}>
+                    <td className="py-2 pr-3">
+                      <input className="input h-8 py-1 text-sm" value={r.week} onChange={(e) => setRotationRow(i, { week: e.target.value })} aria-label={`Week ${i + 1} label`} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <select className="input h-8 py-1 text-sm" value={r.primary} onChange={(e) => setRotationRow(i, { primary: e.target.value })} aria-label={`Week ${i + 1} primary`}>
+                        {(roster.includes(r.primary) ? roster : [r.primary, ...roster]).map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <select className="input h-8 py-1 text-sm" value={r.secondary} onChange={(e) => setRotationRow(i, { secondary: e.target.value })} aria-label={`Week ${i + 1} secondary`}>
+                        {(roster.includes(r.secondary) ? roster : [r.secondary, ...roster]).map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button className="rounded p-1.5 text-ink-400 hover:bg-slate-100 hover:text-ink-700 disabled:opacity-30" onClick={() => moveWeek(i, -1)} disabled={i === 0} aria-label="Move up"><ArrowUp className="h-4 w-4" /></button>
+                        <button className="rounded p-1.5 text-ink-400 hover:bg-slate-100 hover:text-ink-700 disabled:opacity-30" onClick={() => moveWeek(i, 1)} disabled={i === rotationList.length - 1} aria-label="Move down"><ArrowDown className="h-4 w-4" /></button>
+                        <button className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50" onClick={() => applyRotationToOnCall(r)} title="Set this week as the current on-call"><CalendarClock className="h-3.5 w-3.5" />Make current</button>
+                        <button className="rounded p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30" onClick={() => removeWeek(i)} disabled={rotationList.length <= 1} aria-label="Remove week"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {rotationList.length === 0 && (
+                  <tr><td colSpan={4} className="py-6 text-center text-sm text-ink-400">No weeks scheduled — add one to build the rotation.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Table columns={['Week', 'Primary', 'Secondary']}>
+            {rotationList.map((r, i) => (
+              <Tr key={i}>
+                <Td className="font-medium text-ink-900">{r.week}</Td>
+                <Td className="text-ink-700">{r.primary}</Td>
+                <Td className="text-ink-700">{r.secondary}</Td>
+              </Tr>
+            ))}
+          </Table>
+        )}
       </Card>
 
       {/* Recent alerts */}
@@ -359,7 +486,7 @@ export default function Notifications() {
       {onCallOpen && (
         <OnCallModal
           list={onCallList}
-          roster={employeesSeed.map((e) => e.name)}
+          roster={roster}
           onClose={() => setOnCallOpen(false)}
           onSave={saveOnCallList}
         />

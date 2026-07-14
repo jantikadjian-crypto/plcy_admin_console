@@ -85,7 +85,13 @@ export function primaryResponder(): string {
   return loadOnCall().find((o) => o.role === 'Primary' && o.active)?.name ?? '—'
 }
 
-export const rotation = [
+export interface RotationWeek {
+  week: string
+  primary: string
+  secondary: string
+}
+
+export const rotation: RotationWeek[] = [
   { week: 'This week (Jul 7)', primary: 'Dana Cole', secondary: 'Marcus Ihde' },
   { week: 'Jul 14', primary: 'Marcus Ihde', secondary: 'Priya Nair' },
   { week: 'Jul 21', primary: 'Priya Nair', secondary: 'Dana Cole' },
@@ -96,6 +102,42 @@ export const escalation = [
   'No ack in 5 min → page Secondary',
   'No ack in 15 min → escalate to Manager',
 ]
+
+const ROTATION_KEY = 'plcy_rotation'
+export function loadRotation(): RotationWeek[] {
+  try {
+    const raw = localStorage.getItem(ROTATION_KEY)
+    if (!raw) return rotation.map((r) => ({ ...r }))
+    return JSON.parse(raw) as RotationWeek[]
+  } catch {
+    return rotation.map((r) => ({ ...r }))
+  }
+}
+export function saveRotation(list: RotationWeek[]) {
+  try {
+    localStorage.setItem(ROTATION_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
+const ESCALATION_KEY = 'plcy_escalation'
+export function loadEscalation(): string[] {
+  try {
+    const raw = localStorage.getItem(ESCALATION_KEY)
+    if (!raw) return [...escalation]
+    return JSON.parse(raw) as string[]
+  } catch {
+    return [...escalation]
+  }
+}
+export function saveEscalation(list: string[]) {
+  try {
+    localStorage.setItem(ESCALATION_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
 
 export type DeliveryStatus = 'Delivered' | 'Muted' | 'Failed'
 
