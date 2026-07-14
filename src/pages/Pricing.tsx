@@ -415,9 +415,6 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
     log({ action: 'pricing.quote.export', target: client, category: 'settings' })
   }
 
-  const Toggle = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
-    <button onClick={onClick} aria-pressed={on} className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors ${on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'}`}><span className="h-5 w-5 rounded-full bg-white shadow-sm" /></button>
-  )
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_420px]">
@@ -457,33 +454,38 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
         </Card>
 
         <Card>
-          <CardTitle title="Options" />
+          <CardTitle title="Options" subtitle="Each option has a note so quotes stay consistent across the team" />
           <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-500">Throughput tier</label>
               <select className="input" value={input.throughputTier} onChange={(e) => set({ throughputTier: e.target.value })}>
                 {THROUGHPUT_TIERS.map((t) => <option key={t.name} value={t.name}>{t.name} — {money(t.monthly)}/mo</option>)}
               </select>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">Sustained rate-limit tier. Higher tiers add reserved capacity and priority; charged as the delta above the plan's included tier.</p>
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 sm:mt-5">
-              <span className="text-sm text-ink-700">Cache hit rate</span>
-              <div className="relative w-24">
-                <input type="number" min={0} max={100} className="input py-1.5 pr-7 text-right text-sm" value={Math.round(input.cacheHitRate * 100)} onChange={(e) => set({ cacheHitRate: Math.min(100, Math.max(0, Number(e.target.value))) / 100 })} />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-500">Cache hit rate</label>
+              <div className="relative">
+                <input type="number" min={0} max={100} className="input pr-7" value={Math.round(input.cacheHitRate * 100)} onChange={(e) => set({ cacheHitRate: Math.min(100, Math.max(0, Number(e.target.value))) / 100 })} />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">%</span>
               </div>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">Share of requests served from prompt cache. Cached prompts are discounted off billable requests — they aren't charged as new requests.</p>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {ENTITLEMENTS.map((e) => (
-              <div key={e.key} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
-                <span className="text-sm text-ink-700">{e.label}</span>
-                <Toggle on={input.entitlements[e.key]} onClick={() => setInput((p) => ({ ...p, entitlements: { ...p.entitlements, [e.key]: !p.entitlements[e.key] } }))} />
-              </div>
-            ))}
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
-              <span className="text-sm text-ink-700">Premium support (+{pct(discounts.premiumSupport)})</span>
-              <Toggle on={input.premiumSupport} onClick={() => set({ premiumSupport: !input.premiumSupport })} />
-            </div>
+            {ENTITLEMENTS.map((e) => {
+              const isBedrock = e.key === 'bedrock'
+              const label = isBedrock ? (input.modelAccess === 'Managed' ? 'AWS Bedrock (managed)' : 'AWS Bedrock (govern BYOK)') : e.label
+              const desc = isBedrock
+                ? (input.modelAccess === 'Managed'
+                    ? 'PLCY provisions Bedrock and meters usage as credits (+fee) — set the monthly budget below. Model tokens are billed by PLCY.'
+                    : "Connect and govern the customer's own AWS Bedrock. Model tokens bill to their AWS account; PLCY charges for governance only.")
+                : e.desc
+              return (
+                <OptToggle key={e.key} label={label} desc={desc} on={input.entitlements[e.key]} onClick={() => setInput((p) => ({ ...p, entitlements: { ...p.entitlements, [e.key]: !p.entitlements[e.key] } }))} />
+              )
+            })}
+            <OptToggle label={`Premium support (+${pct(discounts.premiumSupport)})`} desc="Priority support with an SLA and a named contact. Adds an uplift on the recurring subscription." on={input.premiumSupport} onClick={() => set({ premiumSupport: !input.premiumSupport })} />
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -492,8 +494,14 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
                 <option value="BYOK">BYOK (default)</option>
                 <option value="Managed">PLCY-managed credits</option>
               </select>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">BYOK: the customer pays their model provider directly (default). PLCY-managed: PLCY bills model usage as credits plus a {pct(discounts.managedLlmFee)} service fee.</p>
             </div>
-            {input.modelAccess === 'Managed' && <NumField label="Managed LLM credits / mo" value={input.managedCreditsMonthly} onChange={(v) => set({ managedCreditsMonthly: v })} suffix="$" />}
+            {input.modelAccess === 'Managed' && (
+              <div>
+                <NumField label="Managed LLM credits / mo" value={input.managedCreditsMonthly} onChange={(v) => set({ managedCreditsMonthly: v })} suffix="$" />
+                <p className="mt-1 text-[11px] leading-snug text-ink-400">Monthly model-usage budget PLCY meters and bills, plus the service fee. Leave BYOK if the customer pays AWS/their provider.</p>
+              </div>
+            )}
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <NumField label="Setup / onboarding" value={input.setupFee} onChange={(v) => set({ setupFee: v })} suffix="$" />
@@ -508,6 +516,10 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
         <Card>
           <div className="flex items-center justify-between">
             <CardTitle title="Order form" subtitle={client} />
+          </div>
+          <div className="mb-2 flex items-start gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] leading-snug text-ink-600">
+            <span className="font-semibold text-ink-700">Inference billing:</span>
+            <span>{input.modelAccess === 'Managed' ? 'PLCY — managed model credits (+fee), billed on this order' : "Customer — BYOK; model tokens bill to the customer's own AWS / provider account, not this order"}</span>
           </div>
           <div className="mt-1 overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -551,6 +563,20 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
           </div>
         </Card>
       </div>
+    </div>
+  )
+}
+
+function OptToggle({ label, desc, on, onClick }: { label: string; desc: string; on: boolean; onClick: () => void }) {
+  return (
+    <div className="rounded-xl border border-slate-200 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-ink-800">{label}</span>
+        <button onClick={onClick} aria-pressed={on} className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors ${on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'}`}>
+          <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+        </button>
+      </div>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink-400">{desc}</p>
     </div>
   )
 }

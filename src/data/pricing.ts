@@ -125,13 +125,13 @@ export const FEATURE_BOOLS: { key: BoolFeatureKey; label: string }[] = [
 ]
 
 /** Boolean entitlements that are individually chargeable via an add-on when a plan omits them. */
-export interface Entitlement { key: BoolFeatureKey; label: string; addonId: string }
+export interface Entitlement { key: BoolFeatureKey; label: string; addonId: string; desc: string }
 export const ENTITLEMENTS: Entitlement[] = [
-  { key: 'immutableLogs', label: 'Immutable logs', addonId: 'ao_immutable' },
-  { key: 'advancedReporting', label: 'Advanced reporting', addonId: 'ao_reporting' },
-  { key: 'hitl', label: 'HITL', addonId: 'ao_hitl' },
-  { key: 'bedrock', label: 'AWS Bedrock', addonId: 'ao_bedrock' },
-  { key: 'customModels', label: 'Custom models', addonId: 'ao_custom' },
+  { key: 'immutableLogs', label: 'Immutable logs', addonId: 'ao_immutable', desc: 'Tamper-evident, append-only (WORM) audit logs. Often required by financial and healthcare regulators.' },
+  { key: 'advancedReporting', label: 'Advanced reporting', addonId: 'ao_reporting', desc: 'Governance dashboards, exportable compliance reports, and custom analytics beyond the standard views.' },
+  { key: 'hitl', label: 'HITL', addonId: 'ao_hitl', desc: 'Human-in-the-loop review and approval gates before high-risk model actions execute.' },
+  { key: 'bedrock', label: 'AWS Bedrock', addonId: 'ao_bedrock', desc: 'Access to AWS Bedrock foundation models, governed by PLCY.' },
+  { key: 'customModels', label: 'Custom models', addonId: 'ao_custom', desc: 'Fine-tuned or customer-imported private models, governed and routed through PLCY.' },
 ]
 
 /* ------------------------------------------------------------------ */
