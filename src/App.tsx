@@ -28,6 +28,7 @@ import Billing from './pages/Billing'
 import BillingIntegration from './pages/BillingIntegration'
 import BillingHealth from './pages/BillingHealth'
 import FinOps from './pages/FinOps'
+import Pricing from './pages/Pricing'
 import Backups from './pages/Backups'
 import SupplyChain from './pages/SupplyChain'
 import Registry from './pages/Registry'
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/billing-integration" element={<BillingIntegration />} />
         <Route path="/billing-health" element={<BillingHealth />} />
         <Route path="/finops" element={<FinOps />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route path="/backups" element={<Backups />} />
         <Route path="/supply-chain" element={<SupplyChain />} />
         <Route path="/registry" element={<Registry />} />

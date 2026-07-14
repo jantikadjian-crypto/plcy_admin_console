@@ -41,6 +41,7 @@ import {
   Wallet,
   CreditCard,
   HeartPulse,
+  BadgeDollarSign,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -69,6 +70,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Customers', to: '/customers', icon: Users },
       { label: 'Instances', to: '/instances', icon: Server },
+      { label: 'Pricing & Plans', to: '/pricing', icon: BadgeDollarSign },
       { label: 'Billing & Usage', to: '/billing', icon: Receipt },
       { label: 'Billing Integration', to: '/billing-integration', icon: CreditCard },
       { label: 'Billing Health', to: '/billing-health', icon: HeartPulse },
