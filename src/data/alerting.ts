@@ -14,7 +14,7 @@ import type { DunningStage } from './billingHealth'
 import { loadDevices, postureSummary } from './devices'
 import { terraformFor, imageDriftForDeployment } from './clusters'
 import { registryImages, currentTagOf } from './registry'
-import { channels as defaultChannels, onCall } from './notifications'
+import { channels as defaultChannels, primaryResponder } from './notifications'
 import type { RoutingRule, ChannelType, AlertSeverity, ChannelConfig } from './notifications'
 
 /** Dunning escalates severity as retries are exhausted. */
@@ -136,7 +136,7 @@ export function collectLiveSignals(promoted: Record<string, string>): LiveSignal
 }
 
 /** Resolve a signal against the (possibly edited) rule set → who gets paged. */
-export function evaluateRouting(signal: LiveSignal, rules: RoutingRule[], channels: ChannelConfig[] = defaultChannels): RoutingOutcome {
+export function evaluateRouting(signal: LiveSignal, rules: RoutingRule[], channels: ChannelConfig[] = defaultChannels, primaryName?: string): RoutingOutcome {
   const rule = rules.find((r) => r.category === signal.category)
   if (!rule) {
     return { status: 'unrouted', channels: [], mutedChannels: [], pages: false, reason: 'No rule covers this category — nobody is notified' }
@@ -149,7 +149,7 @@ export function evaluateRouting(signal: LiveSignal, rules: RoutingRule[], channe
   }
   const muted = rule.channels.filter((c) => !channels.find((ch) => ch.type === c)?.connected)
   const pages = rule.channels.includes('PagerDuty')
-  const responder = pages ? onCall.find((o) => o.role === 'Primary')?.name : undefined
+  const responder = pages ? (primaryName ?? primaryResponder()) : undefined
   return {
     status: 'routed',
     rule,

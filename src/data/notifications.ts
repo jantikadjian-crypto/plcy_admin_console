@@ -62,6 +62,29 @@ export const onCall: OnCallShift[] = [
   { name: 'Priya Nair', role: 'Manager', window: 'Escalation owner', active: true },
 ]
 
+/** Editable, persisted on-call assignment (defaults to the seed above). */
+const ONCALL_KEY = 'plcy_oncall'
+export function loadOnCall(): OnCallShift[] {
+  try {
+    const raw = localStorage.getItem(ONCALL_KEY)
+    if (!raw) return onCall.map((o) => ({ ...o }))
+    return JSON.parse(raw) as OnCallShift[]
+  } catch {
+    return onCall.map((o) => ({ ...o }))
+  }
+}
+export function saveOnCall(list: OnCallShift[]) {
+  try {
+    localStorage.setItem(ONCALL_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+/** Primary responder from the current (possibly edited) on-call assignment. */
+export function primaryResponder(): string {
+  return loadOnCall().find((o) => o.role === 'Primary' && o.active)?.name ?? '—'
+}
+
 export const rotation = [
   { week: 'This week (Jul 7)', primary: 'Dana Cole', secondary: 'Marcus Ihde' },
   { week: 'Jul 14', primary: 'Marcus Ihde', secondary: 'Priya Nair' },

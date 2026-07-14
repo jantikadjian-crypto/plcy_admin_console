@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight, Pencil, Trash2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -8,12 +8,14 @@ import { useSession } from '@/context/Session'
 import {
   channels as seedChannels,
   routingRules as seedRules,
-  onCall,
+  loadOnCall,
+  saveOnCall,
   rotation,
   escalation,
   recentAlerts,
 } from '@/data/notifications'
-import type { ChannelType, ChannelConfig, RoutingRule, AlertSeverity, DeliveryStatus } from '@/data/notifications'
+import type { ChannelType, ChannelConfig, RoutingRule, AlertSeverity, DeliveryStatus, OnCallShift } from '@/data/notifications'
+import { employeesSeed } from '@/data/team'
 import { useRegistryPromoted } from '@/data/registryStore'
 import { collectLiveSignals, evaluateRouting, routingSummary } from '@/data/alerting'
 import type { RoutingStatus } from '@/data/alerting'
@@ -66,11 +68,17 @@ export default function Notifications() {
   const [sentIds, setSentIds] = useState<Record<string, true>>({})
   const [ruleModal, setRuleModal] = useState<{ mode: 'create'; category: string } | { mode: 'edit'; rule: RoutingRule } | null>(null)
   const [channelList, setChannelList] = useState<ChannelConfig[]>(seedChannels)
+  const [onCallList, setOnCallList] = useState<OnCallShift[]>(loadOnCall)
+  const [onCallOpen, setOnCallOpen] = useState(false)
   const canManage = can('settings.modify')
+
+  useEffect(() => {
+    saveOnCall(onCallList)
+  }, [onCallList])
 
   const signals = collectLiveSignals(promoted)
   const summary = routingSummary(signals, rules, channelList)
-  const primaryOnCall = onCall.find((o) => o.role === 'Primary')?.name ?? '—'
+  const primaryOnCall = onCallList.find((o) => o.role === 'Primary' && o.active)?.name ?? '—'
 
   // Categories with live signals but no rule — the gaps a new rule can close.
   const uncovered = [...new Set(signals.map((s) => s.category))].filter((c) => !rules.some((r) => r.category === c))
@@ -105,6 +113,12 @@ export default function Notifications() {
   const saveChannel = (updated: ChannelConfig) => {
     setChannelList((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
     logAction({ action: 'notification.channel.update', target: `${updated.type} · ${updated.target}`, category: 'notifications' })
+  }
+
+  const saveOnCallList = (list: OnCallShift[]) => {
+    setOnCallList(list)
+    logAction({ action: 'notification.oncall.update', target: `Primary ${list.find((o) => o.role === 'Primary')?.name ?? '—'}`, category: 'notifications' })
+    setOnCallOpen(false)
   }
 
   return (
@@ -153,7 +167,7 @@ export default function Notifications() {
             </thead>
             <tbody>
               {signals.map((s) => {
-                const o = evaluateRouting(s, rules, channelList)
+                const o = evaluateRouting(s, rules, channelList, primaryOnCall)
                 const sent = sentIds[s.id]
                 return (
                   <tr key={s.id} className="border-b border-slate-100 align-top last:border-0">
@@ -266,12 +280,20 @@ export default function Notifications() {
 
         {/* On-call */}
         <Card>
-          <CardTitle title="On-Call" subtitle="Current rotation & escalation" />
+          <CardTitle
+            title="On-Call"
+            subtitle="Current rotation & escalation"
+            action={canManage ? (
+              <button className="btn-ghost px-2 py-1 text-xs" onClick={() => setOnCallOpen(true)}>
+                <Pencil className="h-3.5 w-3.5" />Edit
+              </button>
+            ) : undefined}
+          />
           <div className="space-y-2">
-            {onCall.map((o) => (
-              <div key={o.role} className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
+            {onCallList.map((o) => (
+              <div key={o.role} className={`flex items-center justify-between rounded-xl border border-slate-200 p-3 ${o.active ? '' : 'opacity-60'}`}>
                 <div>
-                  <p className="text-sm font-semibold text-ink-900">{o.name}</p>
+                  <p className="text-sm font-semibold text-ink-900">{o.name}{!o.active && <span className="ml-1.5 text-xs font-normal text-ink-400">(unassigned)</span>}</p>
                   <p className="text-xs text-ink-500">{o.window}</p>
                 </div>
                 <Badge tone={o.role === 'Primary' ? 'green' : o.role === 'Secondary' ? 'blue' : 'purple'} dot>{o.role}</Badge>
@@ -334,7 +356,86 @@ export default function Notifications() {
         />
       )}
 
+      {onCallOpen && (
+        <OnCallModal
+          list={onCallList}
+          roster={employeesSeed.map((e) => e.name)}
+          onClose={() => setOnCallOpen(false)}
+          onSave={saveOnCallList}
+        />
+      )}
+
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Edit on-call assignment                                             */
+/* ------------------------------------------------------------------ */
+const ROLE_TONE: Record<OnCallShift['role'], 'green' | 'blue' | 'purple'> = { Primary: 'green', Secondary: 'blue', Manager: 'purple' }
+
+function OnCallModal({ list, roster, onClose, onSave }: {
+  list: OnCallShift[]
+  roster: string[]
+  onClose: () => void
+  onSave: (list: OnCallShift[]) => void
+}) {
+  const [draft, setDraft] = useState<OnCallShift[]>(() => list.map((o) => ({ ...o })))
+  const setRow = (role: OnCallShift['role'], patch: Partial<OnCallShift>) =>
+    setDraft((prev) => prev.map((o) => (o.role === role ? { ...o, ...patch } : o)))
+
+  // Roster options, plus any current assignee not in the roster.
+  const options = (current: string) => (roster.includes(current) ? roster : [current, ...roster])
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Edit on-call"
+      subtitle="Reassign the responders paged for fleet alerts"
+      maxWidth="max-w-lg"
+      footer={
+        <>
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={() => onSave(draft)}>
+            <Check className="h-4 w-4" />Save on-call
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {draft.map((o) => (
+          <div key={o.role} className="rounded-xl border border-slate-200 p-3">
+            <div className="mb-2.5 flex items-center justify-between">
+              <Badge tone={ROLE_TONE[o.role]} dot>{o.role}</Badge>
+              <button
+                onClick={() => setRow(o.role, { active: !o.active })}
+                aria-pressed={o.active}
+                title={o.active ? 'Assigned' : 'Unassigned'}
+                className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors ${o.active ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'}`}
+              >
+                <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+              </button>
+            </div>
+            <div className={`grid grid-cols-1 gap-2 sm:grid-cols-2 ${o.active ? '' : 'opacity-50'}`}>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink-500">Responder</label>
+                <select className="input" value={o.name} onChange={(e) => setRow(o.role, { name: e.target.value })} disabled={!o.active}>
+                  {options(o.name).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink-500">Window</label>
+                <input className="input" value={o.window} onChange={(e) => setRow(o.role, { window: e.target.value })} disabled={!o.active} placeholder="e.g. Jul 14 – Jul 21" />
+              </div>
+            </div>
+          </div>
+        ))}
+        <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-ink-500">
+          The <strong>Primary</strong> responder is who every PagerDuty rule pages first — changing it updates the live routing table and the “On-call now” tile immediately.
+        </p>
+      </div>
+    </Modal>
   )
 }
 
