@@ -42,6 +42,8 @@ import {
   scoreSecurity,
 } from '@/data/security'
 import type { SecurityPolicy, MfaMethod, AllowlistMode, PostureRag } from '@/data/security'
+import { loadOrgSettings, saveOrgSettings } from '@/data/orgSettings'
+import type { OrgSettings } from '@/data/orgSettings'
 import {
   roleDefs,
   assignedCount,
@@ -614,7 +616,8 @@ export default function Settings() {
   const [searchParams] = useSearchParams()
   const initialTab = tabs.find((t) => t.key === searchParams.get('tab'))?.key ?? 'General'
   const [active, setActive] = useState<TabKey>(initialTab)
-  const [accent, setAccent] = useState('#1f47f5')
+  const [org, setOrg] = useState<OrgSettings>(loadOrgSettings)
+  const setOrgField = (patch: Partial<OrgSettings>) => setOrg((p) => ({ ...p, ...patch }))
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     notifyIncidents: true,
     notifyViolations: true,
@@ -660,7 +663,8 @@ export default function Settings() {
   const saveChanges = () => {
     saveAccessMap(accessMap)
     saveSecurityPolicy(securityPolicy)
-    logAction({ action: 'settings.save', target: active === 'Security' ? 'security policy' : 'roles & permissions', category: 'settings' })
+    saveOrgSettings(org)
+    logAction({ action: 'settings.save', target: active.toLowerCase(), category: 'settings' })
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2000)
   }
@@ -713,13 +717,13 @@ export default function Settings() {
               <CardTitle title="General" subtitle="Organization profile and defaults" />
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field label="Organization name">
-                  <input className="input" defaultValue="PLCY, Inc." />
+                  <input className="input" value={org.orgName} onChange={(e) => setOrgField({ orgName: e.target.value })} />
                 </Field>
                 <Field label="Support email">
-                  <input className="input" defaultValue="support@plcy.app" />
+                  <input className="input" value={org.supportEmail} onChange={(e) => setOrgField({ supportEmail: e.target.value })} />
                 </Field>
                 <Field label="Default region">
-                  <select className="input" defaultValue="US-East">
+                  <select className="input" value={org.defaultRegion} onChange={(e) => setOrgField({ defaultRegion: e.target.value })}>
                     <option>US-East</option>
                     <option>US-West</option>
                     <option>EU-Central</option>
@@ -728,7 +732,7 @@ export default function Settings() {
                   </select>
                 </Field>
                 <Field label="Default plan tier">
-                  <select className="input" defaultValue="Business">
+                  <select className="input" value={org.defaultPlan} onChange={(e) => setOrgField({ defaultPlan: e.target.value })}>
                     <option>Enterprise</option>
                     <option>Business</option>
                     <option>Growth</option>
@@ -757,15 +761,15 @@ export default function Settings() {
                 {swatches.map((s) => (
                   <button
                     key={s.hex}
-                    onClick={() => setAccent(s.hex)}
+                    onClick={() => setOrgField({ accentColor: s.hex })}
                     className="flex h-11 w-11 items-center justify-center rounded-xl ring-2 ring-offset-2 transition"
                     style={{
                       backgroundColor: s.hex,
-                      boxShadow: accent === s.hex ? `0 0 0 2px ${s.hex}` : 'none',
+                      boxShadow: org.accentColor === s.hex ? `0 0 0 2px ${s.hex}` : 'none',
                     }}
                     aria-label={s.name}
                   >
-                    {accent === s.hex && <Check className="h-5 w-5 text-white" />}
+                    {org.accentColor === s.hex && <Check className="h-5 w-5 text-white" />}
                   </button>
                 ))}
               </div>
@@ -777,7 +781,7 @@ export default function Settings() {
                   </div>
                 </div>
                 <Field label="Login page tagline">
-                  <input className="input" defaultValue="Govern every model. Enforce every policy." />
+                  <input className="input" value={org.tagline} onChange={(e) => setOrgField({ tagline: e.target.value })} />
                 </Field>
               </div>
             </Card>

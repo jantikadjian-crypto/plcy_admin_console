@@ -31,7 +31,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
-import { incidents as seedIncidents, regulatoryNotices as regNotices } from '@/data/incidents'
+import { loadIncidents, saveIncidents, regulatoryNotices as regNotices } from '@/data/incidents'
 import type { IncidentSeverity as Severity, IncidentStatus as Status, TimelineEvent, Incident } from '@/data/incidents'
 
 /* ------------------------------------------------------------------ */
@@ -100,14 +100,27 @@ type Tab = (typeof TABS)[number]
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 export default function Incidents() {
-  const { logAction } = useSession()
+  const { can, logAction } = useSession()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('Incidents')
   const [sevFilter, setSevFilter] = useState<'All' | Severity>('All')
   const [selected, setSelected] = useState<Incident | null>(null)
   const [reporting, setReporting] = useState(false)
   useCreateIntent(() => setReporting(true))
-  const [items, setItems] = useState<Incident[]>(seedIncidents)
+  const [items, setItems] = useState<Incident[]>(loadIncidents)
+  const canManage = can('incident.manage')
+
+  useEffect(() => {
+    saveIncidents(items)
+  }, [items])
+
+  const updateIncident = (id: string, patch: Partial<Incident>, what: string) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+    logAction({ action: 'incident.update', target: `${id} · ${what}`, category: 'incident' })
+  }
+
+  // Keep the open modal in sync after edits.
+  const selectedLive = selected ? items.find((i) => i.id === selected.id) ?? null : null
 
   useEffect(() => {
     if (!selected) return
@@ -243,7 +256,14 @@ export default function Incidents() {
       {tab === 'Regulatory Notifications' && <RegulatoryNotifications />}
 
       {/* Detail modal */}
-      {selected && <IncidentModal incident={selected} onClose={() => setSelected(null)} />}
+      {selectedLive && (
+        <IncidentModal
+          incident={selectedLive}
+          canEdit={canManage}
+          onUpdate={(patch, what) => updateIncident(selectedLive.id, patch, what)}
+          onClose={() => setSelected(null)}
+        />
+      )}
 
       {/* Report incident form */}
       <ReportIncidentModal
@@ -385,7 +405,12 @@ function Field({ label, children, className }: { label: string; children: ReactN
 /* ------------------------------------------------------------------ */
 /* Incident detail modal                                               */
 /* ------------------------------------------------------------------ */
-function IncidentModal({ incident: i, onClose }: { incident: Incident; onClose: () => void }) {
+function IncidentModal({ incident: i, canEdit, onUpdate, onClose }: {
+  incident: Incident
+  canEdit: boolean
+  onUpdate: (patch: Partial<Incident>, what: string) => void
+  onClose: () => void
+}) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 backdrop-blur-sm sm:p-8"
@@ -428,6 +453,45 @@ function IncidentModal({ incident: i, onClose }: { incident: Incident; onClose: 
             <Badge tone="blue">{i.model}</Badge>
             <Badge tone="purple">{i.customer}</Badge>
           </div>
+
+          {/* Triage — edit status, severity, and owner in place */}
+          {canEdit && (
+            <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <h4 className="mb-3 text-sm font-semibold text-ink-900">Triage</h4>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-500">Status</label>
+                  <select
+                    className="input"
+                    value={i.status}
+                    onChange={(e) => onUpdate({ status: e.target.value as Status }, `status → ${e.target.value}`)}
+                  >
+                    {(['Open', 'Triage', 'Investigating', 'Remediation', 'Resolved'] as Status[]).map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-500">Severity</label>
+                  <select
+                    className="input"
+                    value={i.severity}
+                    onChange={(e) => onUpdate({ severity: e.target.value as Severity }, `severity → ${e.target.value}`)}
+                  >
+                    {(['Critical', 'High', 'Medium', 'Low'] as Severity[]).map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-500">Assigned to</label>
+                  <select
+                    className="input"
+                    value={i.assignedTo}
+                    onChange={(e) => onUpdate({ assignedTo: e.target.value }, `assignee → ${e.target.value}`)}
+                  >
+                    {(ASSIGNEES.includes(i.assignedTo) ? ASSIGNEES : [i.assignedTo, ...ASSIGNEES]).map((a) => <option key={a}>{a}</option>)}
+                  </select>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Impact */}
           <section>

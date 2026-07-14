@@ -164,6 +164,27 @@ export const incidents: Incident[] = [
   },
 ]
 
+/** Persisted incident register (seed above), so triage edits survive a reload. */
+const STORAGE_KEY = 'plcy_incidents'
+
+export function loadIncidents(): Incident[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return incidents.map((i) => ({ ...i, timeline: [...i.timeline], remediation: [...i.remediation] }))
+    return JSON.parse(raw) as Incident[]
+  } catch {
+    return incidents.map((i) => ({ ...i, timeline: [...i.timeline], remediation: [...i.remediation] }))
+  }
+}
+
+export function saveIncidents(list: Incident[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+
 export type RegNoticeStatus = 'Filed' | 'Pending' | 'Overdue' | 'Not required'
 export interface RegNotice {
   regulator: string

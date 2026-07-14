@@ -4,7 +4,7 @@
  * regulatory reporting obligations they triggered. Scope-aware: the whole fleet
  * under "All Customers", or a single customer when one is selected.
  */
-import { incidents, regulatoryNotices } from '@/data/incidents'
+import { loadIncidents, regulatoryNotices } from '@/data/incidents'
 import type { Incident, IncidentSeverity, RegNotice } from '@/data/incidents'
 
 export type IncRag = 'green' | 'amber' | 'red'
@@ -42,6 +42,7 @@ const SEV_ORDER: IncidentSeverity[] = ['Critical', 'High', 'Medium', 'Low']
 const SEV_RANK: Record<IncidentSeverity, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 }
 
 export function buildIncidentReport(scope: string, isAll: boolean, generatedBy: string, generatedAt: string): IncidentReport {
+  const incidents = loadIncidents()
   const rows = (isAll ? incidents : incidents.filter((i) => i.customer === scope))
     .slice()
     .sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || b.riskScore - a.riskScore)
