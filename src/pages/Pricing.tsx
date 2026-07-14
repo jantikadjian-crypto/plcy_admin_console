@@ -6,7 +6,8 @@ import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import {
   loadPlans, savePlans, loadAddOns, saveAddOns, loadDiscounts, saveDiscounts,
-  newPlanId, newAddOnId, CAPACITY_META, FEATURE_META,
+  newPlanId, newAddOnId, CAPACITY_META, FEATURE_ENUMS, FEATURE_TEXTS, FEATURE_BOOLS,
+  THROUGHPUT_TIERS, ENTITLEMENTS,
   money, money2, pct, compact, effectivePrice, packUnitPrice, packSavingsPct, computeQuote,
 } from '@/data/pricing'
 import type { Plan, PlanCapacity, PlanFeatures, AddOn, Discounts, Cadence, QuoteInput } from '@/data/pricing'
@@ -88,8 +89,8 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
 
   const emptyPlan = (): Plan => ({
     id: newPlanId(), name: 'New plan', monthly: 0, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 100000, throughputRps: 25, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, cacheGb: 1, retentionDays: 30 },
-    features: { rbac: 'Basic roles', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'Optional add-on', backups: 'Daily', deployment: 'Shared multi-tenant', bedrock: 'No', specialFeatures: '—', support: 'Email support' },
+    capacity: { requests: 100000, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, cacheGb: 1, retentionDays: 30 },
+    features: { rbac: 'Basic roles', throughputTier: 'Standard', deployment: 'Shared multi-tenant', backups: 'Daily', support: 'Email support', sso: false, scim: false, immutableLogs: false, advancedReporting: false, hitl: false, bedrock: false, customModels: false },
     notes: '',
   })
 
@@ -132,10 +133,12 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
             </div>
 
             <div className="mt-3 flex flex-wrap gap-1">
-              <Badge tone="blue">{p.features.rbac}</Badge>
-              {p.features.sso !== 'No' && <Badge tone="purple">{p.features.sso}</Badge>}
+              {p.features.rbac !== 'None' && <Badge tone="blue">{p.features.rbac}</Badge>}
+              <Badge tone="slate">{p.features.throughputTier} throughput</Badge>
+              {p.features.sso && <Badge tone="purple">SSO{p.features.scim ? ' + SCIM' : ''}</Badge>}
               {p.features.deployment.includes('Dedicated') && <Badge tone="orange">Dedicated</Badge>}
-              {p.features.bedrock === 'Included' && <Badge tone="green">Bedrock</Badge>}
+              {p.features.bedrock && <Badge tone="green">Bedrock</Badge>}
+              {p.features.customModels && <Badge tone="green">Custom models</Badge>}
             </div>
 
             {canManage && (
@@ -168,10 +171,18 @@ function NumField({ label, value, onChange, step = 1, suffix }: { label: string;
   )
 }
 
+function FeatureToggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} aria-pressed={on} className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors ${on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'}`}>
+      <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+    </button>
+  )
+}
+
 function PlanModal({ plan, onClose, onSave }: { plan: Plan; onClose: () => void; onSave: (p: Plan) => void }) {
   const [d, setD] = useState<Plan>(() => ({ ...plan, capacity: { ...plan.capacity }, features: { ...plan.features } }))
   const setCap = (k: keyof PlanCapacity, v: number) => setD((p) => ({ ...p, capacity: { ...p.capacity, [k]: v } }))
-  const setFeat = (k: keyof PlanFeatures, v: string) => setD((p) => ({ ...p, features: { ...p.features, [k]: v } }))
+  const setFeat = (k: keyof PlanFeatures, v: string | boolean) => setD((p) => ({ ...p, features: { ...p.features, [k]: v } }))
   return (
     <Modal open onClose={onClose} title={plan.name === 'New plan' ? 'New plan' : `Edit ${plan.name}`} subtitle="Price, included capacity, and features" maxWidth="max-w-2xl"
       footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={() => onSave(d)}><Check className="h-4 w-4" />Save plan</button></>}>
@@ -193,10 +204,32 @@ function PlanModal({ plan, onClose, onSave }: { plan: Plan; onClose: () => void;
         </section>
 
         <section>
-          <h4 className="mb-2 text-sm font-semibold text-ink-900">Features</h4>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {FEATURE_META.map((f) => (
-              <div key={f.key}><label className="mb-1 block text-xs font-medium text-ink-500">{f.label}</label><input className="input" value={d.features[f.key]} onChange={(e) => setFeat(f.key, e.target.value)} /></div>
+          <h4 className="mb-2 text-sm font-semibold text-ink-900">Tiers & levels</h4>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {FEATURE_ENUMS.map((f) => (
+              <div key={f.key}>
+                <label className="mb-1 block text-xs font-medium text-ink-500">{f.label}</label>
+                <select className="input" value={d.features[f.key]} onChange={(e) => setFeat(f.key, e.target.value)}>
+                  {f.options.map((o) => <option key={o} value={o}>{o}{f.key === 'throughputTier' ? ` — ${money(THROUGHPUT_TIERS.find((t) => t.name === o)?.monthly ?? 0)}` : ''}</option>)}
+                </select>
+              </div>
+            ))}
+            {FEATURE_TEXTS.map((f) => (
+              <div key={f.key} className="sm:col-span-3 sm:grid sm:grid-cols-2 sm:gap-3">
+                <div className="sm:col-span-1"><label className="mb-1 block text-xs font-medium text-ink-500">{f.label}</label><input className="input" value={d.features[f.key]} onChange={(e) => setFeat(f.key, e.target.value)} /></div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h4 className="mb-2 text-sm font-semibold text-ink-900">Included entitlements</h4>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {FEATURE_BOOLS.map((f) => (
+              <div key={f.key} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2">
+                <span className="text-sm text-ink-700">{f.label}</span>
+                <FeatureToggle on={d.features[f.key]} onClick={() => setFeat(f.key, !d.features[f.key])} />
+              </div>
             ))}
           </div>
         </section>
@@ -358,8 +391,10 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
     const p = active.find((x) => x.name === 'Business') ?? active[0]
     return {
       planId: p?.id ?? '', cadence: 'Annual', termMonths: 12, commercialPct: 0,
-      demand: p ? { ...p.capacity } : { requests: 0, throughputRps: 0, seats: 0, apps: 0, packs: 0, primitives: 0, promptGb: 0, logGb: 0, cacheGb: 0, retentionDays: 0 },
-      immutableLogs: false, advancedReporting: true, hitl: true, bedrock: false, premiumSupport: false, cacheHitRate: 0,
+      demand: p ? { ...p.capacity } : { requests: 0, seats: 0, apps: 0, packs: 0, primitives: 0, promptGb: 0, logGb: 0, cacheGb: 0, retentionDays: 0 },
+      throughputTier: p?.features.throughputTier ?? 'Standard',
+      entitlements: { sso: false, scim: false, immutableLogs: false, advancedReporting: true, hitl: true, bedrock: false, customModels: false },
+      premiumSupport: false, cacheHitRate: 0,
       modelAccess: 'BYOK', managedCreditsMonthly: 0, setupFee: 1000, trainingFee: 500, migrationFee: 0,
     }
   })
@@ -394,7 +429,7 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
             <div className="sm:col-span-2"><label className="mb-1 block text-xs font-medium text-ink-500">Client / business name</label><input className="input" value={client} onChange={(e) => setClient(e.target.value)} /></div>
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-500">Plan</label>
-              <select className="input" value={input.planId} onChange={(e) => { const p = plans.find((x) => x.id === e.target.value); set({ planId: e.target.value, demand: p ? { ...p.capacity } : input.demand }) }}>
+              <select className="input" value={input.planId} onChange={(e) => { const p = plans.find((x) => x.id === e.target.value); set({ planId: e.target.value, demand: p ? { ...p.capacity } : input.demand, throughputTier: p?.features.throughputTier ?? input.throughputTier }) }}>
                 {active.map((p) => <option key={p.id} value={p.id}>{p.name} — {money(p.monthly)}/mo</option>)}
               </select>
             </div>
@@ -423,25 +458,31 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
 
         <Card>
           <CardTitle title="Options" />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {[
-              { k: 'immutableLogs' as const, label: 'Immutable logs' },
-              { k: 'advancedReporting' as const, label: 'Advanced reporting' },
-              { k: 'hitl' as const, label: 'HITL (human-in-the-loop)' },
-              { k: 'bedrock' as const, label: 'AWS Bedrock access' },
-              { k: 'premiumSupport' as const, label: `Premium support (+${pct(discounts.premiumSupport)})` },
-            ].map((o) => (
-              <div key={o.k} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
-                <span className="text-sm text-ink-700">{o.label}</span>
-                <Toggle on={input[o.k]} onClick={() => set({ [o.k]: !input[o.k] } as Partial<QuoteInput>)} />
-              </div>
-            ))}
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-500">Throughput tier</label>
+              <select className="input" value={input.throughputTier} onChange={(e) => set({ throughputTier: e.target.value })}>
+                {THROUGHPUT_TIERS.map((t) => <option key={t.name} value={t.name}>{t.name} — {money(t.monthly)}/mo</option>)}
+              </select>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 sm:mt-5">
               <span className="text-sm text-ink-700">Cache hit rate</span>
               <div className="relative w-24">
                 <input type="number" min={0} max={100} className="input py-1.5 pr-7 text-right text-sm" value={Math.round(input.cacheHitRate * 100)} onChange={(e) => set({ cacheHitRate: Math.min(100, Math.max(0, Number(e.target.value))) / 100 })} />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">%</span>
               </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ENTITLEMENTS.map((e) => (
+              <div key={e.key} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
+                <span className="text-sm text-ink-700">{e.label}</span>
+                <Toggle on={input.entitlements[e.key]} onClick={() => setInput((p) => ({ ...p, entitlements: { ...p.entitlements, [e.key]: !p.entitlements[e.key] } }))} />
+              </div>
+            ))}
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
+              <span className="text-sm text-ink-700">Premium support (+{pct(discounts.premiumSupport)})</span>
+              <Toggle on={input.premiumSupport} onClick={() => set({ premiumSupport: !input.premiumSupport })} />
             </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">

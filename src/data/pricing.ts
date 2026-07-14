@@ -1,16 +1,21 @@
 /**
- * Pricing catalog — the source of truth behind Settings/Billing for what PLCY
- * sells: plans (packages) with included capacity + features, add-ons with bulk
- * (pack) pricing, and the global discount levers. Modeled from the SaaS pricing
- * workbook (Package Matrix / Add-Ons / discount logic / Quote Builder). All three
- * are persisted to localStorage so edits survive a reload.
+ * Pricing catalog — the source of truth for what PLCY sells: plans (packages)
+ * with included capacity + features, add-ons with bulk (pack) pricing, named
+ * throughput tiers, and global discount levers. Modeled from the SaaS pricing
+ * workbook. Persisted to localStorage.
+ *
+ * Feature model:
+ *  - Metered capacity (requests, seats, cache GB, …) → overage add-ons.
+ *  - Throughput → a named tier (Standard/High/Burst/Dedicated) with an uplift.
+ *  - Boolean entitlements (SSO, immutable logs, Bedrock, custom models, …) →
+ *    on/off per plan; chargeable ones become add-ons when a plan doesn't include
+ *    them.
  */
 
-export type CapacityKey = 'requests' | 'throughputRps' | 'seats' | 'apps' | 'packs' | 'primitives' | 'promptGb' | 'logGb' | 'cacheGb' | 'retentionDays'
+export type CapacityKey = 'requests' | 'seats' | 'apps' | 'packs' | 'primitives' | 'promptGb' | 'logGb' | 'cacheGb' | 'retentionDays'
 
 export interface PlanCapacity {
   requests: number
-  throughputRps: number
   seats: number
   apps: number
   packs: number
@@ -21,17 +26,21 @@ export interface PlanCapacity {
   retentionDays: number
 }
 
+export type BoolFeatureKey = 'sso' | 'scim' | 'immutableLogs' | 'advancedReporting' | 'hitl' | 'bedrock' | 'customModels'
+
 export interface PlanFeatures {
   rbac: string
-  sso: string
-  immutableLogs: string
-  advancedReporting: string
-  hitl: string
-  backups: string
+  throughputTier: string
   deployment: string
-  bedrock: string
-  specialFeatures: string
+  backups: string
   support: string
+  sso: boolean
+  scim: boolean
+  immutableLogs: boolean
+  advancedReporting: boolean
+  hitl: boolean
+  bedrock: boolean
+  customModels: boolean
 }
 
 export interface Plan {
@@ -51,9 +60,7 @@ export interface AddOn {
   id: string
   name: string
   kind: AddOnKind
-  /** Links a capacity add-on to the plan dimension it tops up. */
   capacityKey?: CapacityKey
-  /** Individual per-unit price; null when only sold as a pack (e.g. requests). */
   unitPrice: number | null
   packSize: number
   packPrice: number
@@ -69,14 +76,12 @@ export interface Discounts {
   premiumSupport: number
   managedLlmFee: number
   byokMarkup: number
-  /** How much a cache hit is discounted off a billable request (1 = free). */
   cacheHitDiscount: number
 }
 
-/* ---- Capacity dimension metadata (labels + formatting) ---- */
-export const CAPACITY_META: { key: CapacityKey; label: string; short: string; unit?: string }[] = [
+/* ---- Capacity / feature metadata ---- */
+export const CAPACITY_META: { key: CapacityKey; label: string; short: string }[] = [
   { key: 'requests', label: 'Governed requests / mo', short: 'Requests' },
-  { key: 'throughputRps', label: 'Throughput (req/s)', short: 'Throughput', unit: ' r/s' },
   { key: 'seats', label: 'Seats', short: 'Seats' },
   { key: 'apps', label: 'Apps / workflows', short: 'Apps' },
   { key: 'packs', label: 'Policy packs', short: 'Packs' },
@@ -87,17 +92,46 @@ export const CAPACITY_META: { key: CapacityKey; label: string; short: string; un
   { key: 'retentionDays', label: 'Log retention (days)', short: 'Retention' },
 ]
 
-export const FEATURE_META: { key: keyof PlanFeatures; label: string }[] = [
-  { key: 'rbac', label: 'RBAC' },
-  { key: 'sso', label: 'SSO / SCIM' },
+export const RBAC_OPTIONS = ['None', 'Basic roles', 'Basic RBAC', 'Advanced RBAC']
+export const DEPLOYMENT_OPTIONS = ['Shared multi-tenant', 'Shared; Dedicated add-on available', 'Dedicated single-tenant included']
+
+export interface ThroughputTier { name: string; monthly: number; note: string }
+export const THROUGHPUT_TIERS: ThroughputTier[] = [
+  { name: 'Standard', monthly: 0, note: 'Baseline sustained rate limits' },
+  { name: 'High', monthly: 200, note: 'Elevated sustained throughput' },
+  { name: 'Burst', monthly: 600, note: 'High burst ceiling + priority queue' },
+  { name: 'Dedicated', monthly: 2000, note: 'Reserved capacity, no contention' },
+]
+export const tierPrice = (name: string): number => THROUGHPUT_TIERS.find((t) => t.name === name)?.monthly ?? 0
+export const tierRank = (name: string): number => { const i = THROUGHPUT_TIERS.findIndex((t) => t.name === name); return i < 0 ? 0 : i }
+
+export const FEATURE_ENUMS: { key: 'rbac' | 'throughputTier' | 'deployment'; label: string; options: string[] }[] = [
+  { key: 'rbac', label: 'RBAC', options: RBAC_OPTIONS },
+  { key: 'throughputTier', label: 'Throughput tier', options: THROUGHPUT_TIERS.map((t) => t.name) },
+  { key: 'deployment', label: 'Deployment', options: DEPLOYMENT_OPTIONS },
+]
+export const FEATURE_TEXTS: { key: 'backups' | 'support'; label: string }[] = [
+  { key: 'backups', label: 'Backups' },
+  { key: 'support', label: 'Onboarding / support' },
+]
+export const FEATURE_BOOLS: { key: BoolFeatureKey; label: string }[] = [
+  { key: 'sso', label: 'SSO' },
+  { key: 'scim', label: 'SCIM provisioning' },
   { key: 'immutableLogs', label: 'Immutable logs' },
   { key: 'advancedReporting', label: 'Advanced reporting' },
-  { key: 'hitl', label: 'HITL' },
-  { key: 'backups', label: 'Backups' },
-  { key: 'deployment', label: 'Deployment model' },
+  { key: 'hitl', label: 'HITL (human-in-the-loop)' },
   { key: 'bedrock', label: 'AWS Bedrock access' },
-  { key: 'specialFeatures', label: 'Special / premium features' },
-  { key: 'support', label: 'Onboarding / support' },
+  { key: 'customModels', label: 'Custom / fine-tuned models' },
+]
+
+/** Boolean entitlements that are individually chargeable via an add-on when a plan omits them. */
+export interface Entitlement { key: BoolFeatureKey; label: string; addonId: string }
+export const ENTITLEMENTS: Entitlement[] = [
+  { key: 'immutableLogs', label: 'Immutable logs', addonId: 'ao_immutable' },
+  { key: 'advancedReporting', label: 'Advanced reporting', addonId: 'ao_reporting' },
+  { key: 'hitl', label: 'HITL', addonId: 'ao_hitl' },
+  { key: 'bedrock', label: 'AWS Bedrock', addonId: 'ao_bedrock' },
+  { key: 'customModels', label: 'Custom models', addonId: 'ao_custom' },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -106,41 +140,39 @@ export const FEATURE_META: { key: keyof PlanFeatures; label: string }[] = [
 export const seedPlans: Plan[] = [
   {
     id: 'plan_free', name: 'Free', monthly: 0, quarterlyDiscount: 0, annualDiscount: 0,
-    capacity: { requests: 10000, throughputRps: 5, seats: 2, apps: 1, packs: 1, primitives: 3, promptGb: 0.5, logGb: 0.5, cacheGb: 0.1, retentionDays: 7 },
-    features: { rbac: 'No', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'No', backups: 'None', deployment: 'Shared multi-tenant', bedrock: 'No', specialFeatures: '—', support: 'Community' },
+    capacity: { requests: 10000, seats: 2, apps: 1, packs: 1, primitives: 3, promptGb: 0.5, logGb: 0.5, cacheGb: 0.1, retentionDays: 7 },
+    features: { rbac: 'None', throughputTier: 'Standard', deployment: 'Shared multi-tenant', backups: 'None', support: 'Community', sso: false, scim: false, immutableLogs: false, advancedReporting: false, hitl: false, bedrock: false, customModels: false },
     notes: 'Developer / plugin adoption',
   },
   {
     id: 'plan_builder', name: 'Builder', monthly: 29, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 100000, throughputRps: 25, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, cacheGb: 1, retentionDays: 30 },
-    features: { rbac: 'Basic roles', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'Optional add-on', backups: 'Daily', deployment: 'Shared; Dedicated add-on available', bedrock: 'No', specialFeatures: '—', support: 'Email support' },
+    capacity: { requests: 100000, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, cacheGb: 1, retentionDays: 30 },
+    features: { rbac: 'Basic roles', throughputTier: 'Standard', deployment: 'Shared; Dedicated add-on available', backups: 'Daily', support: 'Email support', sso: false, scim: false, immutableLogs: false, advancedReporting: false, hitl: false, bedrock: false, customModels: false },
     notes: 'Solo founder / startup builder',
   },
   {
     id: 'plan_team', name: 'Team', monthly: 99, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 500000, throughputRps: 100, seats: 10, apps: 10, packs: 5, primitives: 12, promptGb: 10, logGb: 10, cacheGb: 5, retentionDays: 90 },
-    features: { rbac: 'Basic RBAC', sso: 'No', immutableLogs: 'Optional add-on', advancedReporting: 'Standard', hitl: 'Included', backups: 'Daily + restore window', deployment: 'Shared; Dedicated add-on available', bedrock: 'Add-on', specialFeatures: 'Beta features', support: '1 kickoff session + priority email' },
+    capacity: { requests: 500000, seats: 10, apps: 10, packs: 5, primitives: 12, promptGb: 10, logGb: 10, cacheGb: 5, retentionDays: 90 },
+    features: { rbac: 'Basic RBAC', throughputTier: 'High', deployment: 'Shared; Dedicated add-on available', backups: 'Daily + restore window', support: '1 kickoff session + priority email', sso: false, scim: false, immutableLogs: false, advancedReporting: true, hitl: true, bedrock: false, customModels: false },
     notes: 'Small product team',
   },
   {
     id: 'plan_business', name: 'Business', monthly: 399, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 2000000, throughputRps: 500, seats: 25, apps: 25, packs: 10, primitives: 25, promptGb: 50, logGb: 100, cacheGb: 25, retentionDays: 180 },
-    features: { rbac: 'Advanced RBAC', sso: 'SSO', immutableLogs: 'Included', advancedReporting: 'Included', hitl: 'Included', backups: 'Daily + extended restore', deployment: 'Shared; Dedicated add-on available', bedrock: 'Included', specialFeatures: 'AWS Bedrock, priority throughput, cache tuning', support: 'Dedicated onboarding + quarterly training + Slack' },
+    capacity: { requests: 2000000, seats: 25, apps: 25, packs: 10, primitives: 25, promptGb: 50, logGb: 100, cacheGb: 25, retentionDays: 180 },
+    features: { rbac: 'Advanced RBAC', throughputTier: 'Burst', deployment: 'Shared; Dedicated add-on available', backups: 'Daily + extended restore', support: 'Dedicated onboarding + quarterly training + Slack', sso: true, scim: false, immutableLogs: true, advancedReporting: true, hitl: true, bedrock: true, customModels: false },
     notes: 'Main governance SaaS plan',
   },
   {
     id: 'plan_enterprise', name: 'Enterprise Cloud', monthly: 2499, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 10000000, throughputRps: 5000, seats: 1000, apps: 100, packs: 20, primitives: 50, promptGb: 500, logGb: 1000, cacheGb: 250, retentionDays: 1095 },
-    features: { rbac: 'Advanced RBAC', sso: 'SSO + SCIM', immutableLogs: 'Included', advancedReporting: 'Included', hitl: 'Included', backups: 'Custom', deployment: 'Dedicated single-tenant included', bedrock: 'Included', specialFeatures: 'Bedrock + custom models, priority throughput, dedicated cache', support: 'Named onboarding lead + SLA support' },
+    capacity: { requests: 10000000, seats: 1000, apps: 100, packs: 20, primitives: 50, promptGb: 500, logGb: 1000, cacheGb: 250, retentionDays: 1095 },
+    features: { rbac: 'Advanced RBAC', throughputTier: 'Dedicated', deployment: 'Dedicated single-tenant included', backups: 'Custom', support: 'Named onboarding lead + SLA support', sso: true, scim: true, immutableLogs: true, advancedReporting: true, hitl: true, bedrock: true, customModels: true },
     notes: 'Dedicated enterprise cloud',
   },
 ]
 
 export const seedAddOns: AddOn[] = [
   { id: 'ao_requests', name: 'Extra governed requests', kind: 'capacity', capacityKey: 'requests', unitPrice: null, packSize: 100000, packPrice: 15, unitLabel: '100k req/mo', notes: 'Usage overage pack' },
-  { id: 'ao_throughput', name: 'Extra throughput', kind: 'capacity', capacityKey: 'throughputRps', unitPrice: 2, packSize: 100, packPrice: 150, unitLabel: 'req/s', notes: 'Higher sustained rate limit; 100 req/s pack' },
   { id: 'ao_cache', name: 'Extra prompt cache', kind: 'capacity', capacityKey: 'cacheGb', unitPrice: 3, packSize: 50, packPrice: 120, unitLabel: 'GB cache/mo', notes: 'Larger cache; cached prompts are not billed as requests' },
-  { id: 'ao_bedrock', name: 'AWS Bedrock access', kind: 'feature', unitPrice: 250, packSize: 1, packPrice: 250, unitLabel: 'workspace/mo', notes: 'Included in Business+; add-on for Team' },
   { id: 'ao_seats', name: 'Extra seat', kind: 'capacity', capacityKey: 'seats', unitPrice: 15, packSize: 100, packPrice: 1000, unitLabel: 'seat/mo', notes: 'Discounted 100-seat pack' },
   { id: 'ao_apps', name: 'Extra app / workflow', kind: 'capacity', capacityKey: 'apps', unitPrice: 25, packSize: 5, packPrice: 100, unitLabel: 'app/mo', notes: 'Discounted 5-app pack' },
   { id: 'ao_packs', name: 'Extra policy pack', kind: 'capacity', capacityKey: 'packs', unitPrice: 50, packSize: 5, packPrice: 200, unitLabel: 'pack/mo', notes: 'Discounted 5-pack bundle' },
@@ -148,8 +180,10 @@ export const seedAddOns: AddOn[] = [
   { id: 'ao_prompt', name: 'Extra prompt storage', kind: 'capacity', capacityKey: 'promptGb', unitPrice: 2, packSize: 100, packPrice: 150, unitLabel: 'GB/mo', notes: 'Discounted 100GB storage pack' },
   { id: 'ao_log', name: 'Extra log storage', kind: 'capacity', capacityKey: 'logGb', unitPrice: 3, packSize: 100, packPrice: 250, unitLabel: 'GB/mo', notes: 'Discounted 100GB log storage pack' },
   { id: 'ao_immutable', name: 'Immutable logs', kind: 'feature', unitPrice: 100, packSize: 1, packPrice: 100, unitLabel: 'workspace/mo', notes: 'Included in Business+' },
-  { id: 'ao_reporting', name: 'Advanced reporting', kind: 'feature', unitPrice: 150, packSize: 1, packPrice: 150, unitLabel: 'workspace/mo', notes: 'Included in Business+' },
+  { id: 'ao_reporting', name: 'Advanced reporting', kind: 'feature', unitPrice: 150, packSize: 1, packPrice: 150, unitLabel: 'workspace/mo', notes: 'Included in Team+' },
   { id: 'ao_hitl', name: 'HITL', kind: 'feature', unitPrice: 99, packSize: 1, packPrice: 99, unitLabel: 'workspace/mo', notes: 'Included in Team+' },
+  { id: 'ao_bedrock', name: 'AWS Bedrock access', kind: 'feature', unitPrice: 250, packSize: 1, packPrice: 250, unitLabel: 'workspace/mo', notes: 'Included in Business+; add-on for Team' },
+  { id: 'ao_custom', name: 'Custom / fine-tuned models', kind: 'feature', unitPrice: 500, packSize: 1, packPrice: 500, unitLabel: 'workspace/mo', notes: 'Included in Enterprise Cloud' },
 ]
 
 export const defaultDiscounts: Discounts = {
@@ -157,7 +191,7 @@ export const defaultDiscounts: Discounts = {
 }
 
 /* ------------------------------------------------------------------ */
-/* Persistence                                                          */
+/* Persistence (v2 keys — feature model changed)                        */
 /* ------------------------------------------------------------------ */
 function load<T>(key: string, fallback: T): T {
   try {
@@ -177,12 +211,12 @@ function save<T>(key: string, val: T) {
 const clonePlans = () => seedPlans.map((p) => ({ ...p, capacity: { ...p.capacity }, features: { ...p.features } }))
 const cloneAddOns = () => seedAddOns.map((a) => ({ ...a }))
 
-export const loadPlans = (): Plan[] => load('plcy_plans', clonePlans())
-export const savePlans = (v: Plan[]) => save('plcy_plans', v)
-export const loadAddOns = (): AddOn[] => load('plcy_addons', cloneAddOns())
-export const saveAddOns = (v: AddOn[]) => save('plcy_addons', v)
-export const loadDiscounts = (): Discounts => load('plcy_discounts', { ...defaultDiscounts })
-export const saveDiscounts = (v: Discounts) => save('plcy_discounts', v)
+export const loadPlans = (): Plan[] => load('plcy_plans_v2', clonePlans())
+export const savePlans = (v: Plan[]) => save('plcy_plans_v2', v)
+export const loadAddOns = (): AddOn[] => load('plcy_addons_v2', cloneAddOns())
+export const saveAddOns = (v: AddOn[]) => save('plcy_addons_v2', v)
+export const loadDiscounts = (): Discounts => load('plcy_discounts_v2', { ...defaultDiscounts })
+export const saveDiscounts = (v: Discounts) => save('plcy_discounts_v2', v)
 
 export function newPlanId(): string {
   return 'plan_' + Math.random().toString(36).slice(2, 8)
@@ -218,12 +252,10 @@ export interface QuoteInput {
   termMonths: 12 | 24 | 36
   commercialPct: number
   demand: PlanCapacity
-  immutableLogs: boolean
-  advancedReporting: boolean
-  hitl: boolean
-  bedrock: boolean
+  throughputTier: string
+  /** Individually toggleable entitlements (keys of ENTITLEMENTS). */
+  entitlements: Record<BoolFeatureKey, boolean>
   premiumSupport: boolean
-  /** Share of requests served from prompt cache (0–1); discounted, not billed. */
   cacheHitRate: number
   modelAccess: 'BYOK' | 'Managed'
   managedCreditsMonthly: number
@@ -252,7 +284,6 @@ export interface Quote {
   effPerSeat: number
 }
 
-/** Cheapest way to buy `extra` units: individual vs whole packs. */
 function overageCost(extra: number, a: AddOn): { cost: number; basis: string } {
   if (extra <= 0) return { cost: 0, basis: 'within plan' }
   const packs = Math.ceil(extra / a.packSize)
@@ -261,8 +292,6 @@ function overageCost(extra: number, a: AddOn): { cost: number; basis: string } {
   if (packCost <= individual) return { cost: packCost, basis: `${packs} × ${a.unitLabel} pack` }
   return { cost: individual, basis: `${extra} × ${a.unitLabel}` }
 }
-
-const isIncluded = (v: string) => v === 'Included' || v === 'Standard'
 
 export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], discounts: Discounts): Quote {
   const plan = plans.find((p) => p.id === input.planId) ?? null
@@ -273,7 +302,12 @@ export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], 
 
   lines.push({ label: `${plan.name} plan`, basis: 'base subscription', monthly: plan.monthly, notes: 'Recurring platform fee' })
 
-  // Cache hits are discounted off billable requests (default: not billed at all).
+  // Throughput tier upgrade (delta above the plan's included tier)
+  if (tierRank(input.throughputTier) > tierRank(plan.features.throughputTier)) {
+    const delta = tierPrice(input.throughputTier) - tierPrice(plan.features.throughputTier)
+    lines.push({ label: `Throughput — ${input.throughputTier}`, basis: `upgrade from ${plan.features.throughputTier}`, monthly: delta, notes: THROUGHPUT_TIERS.find((t) => t.name === input.throughputTier)?.note ?? '' })
+  }
+
   const cacheHit = Math.min(1, Math.max(0, input.cacheHitRate)) * discounts.cacheHitDiscount
 
   // Capacity overages
@@ -294,19 +328,13 @@ export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], 
     }
   }
 
-  // Feature add-ons (only charged when required and not already included)
-  const featureReq: { on: boolean; feat: keyof PlanFeatures; addon: string }[] = [
-    { on: input.immutableLogs, feat: 'immutableLogs', addon: 'ao_immutable' },
-    { on: input.advancedReporting, feat: 'advancedReporting', addon: 'ao_reporting' },
-    { on: input.hitl, feat: 'hitl', addon: 'ao_hitl' },
-    { on: input.bedrock, feat: 'bedrock', addon: 'ao_bedrock' },
-  ]
-  for (const fr of featureReq) {
-    if (!fr.on) continue
-    if (isIncluded(plan.features[fr.feat])) {
-      lines.push({ label: addOns.find((a) => a.id === fr.addon)?.name ?? fr.addon, basis: 'included in plan', monthly: 0, notes: 'No charge — bundled' })
+  // Entitlements — $0 when the plan includes it, else the add-on price
+  for (const e of ENTITLEMENTS) {
+    if (!input.entitlements[e.key]) continue
+    if (plan.features[e.key]) {
+      lines.push({ label: e.label, basis: 'included in plan', monthly: 0, notes: 'Bundled — no charge' })
     } else {
-      const a = addOns.find((x) => x.id === fr.addon)
+      const a = addOns.find((x) => x.id === e.addonId)
       if (a) lines.push({ label: a.name, basis: a.unitLabel, monthly: a.packPrice, notes: a.notes })
     }
   }
@@ -317,7 +345,6 @@ export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], 
     lines.push({ label: 'PLCY-managed LLM', basis: `${money(input.managedCreditsMonthly)} credits + ${pct(discounts.managedLlmFee)} fee`, monthly: input.managedCreditsMonthly + fee, notes: 'Optional convenience layer; BYOK is default' })
   }
 
-  // Premium support — % of the recurring subtotal so far
   const subtotal = lines.reduce((s, l) => s + l.monthly, 0)
   if (input.premiumSupport) {
     const fee = subtotal * discounts.premiumSupport
