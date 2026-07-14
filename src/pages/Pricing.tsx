@@ -88,8 +88,8 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
 
   const emptyPlan = (): Plan => ({
     id: newPlanId(), name: 'New plan', monthly: 0, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 100000, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, retentionDays: 30 },
-    features: { rbac: 'Basic roles', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'Optional add-on', backups: 'Daily', deployment: 'Shared multi-tenant', support: 'Email support' },
+    capacity: { requests: 100000, throughputRps: 25, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, cacheGb: 1, retentionDays: 30 },
+    features: { rbac: 'Basic roles', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'Optional add-on', backups: 'Daily', deployment: 'Shared multi-tenant', bedrock: 'No', specialFeatures: '—', support: 'Email support' },
     notes: '',
   })
 
@@ -135,6 +135,7 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
               <Badge tone="blue">{p.features.rbac}</Badge>
               {p.features.sso !== 'No' && <Badge tone="purple">{p.features.sso}</Badge>}
               {p.features.deployment.includes('Dedicated') && <Badge tone="orange">Dedicated</Badge>}
+              {p.features.bedrock === 'Included' && <Badge tone="green">Bedrock</Badge>}
             </div>
 
             {canManage && (
@@ -323,6 +324,7 @@ function DiscountsTab({ discounts, setDiscounts, canManage }: { discounts: Disco
     { key: 'premiumSupport', label: 'Premium support', desc: 'Uplift applied on the recurring subscription' },
     { key: 'managedLlmFee', label: 'PLCY-managed LLM fee', desc: 'Service fee on managed model credits (BYOK stays default)' },
     { key: 'byokMarkup', label: 'BYOK markup', desc: 'Markup for bring-your-own-key access' },
+    { key: 'cacheHitDiscount', label: 'Cache-hit discount', desc: 'How much a cached prompt is discounted off a billable request (100% = cache hits are free)' },
   ]
   return (
     <Card>
@@ -356,8 +358,8 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
     const p = active.find((x) => x.name === 'Business') ?? active[0]
     return {
       planId: p?.id ?? '', cadence: 'Annual', termMonths: 12, commercialPct: 0,
-      demand: p ? { ...p.capacity } : { requests: 0, seats: 0, apps: 0, packs: 0, primitives: 0, promptGb: 0, logGb: 0, retentionDays: 0 },
-      immutableLogs: false, advancedReporting: true, hitl: true, premiumSupport: false,
+      demand: p ? { ...p.capacity } : { requests: 0, throughputRps: 0, seats: 0, apps: 0, packs: 0, primitives: 0, promptGb: 0, logGb: 0, cacheGb: 0, retentionDays: 0 },
+      immutableLogs: false, advancedReporting: true, hitl: true, bedrock: false, premiumSupport: false, cacheHitRate: 0,
       modelAccess: 'BYOK', managedCreditsMonthly: 0, setupFee: 1000, trainingFee: 500, migrationFee: 0,
     }
   })
@@ -426,6 +428,7 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
               { k: 'immutableLogs' as const, label: 'Immutable logs' },
               { k: 'advancedReporting' as const, label: 'Advanced reporting' },
               { k: 'hitl' as const, label: 'HITL (human-in-the-loop)' },
+              { k: 'bedrock' as const, label: 'AWS Bedrock access' },
               { k: 'premiumSupport' as const, label: `Premium support (+${pct(discounts.premiumSupport)})` },
             ].map((o) => (
               <div key={o.k} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
@@ -433,6 +436,13 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
                 <Toggle on={input[o.k]} onClick={() => set({ [o.k]: !input[o.k] } as Partial<QuoteInput>)} />
               </div>
             ))}
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
+              <span className="text-sm text-ink-700">Cache hit rate</span>
+              <div className="relative w-24">
+                <input type="number" min={0} max={100} className="input py-1.5 pr-7 text-right text-sm" value={Math.round(input.cacheHitRate * 100)} onChange={(e) => set({ cacheHitRate: Math.min(100, Math.max(0, Number(e.target.value))) / 100 })} />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">%</span>
+              </div>
+            </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>

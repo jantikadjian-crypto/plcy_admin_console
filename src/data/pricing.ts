@@ -6,16 +6,18 @@
  * are persisted to localStorage so edits survive a reload.
  */
 
-export type CapacityKey = 'requests' | 'seats' | 'apps' | 'packs' | 'primitives' | 'promptGb' | 'logGb' | 'retentionDays'
+export type CapacityKey = 'requests' | 'throughputRps' | 'seats' | 'apps' | 'packs' | 'primitives' | 'promptGb' | 'logGb' | 'cacheGb' | 'retentionDays'
 
 export interface PlanCapacity {
   requests: number
+  throughputRps: number
   seats: number
   apps: number
   packs: number
   primitives: number
   promptGb: number
   logGb: number
+  cacheGb: number
   retentionDays: number
 }
 
@@ -27,6 +29,8 @@ export interface PlanFeatures {
   hitl: string
   backups: string
   deployment: string
+  bedrock: string
+  specialFeatures: string
   support: string
 }
 
@@ -65,17 +69,21 @@ export interface Discounts {
   premiumSupport: number
   managedLlmFee: number
   byokMarkup: number
+  /** How much a cache hit is discounted off a billable request (1 = free). */
+  cacheHitDiscount: number
 }
 
 /* ---- Capacity dimension metadata (labels + formatting) ---- */
-export const CAPACITY_META: { key: CapacityKey; label: string; short: string }[] = [
+export const CAPACITY_META: { key: CapacityKey; label: string; short: string; unit?: string }[] = [
   { key: 'requests', label: 'Governed requests / mo', short: 'Requests' },
+  { key: 'throughputRps', label: 'Throughput (req/s)', short: 'Throughput', unit: ' r/s' },
   { key: 'seats', label: 'Seats', short: 'Seats' },
   { key: 'apps', label: 'Apps / workflows', short: 'Apps' },
   { key: 'packs', label: 'Policy packs', short: 'Packs' },
   { key: 'primitives', label: 'Primitives', short: 'Primitives' },
   { key: 'promptGb', label: 'Prompt storage (GB)', short: 'Prompt GB' },
   { key: 'logGb', label: 'Log storage (GB)', short: 'Log GB' },
+  { key: 'cacheGb', label: 'Prompt cache (GB)', short: 'Cache GB' },
   { key: 'retentionDays', label: 'Log retention (days)', short: 'Retention' },
 ]
 
@@ -87,6 +95,8 @@ export const FEATURE_META: { key: keyof PlanFeatures; label: string }[] = [
   { key: 'hitl', label: 'HITL' },
   { key: 'backups', label: 'Backups' },
   { key: 'deployment', label: 'Deployment model' },
+  { key: 'bedrock', label: 'AWS Bedrock access' },
+  { key: 'specialFeatures', label: 'Special / premium features' },
   { key: 'support', label: 'Onboarding / support' },
 ]
 
@@ -96,38 +106,41 @@ export const FEATURE_META: { key: keyof PlanFeatures; label: string }[] = [
 export const seedPlans: Plan[] = [
   {
     id: 'plan_free', name: 'Free', monthly: 0, quarterlyDiscount: 0, annualDiscount: 0,
-    capacity: { requests: 10000, seats: 2, apps: 1, packs: 1, primitives: 3, promptGb: 0.5, logGb: 0.5, retentionDays: 7 },
-    features: { rbac: 'No', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'No', backups: 'None', deployment: 'Shared multi-tenant', support: 'Community' },
+    capacity: { requests: 10000, throughputRps: 5, seats: 2, apps: 1, packs: 1, primitives: 3, promptGb: 0.5, logGb: 0.5, cacheGb: 0.1, retentionDays: 7 },
+    features: { rbac: 'No', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'No', backups: 'None', deployment: 'Shared multi-tenant', bedrock: 'No', specialFeatures: '—', support: 'Community' },
     notes: 'Developer / plugin adoption',
   },
   {
     id: 'plan_builder', name: 'Builder', monthly: 29, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 100000, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, retentionDays: 30 },
-    features: { rbac: 'Basic roles', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'Optional add-on', backups: 'Daily', deployment: 'Shared; Dedicated add-on available', support: 'Email support' },
+    capacity: { requests: 100000, throughputRps: 25, seats: 5, apps: 3, packs: 2, primitives: 6, promptGb: 2, logGb: 2, cacheGb: 1, retentionDays: 30 },
+    features: { rbac: 'Basic roles', sso: 'No', immutableLogs: 'No', advancedReporting: 'No', hitl: 'Optional add-on', backups: 'Daily', deployment: 'Shared; Dedicated add-on available', bedrock: 'No', specialFeatures: '—', support: 'Email support' },
     notes: 'Solo founder / startup builder',
   },
   {
     id: 'plan_team', name: 'Team', monthly: 99, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 500000, seats: 10, apps: 10, packs: 5, primitives: 12, promptGb: 10, logGb: 10, retentionDays: 90 },
-    features: { rbac: 'Basic RBAC', sso: 'No', immutableLogs: 'Optional add-on', advancedReporting: 'Standard', hitl: 'Included', backups: 'Daily + restore window', deployment: 'Shared; Dedicated add-on available', support: '1 kickoff session + priority email' },
+    capacity: { requests: 500000, throughputRps: 100, seats: 10, apps: 10, packs: 5, primitives: 12, promptGb: 10, logGb: 10, cacheGb: 5, retentionDays: 90 },
+    features: { rbac: 'Basic RBAC', sso: 'No', immutableLogs: 'Optional add-on', advancedReporting: 'Standard', hitl: 'Included', backups: 'Daily + restore window', deployment: 'Shared; Dedicated add-on available', bedrock: 'Add-on', specialFeatures: 'Beta features', support: '1 kickoff session + priority email' },
     notes: 'Small product team',
   },
   {
     id: 'plan_business', name: 'Business', monthly: 399, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 2000000, seats: 25, apps: 25, packs: 10, primitives: 25, promptGb: 50, logGb: 100, retentionDays: 180 },
-    features: { rbac: 'Advanced RBAC', sso: 'SSO', immutableLogs: 'Included', advancedReporting: 'Included', hitl: 'Included', backups: 'Daily + extended restore', deployment: 'Shared; Dedicated add-on available', support: 'Dedicated onboarding + quarterly training + Slack' },
+    capacity: { requests: 2000000, throughputRps: 500, seats: 25, apps: 25, packs: 10, primitives: 25, promptGb: 50, logGb: 100, cacheGb: 25, retentionDays: 180 },
+    features: { rbac: 'Advanced RBAC', sso: 'SSO', immutableLogs: 'Included', advancedReporting: 'Included', hitl: 'Included', backups: 'Daily + extended restore', deployment: 'Shared; Dedicated add-on available', bedrock: 'Included', specialFeatures: 'AWS Bedrock, priority throughput, cache tuning', support: 'Dedicated onboarding + quarterly training + Slack' },
     notes: 'Main governance SaaS plan',
   },
   {
     id: 'plan_enterprise', name: 'Enterprise Cloud', monthly: 2499, quarterlyDiscount: 0.05, annualDiscount: 0.17,
-    capacity: { requests: 10000000, seats: 1000, apps: 100, packs: 20, primitives: 50, promptGb: 500, logGb: 1000, retentionDays: 1095 },
-    features: { rbac: 'Advanced RBAC', sso: 'SSO + SCIM', immutableLogs: 'Included', advancedReporting: 'Included', hitl: 'Included', backups: 'Custom', deployment: 'Dedicated single-tenant included', support: 'Named onboarding lead + SLA support' },
+    capacity: { requests: 10000000, throughputRps: 5000, seats: 1000, apps: 100, packs: 20, primitives: 50, promptGb: 500, logGb: 1000, cacheGb: 250, retentionDays: 1095 },
+    features: { rbac: 'Advanced RBAC', sso: 'SSO + SCIM', immutableLogs: 'Included', advancedReporting: 'Included', hitl: 'Included', backups: 'Custom', deployment: 'Dedicated single-tenant included', bedrock: 'Included', specialFeatures: 'Bedrock + custom models, priority throughput, dedicated cache', support: 'Named onboarding lead + SLA support' },
     notes: 'Dedicated enterprise cloud',
   },
 ]
 
 export const seedAddOns: AddOn[] = [
   { id: 'ao_requests', name: 'Extra governed requests', kind: 'capacity', capacityKey: 'requests', unitPrice: null, packSize: 100000, packPrice: 15, unitLabel: '100k req/mo', notes: 'Usage overage pack' },
+  { id: 'ao_throughput', name: 'Extra throughput', kind: 'capacity', capacityKey: 'throughputRps', unitPrice: 2, packSize: 100, packPrice: 150, unitLabel: 'req/s', notes: 'Higher sustained rate limit; 100 req/s pack' },
+  { id: 'ao_cache', name: 'Extra prompt cache', kind: 'capacity', capacityKey: 'cacheGb', unitPrice: 3, packSize: 50, packPrice: 120, unitLabel: 'GB cache/mo', notes: 'Larger cache; cached prompts are not billed as requests' },
+  { id: 'ao_bedrock', name: 'AWS Bedrock access', kind: 'feature', unitPrice: 250, packSize: 1, packPrice: 250, unitLabel: 'workspace/mo', notes: 'Included in Business+; add-on for Team' },
   { id: 'ao_seats', name: 'Extra seat', kind: 'capacity', capacityKey: 'seats', unitPrice: 15, packSize: 100, packPrice: 1000, unitLabel: 'seat/mo', notes: 'Discounted 100-seat pack' },
   { id: 'ao_apps', name: 'Extra app / workflow', kind: 'capacity', capacityKey: 'apps', unitPrice: 25, packSize: 5, packPrice: 100, unitLabel: 'app/mo', notes: 'Discounted 5-app pack' },
   { id: 'ao_packs', name: 'Extra policy pack', kind: 'capacity', capacityKey: 'packs', unitPrice: 50, packSize: 5, packPrice: 200, unitLabel: 'pack/mo', notes: 'Discounted 5-pack bundle' },
@@ -140,7 +153,7 @@ export const seedAddOns: AddOn[] = [
 ]
 
 export const defaultDiscounts: Discounts = {
-  quarterly: 0.05, annual: 0.17, term24: 0.2, term36: 0.25, premiumSupport: 0.15, managedLlmFee: 0.05, byokMarkup: 0,
+  quarterly: 0.05, annual: 0.17, term24: 0.2, term36: 0.25, premiumSupport: 0.15, managedLlmFee: 0.05, byokMarkup: 0, cacheHitDiscount: 1,
 }
 
 /* ------------------------------------------------------------------ */
@@ -208,7 +221,10 @@ export interface QuoteInput {
   immutableLogs: boolean
   advancedReporting: boolean
   hitl: boolean
+  bedrock: boolean
   premiumSupport: boolean
+  /** Share of requests served from prompt cache (0–1); discounted, not billed. */
+  cacheHitRate: number
   modelAccess: 'BYOK' | 'Managed'
   managedCreditsMonthly: number
   setupFee: number
@@ -257,15 +273,24 @@ export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], 
 
   lines.push({ label: `${plan.name} plan`, basis: 'base subscription', monthly: plan.monthly, notes: 'Recurring platform fee' })
 
+  // Cache hits are discounted off billable requests (default: not billed at all).
+  const cacheHit = Math.min(1, Math.max(0, input.cacheHitRate)) * discounts.cacheHitDiscount
+
   // Capacity overages
   for (const a of addOns) {
     if (a.kind !== 'capacity' || !a.capacityKey) continue
-    const need = input.demand[a.capacityKey]
+    let need = input.demand[a.capacityKey]
+    let cacheSuffix = ''
+    if (a.capacityKey === 'requests' && cacheHit > 0) {
+      const billable = Math.round(need * (1 - cacheHit))
+      cacheSuffix = ` · ${Math.round(cacheHit * 100)}% cached (${billable.toLocaleString()} billable)`
+      need = billable
+    }
     const included = plan.capacity[a.capacityKey]
     const extra = Math.max(0, need - included)
     if (extra > 0) {
       const { cost, basis } = overageCost(extra, a)
-      lines.push({ label: a.name, basis, monthly: cost, notes: a.notes })
+      lines.push({ label: a.name, basis: basis + cacheSuffix, monthly: cost, notes: a.notes })
     }
   }
 
@@ -274,6 +299,7 @@ export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], 
     { on: input.immutableLogs, feat: 'immutableLogs', addon: 'ao_immutable' },
     { on: input.advancedReporting, feat: 'advancedReporting', addon: 'ao_reporting' },
     { on: input.hitl, feat: 'hitl', addon: 'ao_hitl' },
+    { on: input.bedrock, feat: 'bedrock', addon: 'ao_bedrock' },
   ]
   for (const fr of featureReq) {
     if (!fr.on) continue
