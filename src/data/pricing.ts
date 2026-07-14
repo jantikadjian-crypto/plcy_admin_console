@@ -80,16 +80,16 @@ export interface Discounts {
 }
 
 /* ---- Capacity / feature metadata ---- */
-export const CAPACITY_META: { key: CapacityKey; label: string; short: string }[] = [
-  { key: 'requests', label: 'Governed requests / mo', short: 'Requests' },
-  { key: 'seats', label: 'Seats', short: 'Seats' },
-  { key: 'apps', label: 'Apps / workflows', short: 'Apps' },
-  { key: 'packs', label: 'Policy packs', short: 'Packs' },
-  { key: 'primitives', label: 'Primitives', short: 'Primitives' },
-  { key: 'promptGb', label: 'Prompt storage (GB)', short: 'Prompt GB' },
-  { key: 'logGb', label: 'Log storage (GB)', short: 'Log GB' },
-  { key: 'cacheGb', label: 'Prompt cache (GB)', short: 'Cache GB' },
-  { key: 'retentionDays', label: 'Log retention (days)', short: 'Retention' },
+export const CAPACITY_META: { key: CapacityKey; label: string; short: string; desc: string }[] = [
+  { key: 'requests', label: 'Governed requests / mo', short: 'Requests', desc: 'Counted at PLCY ingress. Cache hits are excluded from billable requests.' },
+  { key: 'seats', label: 'Seats', short: 'Seats', desc: 'Named users with console access.' },
+  { key: 'apps', label: 'Apps / workflows', short: 'Apps', desc: 'Distinct governed apps or workflows.' },
+  { key: 'packs', label: 'Policy packs', short: 'Packs', desc: 'Composite policy packs enabled in the workspace.' },
+  { key: 'primitives', label: 'Primitives', short: 'Primitives', desc: 'Individual policy controls (primitives) in use.' },
+  { key: 'promptGb', label: 'Prompt storage (GB)', short: 'Prompt GB', desc: 'Prompt library / access storage.' },
+  { key: 'logGb', label: 'Log storage (GB)', short: 'Log GB', desc: 'Governed request/response log storage.' },
+  { key: 'cacheGb', label: 'Prompt cache (GB)', short: 'Cache GB', desc: 'Prompt cache size — larger cache means more hits, fewer billable requests.' },
+  { key: 'retentionDays', label: 'Log retention (days)', short: 'Retention', desc: 'How long logs are kept before purge.' },
 ]
 
 export const RBAC_OPTIONS = ['None', 'Basic roles', 'Basic RBAC', 'Advanced RBAC']

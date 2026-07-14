@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BadgeDollarSign, Package, Layers, Percent, Calculator, Plus, Pencil, Copy, Archive, ArchiveRestore, Trash2, Check, Download, FileText } from 'lucide-react'
+import { BadgeDollarSign, Package, Layers, Percent, Calculator, Cpu, Plus, Pencil, Copy, Archive, ArchiveRestore, Trash2, Check, Download, FileText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -11,14 +11,17 @@ import {
   money, money2, pct, compact, effectivePrice, packUnitPrice, packSavingsPct, computeQuote,
 } from '@/data/pricing'
 import type { Plan, PlanCapacity, PlanFeatures, AddOn, Discounts, Cadence, QuoteInput } from '@/data/pricing'
+import { bedrockModels, bedrockModalities, PROVIDER_TONE, modalityTone } from '@/data/bedrock'
+import type { Modality } from '@/data/bedrock'
 import { downloadCSV, downloadMarkdown, reportStem } from '@/lib/download'
 
-type Tab = 'Plans' | 'Add-ons' | 'Discounts' | 'Quote'
+type Tab = 'Plans' | 'Add-ons' | 'Discounts' | 'Quote' | 'Bedrock'
 const TABS: { key: Tab; icon: LucideIcon; label: string }[] = [
   { key: 'Plans', icon: Package, label: 'Plans' },
   { key: 'Add-ons', icon: Layers, label: 'Add-ons & packs' },
   { key: 'Discounts', icon: Percent, label: 'Discounts & levers' },
   { key: 'Quote', icon: Calculator, label: 'Quote builder' },
+  { key: 'Bedrock', icon: Cpu, label: 'Bedrock models' },
 ]
 
 export default function Pricing() {
@@ -59,6 +62,7 @@ export default function Pricing() {
       {tab === 'Add-ons' && <AddOnsTab addOns={addOns} setAddOns={setAddOns} canManage={canManage} log={logAction} />}
       {tab === 'Discounts' && <DiscountsTab discounts={discounts} setDiscounts={setDiscounts} canManage={canManage} />}
       {tab === 'Quote' && <QuoteTab plans={plans} addOns={addOns} discounts={discounts} log={logAction} />}
+      {tab === 'Bedrock' && <BedrockTab plans={plans} />}
     </>
   )
 }
@@ -143,7 +147,7 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
 
             {canManage && (
               <div className="mt-4 flex items-center gap-1 border-t border-slate-100 pt-3">
-                <button className="btn-secondary flex-1 px-2 py-1.5 text-xs" onClick={() => setEdit(p)}><Pencil className="h-3.5 w-3.5" />Edit</button>
+                <button className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-200 px-2 py-1.5 text-xs font-semibold text-ink-700 transition-colors hover:bg-slate-300" onClick={() => setEdit(p)}><Pencil className="h-3.5 w-3.5" />Edit</button>
                 <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" onClick={() => duplicate(p)} title="Duplicate"><Copy className="h-4 w-4" /></button>
                 <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-ink-700" onClick={() => toggleArchive(p)} title={p.archived ? 'Restore' : 'Archive'}>{p.archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}</button>
               </div>
@@ -159,7 +163,7 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
   )
 }
 
-function NumField({ label, value, onChange, step = 1, suffix }: { label: string; value: number; onChange: (n: number) => void; step?: number; suffix?: string }) {
+function NumField({ label, value, onChange, step = 1, suffix, hint }: { label: string; value: number; onChange: (n: number) => void; step?: number; suffix?: string; hint?: string }) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-ink-500">{label}</label>
@@ -167,6 +171,7 @@ function NumField({ label, value, onChange, step = 1, suffix }: { label: string;
         <input type="number" step={step} className="input" value={value} onChange={(e) => onChange(Number(e.target.value))} />
         {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">{suffix}</span>}
       </div>
+      {hint && <p className="mt-1 text-[11px] leading-snug text-ink-400">{hint}</p>}
     </div>
   )
 }
@@ -423,33 +428,36 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
         <Card>
           <CardTitle title="Deal setup" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2"><label className="mb-1 block text-xs font-medium text-ink-500">Client / business name</label><input className="input" value={client} onChange={(e) => setClient(e.target.value)} /></div>
+            <div className="sm:col-span-2"><label className="mb-1 block text-xs font-medium text-ink-500">Client / business name</label><input className="input" value={client} onChange={(e) => setClient(e.target.value)} /><p className="mt-1 text-[11px] leading-snug text-ink-400">Legal entity shown on the order form and quote export.</p></div>
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-500">Plan</label>
               <select className="input" value={input.planId} onChange={(e) => { const p = plans.find((x) => x.id === e.target.value); set({ planId: e.target.value, demand: p ? { ...p.capacity } : input.demand, throughputTier: p?.features.throughputTier ?? input.throughputTier }) }}>
                 {active.map((p) => <option key={p.id} value={p.id}>{p.name} — {money(p.monthly)}/mo</option>)}
               </select>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">Base package. Its included capacity pre-fills the Demand fields below.</p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-500">Billing cadence</label>
               <select className="input" value={input.cadence} onChange={(e) => set({ cadence: e.target.value as Cadence })}>
                 {(['Monthly', 'Quarterly', 'Annual'] as Cadence[]).map((c) => <option key={c}>{c}</option>)}
               </select>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">Quarterly and annual bill at a discount off the standard monthly price.</p>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-500">Contract term</label>
               <select className="input" value={input.termMonths} onChange={(e) => set({ termMonths: Number(e.target.value) as QuoteInput['termMonths'] })}>
                 {[12, 24, 36].map((m) => <option key={m} value={m}>{m} months</option>)}
               </select>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">Commitment length. 24- and 36-month terms add an extra discount.</p>
             </div>
-            <NumField label="Commercial discount %" value={Math.round(input.commercialPct * 100)} onChange={(v) => set({ commercialPct: v / 100 })} suffix="%" />
+            <NumField label="Commercial discount %" value={Math.round(input.commercialPct * 100)} onChange={(v) => set({ commercialPct: v / 100 })} suffix="%" hint="Negotiated discount on the recurring subscription, on top of billing and term discounts." />
           </div>
         </Card>
 
         <Card>
           <CardTitle title="Demand" subtitle="Overages beyond the plan's included capacity are priced by the cheaper of unit or pack" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {CAPACITY_META.map((c) => <NumField key={c.key} label={c.short} value={input.demand[c.key]} onChange={(v) => setDemand(c.key, v)} />)}
+            {CAPACITY_META.map((c) => <NumField key={c.key} label={c.short} value={input.demand[c.key]} onChange={(v) => setDemand(c.key, v)} hint={c.desc} />)}
           </div>
         </Card>
 
@@ -564,6 +572,78 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
         </Card>
       </div>
     </div>
+  )
+}
+
+/* ================================================================== */
+/* Bedrock model catalog                                               */
+/* ================================================================== */
+function BedrockTab({ plans }: { plans: Plan[] }) {
+  const [modality, setModality] = useState<'All' | Modality>('All')
+  const [mode, setMode] = useState<'All' | 'byok' | 'managed'>('All')
+  const tierRankOf = (name: string) => { const i = plans.findIndex((p) => p.name === name); return i < 0 ? 99 : i }
+
+  const rows = bedrockModels
+    .filter((m) => (modality === 'All' || m.modality === modality) && (mode === 'All' || (mode === 'byok' ? m.byok : m.managed)))
+    .slice()
+    .sort((a, b) => tierRankOf(a.minTier) - tierRankOf(b.minTier) || a.provider.localeCompare(b.provider))
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-sm text-ink-500">
+          Foundation models a customer can reach through PLCY-governed Bedrock. <span className="font-medium text-ink-700">BYOK</span> models run in the
+          customer's own AWS account (tokens on their bill); <span className="font-medium text-ink-700">Managed</span> models are offered via PLCY credits.
+          Each model unlocks at a plan tier. Rosters and regions change — verify against AWS docs before contracting.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <select className="input w-auto py-1.5 text-sm" value={modality} onChange={(e) => setModality(e.target.value as 'All' | Modality)} aria-label="Filter by modality">
+            <option value="All">All modalities</option>
+            {bedrockModalities.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select className="input w-auto py-1.5 text-sm" value={mode} onChange={(e) => setMode(e.target.value as 'All' | 'byok' | 'managed')} aria-label="Filter by availability">
+            <option value="All">All access</option>
+            <option value="byok">BYOK-enabled</option>
+            <option value="managed">PLCY-managed</option>
+          </select>
+        </div>
+      </div>
+
+      <Card padded={false} className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-ink-400">
+                <th className="px-4 py-2.5 font-medium">Model</th>
+                <th className="px-4 py-2.5 font-medium">Provider</th>
+                <th className="px-4 py-2.5 font-medium">Modality</th>
+                <th className="px-4 py-2.5 font-medium">Best for</th>
+                <th className="px-4 py-2.5 font-medium">Unlocks at</th>
+                <th className="px-4 py-2.5 font-medium">Access</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((m) => (
+                <tr key={m.id} className="align-top hover:bg-slate-50/60">
+                  <td className="px-4 py-3 font-medium text-ink-900">{m.name}</td>
+                  <td className="px-4 py-3"><Badge tone={PROVIDER_TONE[m.provider] ?? 'slate'}>{m.provider}</Badge></td>
+                  <td className="px-4 py-3"><Badge tone={modalityTone[m.modality]}>{m.modality}</Badge></td>
+                  <td className="px-4 py-3 text-ink-600">{m.strengths}</td>
+                  <td className="px-4 py-3"><Badge tone="slate">{m.minTier}</Badge></td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {m.byok && <Badge tone="blue">BYOK</Badge>}
+                      {m.managed && <Badge tone="green">Managed</Badge>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-ink-400">No models match this filter.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
   )
 }
 
