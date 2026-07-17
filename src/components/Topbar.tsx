@@ -24,7 +24,8 @@ import { flatNav } from '@/config/navigation'
 import { models, instances } from '@/data/mock'
 import { packs as policyPacks, controls as policyControls, familyOf } from '@/data/policy'
 import { reports } from '@/data/reports'
-import { docs, docSearchText } from '@/data/docs'
+import { docSearchText } from '@/data/docs'
+import { useDocs } from '@/data/docsStore'
 import { glossary, glossaryId, glossarySearchText } from '@/data/glossary'
 import { recentAlerts } from '@/data/notifications'
 import type { AlertSeverity } from '@/data/notifications'
@@ -72,6 +73,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
   const { setScope } = useCustomerScope()
   const { list: customers } = useCustomers()
   const { can } = useSession()
+  const allDocs = useDocs()
   const current = flatNav.find((n) => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)))
   const title = current?.label ?? 'Dashboard'
 
@@ -103,11 +105,11 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
       ...policyControls.map((c) => ({ kind: 'Control', icon: Package, label: `${c.id} — ${c.name}`, sub: familyOf(c.prefix), to: '/policy-packs' })),
       ...instances.map((i) => ({ kind: 'Instance', icon: Server, label: i.name, sub: i.customer, to: '/instances' })),
       ...reports.map((r) => ({ kind: 'Report', icon: FileBarChart, label: `${r.title} report`, sub: r.scope, to: r.to ?? '/reports' })),
-      ...docs.map((d) => ({ kind: 'Doc', icon: BookOpen, label: d.title, sub: d.category, to: `/docs/${d.slug}`, keywords: docSearchText(d) })),
+      ...allDocs.map((d) => ({ kind: 'Doc', icon: BookOpen, label: d.title, sub: d.category, to: `/docs/${d.slug}`, keywords: docSearchText(d) })),
       ...glossary.map((t) => ({ kind: 'Term', icon: BookOpen, label: t.full ? `${t.term} — ${t.full}` : t.term, sub: t.group, to: `/docs/glossary?term=${glossaryId(t.term)}`, keywords: glossarySearchText(t) })),
       ...flatNav.map((n) => ({ kind: 'Page', icon: LayoutDashboard, label: n.label, sub: 'Go to page', to: n.to })),
     ],
-    [customers],
+    [customers, allDocs],
   )
 
   const query = q.trim().toLowerCase()

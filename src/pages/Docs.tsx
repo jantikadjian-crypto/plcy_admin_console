@@ -15,20 +15,24 @@ import {
   Library,
   FileText,
   Image as ImageIcon,
+  Plus,
+  Pencil,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, PageHeader, Badge } from '@/components/ui'
 import type { Tone } from '@/components/ui'
 import { Diagram } from '@/components/diagrams'
+import { GatedButton } from '@/components/GatedButton'
+import { DocEditorModal } from '@/components/DocEditorModal'
+import { useSession } from '@/context/Session'
 import {
-  docs,
   DOC_CATEGORIES,
   DOC_TYPES,
-  docBySlug,
   docSearchText,
   docType,
 } from '@/data/docs'
 import type { DocArticle, DocCategory, DocType } from '@/data/docs'
+import { useDocs, upsertDoc, deleteDoc } from '@/data/docsStore'
 import {
   glossary,
   glossaryById,
@@ -86,7 +90,26 @@ export default function Docs() {
   const { slug } = useParams()
   const { pathname } = useLocation()
   const navigate = useNavigate()
+  const { logAction } = useSession()
   const glossaryMode = pathname.endsWith('/docs/glossary')
+
+  // `null` = closed, `'new'` = adding, a DocArticle = editing that article.
+  const [editing, setEditing] = useState<DocArticle | 'new' | null>(null)
+
+  const handleSave = (article: DocArticle, isNew: boolean) => {
+    upsertDoc(article)
+    logAction({ action: isNew ? 'Created documentation' : 'Updated documentation', target: article.title, category: 'documentation' })
+    setEditing(null)
+    if (isNew) navigate(`/docs/${article.slug}`)
+  }
+
+  const handleDelete = (id: string) => {
+    const doc = editing !== 'new' && editing ? editing : undefined
+    deleteDoc(id)
+    if (doc) logAction({ action: 'Deleted documentation', target: doc.title, category: 'documentation' })
+    setEditing(null)
+    navigate('/docs')
+  }
 
   return (
     <>
@@ -94,24 +117,39 @@ export default function Docs() {
         title="Documentation"
         description="Help center for the PLCY team and users — how to operate the console, how the platform is built, what each feature does, and the policies behind it. Browse the guides, or look up any term in the glossary."
         actions={
-          <div className="flex rounded-lg bg-slate-100 p-0.5">
-            <button
-              onClick={() => navigate('/docs')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${!glossaryMode ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
-            >
-              <BookText className="h-4 w-4" /> Guides
-            </button>
-            <button
-              onClick={() => navigate('/docs/glossary')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${glossaryMode ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
-            >
-              <Library className="h-4 w-4" /> Glossary
-            </button>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg bg-slate-100 p-0.5">
+              <button
+                onClick={() => navigate('/docs')}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${!glossaryMode ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+              >
+                <BookText className="h-4 w-4" /> Guides
+              </button>
+              <button
+                onClick={() => navigate('/docs/glossary')}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${glossaryMode ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}
+              >
+                <Library className="h-4 w-4" /> Glossary
+              </button>
+            </div>
+            {!glossaryMode && (
+              <GatedButton cap="settings.modify" className="btn-primary" onClick={() => setEditing('new')}>
+                <Plus className="h-4 w-4" /> Add doc
+              </GatedButton>
+            )}
           </div>
         }
       />
 
-      {glossaryMode ? <GlossaryView /> : <Guides slug={slug} />}
+      {glossaryMode ? <GlossaryView /> : <Guides slug={slug} onEdit={(d) => setEditing(d)} />}
+
+      <DocEditorModal
+        open={editing !== null}
+        initial={editing === 'new' || editing === null ? undefined : editing}
+        onClose={() => setEditing(null)}
+        onSave={handleSave}
+        onDelete={handleDelete}
+      />
     </>
   )
 }
@@ -119,23 +157,24 @@ export default function Docs() {
 /* ------------------------------------------------------------------ */
 /* Guides (articles)                                                   */
 /* ------------------------------------------------------------------ */
-function Guides({ slug }: { slug?: string }) {
+function Guides({ slug, onEdit }: { slug?: string; onEdit: (d: DocArticle) => void }) {
   const navigate = useNavigate()
+  const allDocs = useDocs()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState<CatFilter>('All')
   const [type, setType] = useState<TypeFilter>('All')
 
   const query = q.trim().toLowerCase()
   const filtered = useMemo(() => {
-    return docs.filter((d) => {
+    return allDocs.filter((d) => {
       if (cat !== 'All' && d.category !== cat) return false
       if (type !== 'All' && docType(d) !== type) return false
       if (query && !docSearchText(d).includes(query)) return false
       return true
     })
-  }, [cat, type, query])
+  }, [allDocs, cat, type, query])
 
-  const active = slug ? docBySlug(slug) : undefined
+  const active = slug ? allDocs.find((d) => d.slug === slug) : undefined
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
@@ -236,18 +275,19 @@ function Guides({ slug }: { slug?: string }) {
               : [{ label: 'Documentation' }, { label: 'Guides' }]
           }
         />
-        {active ? <Article doc={active} onBack={() => navigate('/docs')} /> : <Landing onOpen={(s) => navigate(`/docs/${s}`)} />}
+        {active ? <Article doc={active} onBack={() => navigate('/docs')} onEdit={() => onEdit(active)} /> : <Landing onOpen={(s) => navigate(`/docs/${s}`)} />}
       </div>
     </div>
   )
 }
 
 function Landing({ onOpen }: { onOpen: (slug: string) => void }) {
+  const allDocs = useDocs()
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {DOC_CATEGORIES.map((c) => {
         const Icon = CAT_ICON[c.icon]
-        const list = docs.filter((d) => d.category === c.key)
+        const list = allDocs.filter((d) => d.category === c.key)
         return (
           <Card key={c.key}>
             <div className="mb-3 flex items-center gap-3">
@@ -279,13 +319,18 @@ function Landing({ onOpen }: { onOpen: (slug: string) => void }) {
   )
 }
 
-function Article({ doc, onBack }: { doc: DocArticle; onBack: () => void }) {
+function Article({ doc, onBack, onEdit }: { doc: DocArticle; onBack: () => void; onEdit: () => void }) {
   const Icon = CAT_ICON[catMeta(doc.category).icon]
   return (
     <Card>
-      <button onClick={onBack} className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 transition-colors hover:text-ink-800">
-        <ArrowLeft className="h-3.5 w-3.5" /> All documentation
-      </button>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 transition-colors hover:text-ink-800">
+          <ArrowLeft className="h-3.5 w-3.5" /> All documentation
+        </button>
+        <GatedButton cap="settings.modify" className="btn-secondary bg-slate-200 px-2.5 py-1 text-xs hover:bg-slate-300" onClick={onEdit}>
+          <Pencil className="h-3.5 w-3.5" /> Edit
+        </GatedButton>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge tone={CAT_TONE[doc.category]}>
