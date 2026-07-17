@@ -542,6 +542,22 @@ export const docs: DocArticle[] = [
 export const docBySlug = (slug: string): DocArticle | undefined => docs.find((d) => d.slug === slug)
 export const docsByCategory = (cat: DocCategory): DocArticle[] => docs.filter((d) => d.category === cat)
 
+/**
+ * Content type of an article, for the type filter. A guide is a step-by-step
+ * How-to; a graphic carries a diagram; everything else is a document.
+ */
+export type DocType = 'Document' | 'Guide' | 'Graphic'
+export function docType(d: DocArticle): DocType {
+  if (d.sections.some((s) => s.diagram)) return 'Graphic'
+  if (d.category === 'How-to') return 'Guide'
+  return 'Document'
+}
+export const DOC_TYPES: { key: DocType; icon: 'file' | 'steps' | 'image'; tone: 'blue' | 'red' | 'purple' }[] = [
+  { key: 'Document', icon: 'file', tone: 'blue' },
+  { key: 'Guide', icon: 'steps', tone: 'red' },
+  { key: 'Graphic', icon: 'image', tone: 'purple' },
+]
+
 /** Full searchable text for a doc — title, summary, tags, and body. */
 export function docSearchText(d: DocArticle): string {
   const body = d.sections.flatMap((s) => [s.heading ?? '', ...(s.paras ?? []), ...(s.bullets ?? []), ...(s.steps ?? [])]).join(' ')

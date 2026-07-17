@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   BookText,
   Library,
+  FileText,
+  Image as ImageIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, PageHeader, Badge } from '@/components/ui'
@@ -21,10 +23,12 @@ import { Diagram } from '@/components/diagrams'
 import {
   docs,
   DOC_CATEGORIES,
+  DOC_TYPES,
   docBySlug,
   docSearchText,
+  docType,
 } from '@/data/docs'
-import type { DocArticle, DocCategory } from '@/data/docs'
+import type { DocArticle, DocCategory, DocType } from '@/data/docs'
 import {
   glossary,
   glossaryById,
@@ -50,7 +54,33 @@ const CAT_TONE: Record<DocCategory, Tone> = {
 }
 const catMeta = (cat: DocCategory) => DOC_CATEGORIES.find((c) => c.key === cat)!
 
+const TYPE_ICON: Record<'file' | 'steps' | 'image', LucideIcon> = {
+  file: FileText,
+  steps: ListChecks,
+  image: ImageIcon,
+}
+const typeMeta = (t: DocType) => DOC_TYPES.find((x) => x.key === t)!
+const TYPE_TONE: Record<DocType, Tone> = { Document: 'blue', Guide: 'red', Graphic: 'purple' }
+
 type CatFilter = DocCategory | 'All'
+type TypeFilter = DocType | 'All'
+
+function Breadcrumbs({ items }: { items: { label: string; onClick?: () => void }[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+      {items.map((it, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <ChevronRight className="h-3 w-3 text-ink-300" />}
+          {it.onClick ? (
+            <button onClick={it.onClick} className="font-medium text-ink-500 transition-colors hover:text-brand-600">{it.label}</button>
+          ) : (
+            <span className="font-medium text-ink-800">{it.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  )
+}
 
 export default function Docs() {
   const { slug } = useParams()
@@ -93,15 +123,17 @@ function Guides({ slug }: { slug?: string }) {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState<CatFilter>('All')
+  const [type, setType] = useState<TypeFilter>('All')
 
   const query = q.trim().toLowerCase()
   const filtered = useMemo(() => {
     return docs.filter((d) => {
       if (cat !== 'All' && d.category !== cat) return false
+      if (type !== 'All' && docType(d) !== type) return false
       if (query && !docSearchText(d).includes(query)) return false
       return true
     })
-  }, [cat, query])
+  }, [cat, type, query])
 
   const active = slug ? docBySlug(slug) : undefined
 
@@ -120,6 +152,27 @@ function Guides({ slug }: { slug?: string }) {
           />
         </div>
 
+        {/* Filter by type */}
+        <div className="mb-2 flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
+          {(['All', ...DOC_TYPES.map((t) => t.key)] as TypeFilter[]).map((t) => {
+            const TIcon = t === 'All' ? null : TYPE_ICON[typeMeta(t as DocType).icon]
+            return (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                title={t === 'All' ? 'All types' : `${t}s only`}
+                className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  type === t ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'
+                }`}
+              >
+                {TIcon && <TIcon className="h-3.5 w-3.5" />}
+                {t === 'All' ? 'All' : `${t}s`}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Filter by category */}
         <div className="mb-3 flex flex-wrap gap-1.5">
           {(['All', ...DOC_CATEGORIES.map((c) => c.key)] as CatFilter[]).map((c) => (
             <button
@@ -138,6 +191,8 @@ function Guides({ slug }: { slug?: string }) {
           <ul className="max-h-[70vh] divide-y divide-slate-100 overflow-y-auto">
             {filtered.map((d) => {
               const Icon = CAT_ICON[catMeta(d.category).icon]
+              const t = docType(d)
+              const TIcon = TYPE_ICON[typeMeta(t).icon]
               const isActive = d.slug === slug
               return (
                 <li key={d.id}>
@@ -154,12 +209,15 @@ function Guides({ slug }: { slug?: string }) {
                       <span className={`block truncate text-sm font-medium ${isActive ? 'text-brand-700' : 'text-ink-900'}`}>{d.title}</span>
                       <span className="block truncate text-xs text-ink-500">{d.category}</span>
                     </span>
+                    <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-ink-400" title={t}>
+                      <TIcon className="h-3 w-3" />
+                    </span>
                   </button>
                 </li>
               )
             })}
             {filtered.length === 0 && (
-              <li className="px-4 py-8 text-center text-sm text-ink-400">No guides match “{q}”.</li>
+              <li className="px-4 py-8 text-center text-sm text-ink-400">{q ? `No guides match “${q}”.` : 'No guides match these filters.'}</li>
             )}
           </ul>
         </Card>
@@ -167,6 +225,17 @@ function Guides({ slug }: { slug?: string }) {
 
       {/* Right pane — article or landing */}
       <div className="min-w-0">
+        <Breadcrumbs
+          items={
+            active
+              ? [
+                  { label: 'Documentation', onClick: () => { setCat('All'); setType('All'); navigate('/docs') } },
+                  { label: active.category, onClick: () => { setCat(active.category); navigate('/docs') } },
+                  { label: `${docType(active)} · ${active.title}` },
+                ]
+              : [{ label: 'Documentation' }, { label: 'Guides' }]
+          }
+        />
         {active ? <Article doc={active} onBack={() => navigate('/docs')} /> : <Landing onOpen={(s) => navigate(`/docs/${s}`)} />}
       </div>
     </div>
@@ -218,11 +287,21 @@ function Article({ doc, onBack }: { doc: DocArticle; onBack: () => void }) {
         <ArrowLeft className="h-3.5 w-3.5" /> All documentation
       </button>
 
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge tone={CAT_TONE[doc.category]}>
           <Icon className="mr-1 h-3 w-3" />
           {doc.category}
         </Badge>
+        {(() => {
+          const t = docType(doc)
+          const TIcon = TYPE_ICON[typeMeta(t).icon]
+          return (
+            <Badge tone={TYPE_TONE[t]}>
+              <TIcon className="mr-1 h-3 w-3" />
+              {t}
+            </Badge>
+          )
+        })()}
         <span className="inline-flex items-center gap-1 text-xs text-ink-400">
           <Clock className="h-3 w-3" /> Updated {doc.updated}
         </span>
@@ -281,8 +360,10 @@ function Article({ doc, onBack }: { doc: DocArticle; onBack: () => void }) {
 type GroupFilter = GlossaryGroup | 'All'
 
 function GlossaryView() {
+  const navigate = useNavigate()
   const [params] = useSearchParams()
   const deepLinked = params.get('term') ?? ''
+  const deepTerm = deepLinked ? glossaryById(deepLinked) : undefined
   const [q, setQ] = useState(deepLinked)
   const [group, setGroup] = useState<GroupFilter>('All')
 
@@ -307,6 +388,13 @@ function GlossaryView() {
 
   return (
     <div>
+      <Breadcrumbs
+        items={[
+          { label: 'Documentation', onClick: () => navigate('/docs') },
+          { label: 'Glossary', onClick: deepTerm ? () => { setQ(''); navigate('/docs/glossary') } : undefined },
+          ...(deepTerm ? [{ label: deepTerm.term }] : []),
+        ]}
+      />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
