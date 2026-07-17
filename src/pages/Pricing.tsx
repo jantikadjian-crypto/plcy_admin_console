@@ -13,6 +13,7 @@ import {
 import type { Plan, PlanCapacity, PlanFeatures, AddOn, Discounts, Cadence, QuoteInput } from '@/data/pricing'
 import { bedrockModels, bedrockModalities, PROVIDER_TONE, modalityTone } from '@/data/bedrock'
 import type { Modality } from '@/data/bedrock'
+import { planRollups, reconcileTotals } from '@/data/planReconcile'
 import { downloadCSV, downloadMarkdown, reportStem } from '@/lib/download'
 
 type Tab = 'Plans' | 'Add-ons' | 'Discounts' | 'Quote' | 'Bedrock'
@@ -75,6 +76,8 @@ type Log = ReturnType<typeof useSession>['logAction']
 function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans: (f: (p: Plan[]) => Plan[]) => void; canManage: boolean; log: Log }) {
   const [edit, setEdit] = useState<Plan | null>(null)
   const [creating, setCreating] = useState(false)
+  const rollups = useMemo(() => planRollups(plans), [plans])
+  const totals = reconcileTotals()
 
   const savePlan = (plan: Plan) => {
     setPlans((prev) => (prev.some((p) => p.id === plan.id) ? prev.map((p) => (p.id === plan.id ? plan : p)) : [...prev, plan]))
@@ -100,11 +103,19 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-500">{plans.filter((p) => !p.archived).length} active plans · click a plan to edit its price, capacity, and features.</p>
         <GatedButton cap="license.manage" className="btn-primary" onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" />New plan
         </GatedButton>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-ink-600">
+        <BadgeDollarSign className="h-4 w-4 shrink-0 text-ink-400" />
+        <span>
+          Reconciled to <span className="font-semibold text-ink-900">{totals.customers} customers</span> · <span className="font-semibold text-ink-900">{money(totals.mrr)}/mo</span> recurring.
+          Existing accounts map by tier — <span className="text-ink-500">Growth → Team, Trial → Builder</span>.
+        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -143,6 +154,11 @@ function PlansTab({ plans, setPlans, canManage, log }: { plans: Plan[]; setPlans
               {p.features.deployment.includes('Dedicated') && <Badge tone="orange">Dedicated</Badge>}
               {p.features.bedrock && <Badge tone="green">Bedrock</Badge>}
               {p.features.customModels && <Badge tone="green">Custom models</Badge>}
+            </div>
+
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs">
+              <span className="text-ink-500">{rollups[p.id]?.count ?? 0} {(rollups[p.id]?.count ?? 0) === 1 ? 'customer' : 'customers'}</span>
+              <span className="font-semibold text-ink-800">{money(rollups[p.id]?.mrr ?? 0)}/mo</span>
             </div>
 
             {canManage && (

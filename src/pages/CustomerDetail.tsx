@@ -65,6 +65,8 @@ import type { ChannelConfig } from '@/data/notifications'
 import { billingByCustomer, invoices, paymentByCustomer, billingContactByCustomer } from '@/data/billing'
 import type { PaymentMethod, PaymentType, PaymentStatus, BillingContact } from '@/data/billing'
 import { subscriptionByCustomer, subStatusTone, subStatusLabel, collectionLabel } from '@/data/subscriptions'
+import { loadPlans, ENTITLEMENTS } from '@/data/pricing'
+import { catalogPlanFor } from '@/data/planReconcile'
 import { ExternalLink } from 'lucide-react'
 
 const PLANS: Customer['plan'][] = ['Enterprise', 'Business', 'Growth', 'Trial']
@@ -199,6 +201,7 @@ export default function CustomerDetail() {
   const windows = maintenanceWindows.filter((w) => w.customer === name || w.customer === 'All')
   const billing = billingByCustomer(name)
   const sub = subscriptionByCustomer(name)
+  const catalogPlan = catalogPlanFor(c.plan, loadPlans())
   const custInvoices = invoices.filter((i) => i.customer === name)
   const custIncidents = incidents.filter((i) => i.customer === name)
   const custTransfers = transfers.filter((t) => t.customer === name)
@@ -693,6 +696,35 @@ export default function CustomerDetail() {
                     <Fact label="Next charge" value={sub.currentPeriodEnd} />
                   )}
                 </dl>
+              </Card>
+            )}
+
+            {catalogPlan && (
+              <Card>
+                <CardTitle
+                  title="Catalog Plan & Entitlements"
+                  subtitle={`Mapped from the ${c.plan} account to the pricing catalog`}
+                  action={<Link to="/pricing" className="btn-ghost px-2 py-1 text-xs">Open catalog</Link>}
+                />
+                <dl className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <Fact label="Catalog plan" value={catalogPlan.name} />
+                  <Fact label="List price" value={`${money(catalogPlan.monthly)}/mo`} />
+                  <Fact label="Actual MRR" value={<span className={c.mrr > catalogPlan.monthly ? 'font-semibold text-emerald-600' : undefined}>{money(c.mrr)}/mo</span>} />
+                  <Fact label="Throughput" value={`${catalogPlan.features.throughputTier} tier`} />
+                  <Fact label="RBAC" value={catalogPlan.features.rbac} />
+                  <Fact label="Deployment" value={catalogPlan.features.deployment.includes('Dedicated') ? 'Dedicated' : 'Shared'} />
+                </dl>
+                {c.mrr > catalogPlan.monthly && (
+                  <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-ink-500">
+                    Actual MRR exceeds the {catalogPlan.name} list price — this account is on custom-negotiated / usage-expanded pricing above the base tier.
+                  </p>
+                )}
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">Included entitlements</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {catalogPlan.features.sso && <Badge tone="purple">SSO{catalogPlan.features.scim ? ' + SCIM' : ''}</Badge>}
+                  {ENTITLEMENTS.filter((e) => catalogPlan.features[e.key]).map((e) => <Badge key={e.key} tone="green">{e.label}</Badge>)}
+                  {!catalogPlan.features.sso && !ENTITLEMENTS.some((e) => catalogPlan.features[e.key]) && <span className="text-xs text-ink-400">None included at this tier</span>}
+                </div>
               </Card>
             )}
             <Card>
