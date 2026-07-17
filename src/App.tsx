@@ -120,6 +120,7 @@ export default function App() {
         <Route path="/super-admin" element={<SuperAdmin />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/docs" element={<Docs />} />
+        <Route path="/docs/glossary" element={<Docs />} />
         <Route path="/docs/:slug" element={<Docs />} />
         <Route path="*" element={<NotFound />} />
       </Route>
