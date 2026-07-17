@@ -93,6 +93,27 @@ export const docs: DocArticle[] = [
     ],
   },
 
+  {
+    id: 'doc_audit', slug: 'audit-log', title: 'The audit log & accountability', category: 'System Usage',
+    summary: 'How every action is recorded, and how to use the trail for investigations and evidence.',
+    tags: ['audit', 'log', 'accountability', 'evidence', 'compliance', 'history', 'who did what'], updated: '2026-07-17',
+    sections: [
+      { paras: ['Every action taken in the console is written to a universal audit trail — a single, consistent record of who did what, to which target, and when. It is the backbone of accountability and a primary evidence source for auditors and incident reviews.'] },
+      { heading: 'What every entry captures', bullets: [
+        'Actor — the admin (or system) that performed the action.',
+        'Action & target — what happened and the specific record it touched.',
+        'Category — the area of the console (policy, provisioning, billing, security, …).',
+        'Timestamp — when it occurred, in order.',
+      ] },
+      { heading: 'Using the trail', bullets: [
+        'Open Audit Log and filter by actor, category, or target to reconstruct a sequence of events.',
+        'During an incident, use it to establish a precise timeline of configuration changes.',
+        'For an audit, export the relevant slice as evidence that controls were followed.',
+      ] },
+      { paras: ['Because logging is centralized (not per-page), coverage is consistent across the whole console — privileged and break-glass actions are captured the same way as routine edits. Immutable-log retention is governed by the security policy and the customer’s plan.'] },
+    ],
+  },
+
   /* ---------------- How-to ---------------- */
   {
     id: 'howto_onboard', slug: 'howto-onboard-customer', title: 'Onboard a new customer', category: 'How-to',
@@ -411,6 +432,53 @@ export const docs: DocArticle[] = [
     sections: [
       { heading: 'Incidents', paras: ['Incident Management logs AI-governance incidents with severity, status, owner, timeline, root cause, and remediation. Edit status/severity/assignee in place; the Incident Post-Mortem report rolls them up with the regulatory obligations they trigger.'] },
       { heading: 'DSAR', paras: ['Data Requests tracks data-subject requests against their statutory deadline. The DSAR Fulfilment report scores each request (Breached / At risk / On track / Closed) and breaks the queue down by type and jurisdiction.'] },
+    ],
+  },
+
+  {
+    id: 'doc_observability_loop', slug: 'observability-loop', title: 'The configure → observe loop', category: 'Features',
+    summary: 'How what you set in configuration shows up as live signals across the console.',
+    tags: ['observability', 'signals', 'posture', 'telemetry', 'otel', 'loop', 'monitoring'], updated: '2026-07-17',
+    sections: [
+      { paras: ['PLCY is built as a loop: you configure policy and controls in one place, and the console observes the result everywhere else. “What you set” becomes “what you see” — configuration is never a dead end, it drives live signals.'] },
+      { heading: 'Where the loop shows up', bullets: [
+        'Security — the policy you edit in Settings → Security produces a live posture score and prioritized gaps that reappear on Admin Security and Fleet Posture.',
+        'Billing — payment, dunning, and dispute events flow into Notifications and page on-call.',
+        'Devices — enrolled-device posture (trusted / at-risk / blocked) reflects the managed-device policy.',
+        'Fleet — cluster drift, quota pressure, and pod-security gaps roll up on Fleet Posture.',
+      ] },
+      { heading: 'How evidence flows', paras: ['In production the data plane emits telemetry and evidence via OpenTelemetry to the observability backend (CloudWatch, X-Ray, Prometheus/Grafana), and the same stream feeds the control-plane audit and compliance surfaces. The Observability page is where those operational signals are read.'] },
+      { paras: ['The practical upshot: after you change a control, you can immediately verify the effect on the corresponding observability surface rather than guessing.'] },
+    ],
+  },
+  {
+    id: 'doc_routing_residency', slug: 'model-routing-residency', title: 'Model routing & data residency', category: 'Features',
+    summary: 'How requests are routed to the right model and region to honour residency and cost.',
+    tags: ['model routing', 'residency', 'sovereignty', 'region', 'transfers', 'gdpr', 'sub-processor'], updated: '2026-07-17',
+    sections: [
+      { paras: ['Model routing decides which model and which region an AI request is sent to. It exists to satisfy three pressures at once: data residency, cost, and model capability — without the calling application having to know the difference.'] },
+      { heading: 'Routing levers', bullets: [
+        'Model Routing — rules that select a model/provider per request (e.g. by workload, sensitivity, or capability).',
+        'Regions — region selection pins where data is processed; Sovereign Cloud and air-gapped options exist for strict requirements.',
+        'Residency Controls & Data Transfers — govern where data may live and how cross-border movement is handled.',
+        'Sub-processors — the third parties in the path, tracked and disclosed for compliance.',
+      ] },
+      { heading: 'Residency in practice', paras: ['A request from an EU tenant can be pinned to an EU region and an in-region model, with any cross-border transfer explicitly governed rather than implicit. Because model access is BYOK by default, routing can also keep inference inside the customer’s own account and jurisdiction.'] },
+    ],
+  },
+  {
+    id: 'doc_licensing', slug: 'licensing', title: 'Licensing & entitlements', category: 'Features',
+    summary: 'How a customer’s plan turns into enforceable seats, limits, and feature access.',
+    tags: ['licensing', 'entitlements', 'seats', 'limits', 'plan', 'features', 'quota'], updated: '2026-07-16',
+    sections: [
+      { paras: ['Licensing is where a commercial plan becomes an enforceable set of entitlements for a tenant — which features are on, how many seats are allowed, and what usage limits apply.'] },
+      { heading: 'What a license carries', bullets: [
+        'Feature entitlements — the yes/no capabilities the plan grants (SSO, SCIM, immutable logs, advanced reporting, HITL, Bedrock, custom models).',
+        'Seats & usage — the number of admins/users and the governed-request capacity included.',
+        'Term & status — the active period and whether the license is current, expiring, or lapsed.',
+      ] },
+      { heading: 'How it connects', paras: ['Entitlements come from the catalog plan (see Pricing & the quote builder) and are reconciled to each customer — a customer’s Billing tab shows its catalog plan, entitlements, and list-vs-actual MRR. The Licensing page tracks status and limits per tenant so nothing drifts out of what was sold.'] },
+      { paras: ['Air-gapped and dedicated deployments are licensed the same way; the entitlements travel with the deployment even where connectivity is restricted.'] },
     ],
   },
 
