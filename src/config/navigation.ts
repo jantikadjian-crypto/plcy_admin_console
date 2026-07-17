@@ -42,6 +42,7 @@ import {
   CreditCard,
   HeartPulse,
   BadgeDollarSign,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -138,6 +139,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Container Registry', to: '/registry', icon: Boxes },
       { label: 'Notifications', to: '/notifications', icon: BellRing },
       { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
+      { label: 'Documentation', to: '/docs', icon: BookOpen },
       { label: 'Super Admin', to: '/super-admin', icon: Crown },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],

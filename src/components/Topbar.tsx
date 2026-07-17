@@ -17,12 +17,14 @@ import {
   Lock,
   Check,
   FileBarChart,
+  BookOpen,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { flatNav } from '@/config/navigation'
 import { models, instances } from '@/data/mock'
 import { packs as policyPacks, controls as policyControls, familyOf } from '@/data/policy'
 import { reports } from '@/data/reports'
+import { docs, docSearchText } from '@/data/docs'
 import { recentAlerts } from '@/data/notifications'
 import type { AlertSeverity } from '@/data/notifications'
 import { useCustomerScope } from '@/context/CustomerScope'
@@ -37,6 +39,7 @@ interface Result {
   sub: string
   to: string
   customer?: string
+  keywords?: string
 }
 
 interface CreateItem {
@@ -99,6 +102,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
       ...policyControls.map((c) => ({ kind: 'Control', icon: Package, label: `${c.id} — ${c.name}`, sub: familyOf(c.prefix), to: '/policy-packs' })),
       ...instances.map((i) => ({ kind: 'Instance', icon: Server, label: i.name, sub: i.customer, to: '/instances' })),
       ...reports.map((r) => ({ kind: 'Report', icon: FileBarChart, label: `${r.title} report`, sub: r.scope, to: r.to ?? '/reports' })),
+      ...docs.map((d) => ({ kind: 'Doc', icon: BookOpen, label: d.title, sub: d.category, to: `/docs/${d.slug}`, keywords: docSearchText(d) })),
       ...flatNav.map((n) => ({ kind: 'Page', icon: LayoutDashboard, label: n.label, sub: 'Go to page', to: n.to })),
     ],
     [customers],
@@ -106,7 +110,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
 
   const query = q.trim().toLowerCase()
   const results = query
-    ? index.filter((r) => r.label.toLowerCase().includes(query) || r.sub.toLowerCase().includes(query)).slice(0, 8)
+    ? index.filter((r) => r.label.toLowerCase().includes(query) || r.sub.toLowerCase().includes(query) || (r.keywords ?? '').includes(query)).slice(0, 8)
     : []
 
   const go = (r: Result) => {

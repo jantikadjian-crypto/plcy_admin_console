@@ -56,6 +56,7 @@ import AdminSecurity from './pages/AdminSecurity'
 import DeveloperTools from './pages/DeveloperTools'
 import SuperAdmin from './pages/SuperAdmin'
 import Settings from './pages/Settings'
+import Docs from './pages/Docs'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -118,6 +119,8 @@ export default function App() {
         <Route path="/developer-tools" element={<DeveloperTools />} />
         <Route path="/super-admin" element={<SuperAdmin />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/docs" element={<Docs />} />
+        <Route path="/docs/:slug" element={<Docs />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
