@@ -1,10 +1,10 @@
+import { Link } from 'react-router-dom'
 import {
   ShieldCheck,
   KeyRound,
   Users,
   Fingerprint,
   RotateCw,
-  AlertTriangle,
 } from 'lucide-react'
 import {
   Card,
@@ -19,6 +19,8 @@ import {
   Avatar,
 } from '@/components/ui'
 import { admins, effectiveRoleById } from '@/data/roles'
+import { SecurityPostureBanner } from '@/components/SecurityPostureBanner'
+import { scoreSecurity, loadSecurityPolicy } from '@/data/security'
 
 interface ApiKey {
   name: string
@@ -36,25 +38,6 @@ const apiKeys: ApiKey[] = [
   { name: 'Legacy Webhook', prefix: 'plcy_live_…0e18', scopes: ['read', 'write'], created: '2023-08-22', lastUsed: '90 days ago', status: 'Expired' },
 ]
 
-interface Recommendation {
-  title: string
-  detail: string
-  severity: 'high' | 'medium' | 'low'
-}
-
-const recommendations: Recommendation[] = [
-  { title: 'Enforce MFA for all admins', detail: '2 admin users have not enrolled a second factor.', severity: 'high' },
-  { title: 'Rotate the Legacy Webhook key', detail: 'Key is over 20 months old and unused for 90 days.', severity: 'medium' },
-  { title: 'Review dormant sessions', detail: 'Tom Becker has an active session but last signed in 11 days ago.', severity: 'medium' },
-  { title: 'Enable IP allowlisting', detail: 'Restrict console access to corporate egress ranges.', severity: 'low' },
-]
-
-const severityDot: Record<Recommendation['severity'], string> = {
-  high: 'bg-rose-500',
-  medium: 'bg-amber-500',
-  low: 'bg-emerald-500',
-}
-
 const scopeTone: Record<string, 'red' | 'blue' | 'green' | 'orange' | 'slate' | 'purple'> = {
   admin: 'red',
   write: 'orange',
@@ -65,6 +48,7 @@ const scopeTone: Record<string, 'red' | 'blue' | 'green' | 'orange' | 'slate' | 
 const mfaEnrolled = Math.round((admins.filter((a) => a.mfa).length / admins.length) * 100)
 
 export default function AdminSecurity() {
+  const posture = scoreSecurity(loadSecurityPolicy())
   return (
     <>
       <PageHeader
@@ -77,6 +61,10 @@ export default function AdminSecurity() {
           </button>
         }
       />
+
+      <div className="mb-6">
+        <SecurityPostureBanner />
+      </div>
 
       {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -161,23 +149,30 @@ export default function AdminSecurity() {
         </Card>
 
         <Card>
-          <CardTitle title="Security Recommendations" subtitle="Prioritized hardening actions" />
-          <ul className="divide-y divide-slate-100">
-            {recommendations.map((r) => (
-              <li key={r.title} className="flex items-start gap-3 py-3">
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${severityDot[r.severity]}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-ink-900">{r.title}</p>
-                  <p className="text-xs text-ink-500">{r.detail}</p>
-                </div>
-                <AlertTriangle
-                  className={`h-4 w-4 shrink-0 ${
-                    r.severity === 'high' ? 'text-rose-500' : r.severity === 'medium' ? 'text-amber-500' : 'text-emerald-500'
-                  }`}
-                />
-              </li>
-            ))}
-          </ul>
+          <CardTitle
+            title="Security Recommendations"
+            subtitle="Live gaps from the configured security policy"
+            action={<Link to="/settings?tab=Security" className="btn-ghost px-2 py-1 text-xs">Configure</Link>}
+          />
+          {posture.findings.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <ShieldCheck className="h-5 w-5 shrink-0" />
+              Every hardening control in the security policy is enabled — no open gaps.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {posture.findings.map((f, i) => (
+                <li key={f.label} className="flex items-start gap-3 py-3">
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${i < 2 ? 'bg-rose-500' : i < 4 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ink-900">{f.label}</p>
+                    <p className="text-xs text-ink-500">{f.fix}</p>
+                  </div>
+                  <Badge tone="slate">{f.group}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 

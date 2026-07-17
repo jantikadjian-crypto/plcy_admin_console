@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Progress } from '@/components/ui'
+import { SecurityPostureBanner } from '@/components/SecurityPostureBanner'
 import { deployments, regionByCode } from '@/data/fleet'
 import { useRegistryPromoted } from '@/data/registryStore'
 import { fleetPosture, fleetPostureTotals } from '@/data/clusters'
@@ -57,6 +58,10 @@ export default function FleetPosture() {
         <StatCard label="Quota pressure" value={totals.quotaHotNamespaces} icon={Gauge} tone={totals.quotaHotNamespaces ? 'orange' : 'green'} footer="Namespaces ≥ 90% of a quota" />
         <StatCard label="Pod-security gaps" value={totals.psaWeakNamespaces} icon={ShieldCheck} tone={totals.psaWeakNamespaces ? 'orange' : 'green'} footer="Namespaces not fully enforced" />
         <StatCard label="External egress" value={totals.clustersExtEgress} icon={Network} tone={totals.clustersExtEgress ? 'blue' : 'green'} footer="Clusters allowing outbound" />
+      </div>
+
+      <div className="mt-6">
+        <SecurityPostureBanner showGaps={false} />
       </div>
 
       <Card className="mt-6">
