@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { Card, PageHeader, Badge } from '@/components/ui'
 import type { Tone } from '@/components/ui'
+import { Diagram } from '@/components/diagrams'
 import {
   docs,
   DOC_CATEGORIES,
@@ -231,6 +232,7 @@ function Article({ doc, onBack }: { doc: DocArticle; onBack: () => void }) {
         {doc.sections.map((s, i) => (
           <section key={i}>
             {s.heading && <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-400">{s.heading}</h2>}
+            {s.diagram && <Diagram kind={s.diagram} />}
             {s.paras?.map((p, j) => (
               <p key={j} className="mb-2 text-sm leading-relaxed text-ink-700">{p}</p>
             ))}

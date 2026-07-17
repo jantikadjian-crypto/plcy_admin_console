@@ -10,6 +10,8 @@ export interface DocSection {
   heading?: string
   paras?: string[]
   bullets?: string[]
+  /** Renders an inline-SVG figure (see components/diagrams.tsx). */
+  diagram?: 'network' | 'architecture'
 }
 
 export interface DocArticle {
@@ -95,12 +97,39 @@ export const docs: DocArticle[] = [
     tags: ['architecture', 'control plane', 'data plane', 'design'], updated: '2026-07-17',
     sections: [
       { paras: ['PLCY pairs a SaaS governance console and control plane with an open-source data plane that runs inside the customer environment. The console configures policy; the data plane enforces it on every AI request in real time and streams evidence back.'] },
+      { diagram: 'architecture' },
       { heading: 'Planes', bullets: [
         'Control plane (SaaS) — customer/policy management, billing, audit and compliance reporting, this console.',
         'Data plane (open source) — deployed in the customer cloud, VPC, sovereign infrastructure, or air-gapped network.',
         'Model access — BYOK (customer’s provider/AWS) by default, or a PLCY-managed credits layer.',
       ] },
-      { paras: ['This console is a React/TypeScript SPA. See the repository README for the full architecture diagram and roadmap (Go control-plane API, Python ML services).'] },
+      { paras: ['This console is a React/TypeScript SPA. For how the data plane is deployed inside a customer VPC, see the Network & deployment topology article.'] },
+    ],
+  },
+  {
+    id: 'doc_network', slug: 'network-topology', title: 'Network & deployment topology', category: 'Technical',
+    summary: 'How the PLCY data plane runs inside a customer VPC — load balancing, EKS pods, sidecars, data stores, and observability.',
+    tags: ['network', 'vpc', 'eks', 'kubernetes', 'alb', 'opa', 'otel', 'sidecar', 'redis', 's3', 'observability', 'topology'], updated: '2026-07-17',
+    sections: [
+      { paras: ['The PLCY data plane deploys into the customer’s own AWS VPC. Traffic enters through an Application Load Balancer, is routed by ingress rules to the PLCY gateway pod, and every request is governed in-line by an OPA sidecar before reaching model or backend services. Telemetry is exported via OpenTelemetry to the customer’s observability backend.'] },
+      { diagram: 'network' },
+      { heading: 'Request path', bullets: [
+        'User → ALB — HTTPS enters the VPC through the AWS Application Load Balancer.',
+        'ALB → Ingress rules — listener rules route frontend (/), backend (/api/*, /vault/*, /swagger/*), and socket (/socket/) traffic, managed by the AWS ALB Controller.',
+        'Ingress → PLCY Gateway pod — the AI request hits the gateway, where the OPA sidecar evaluates policy in real time.',
+        'Pod → services — governed requests reach backend microservices, the Node.js frontend, or background tasks; all application pods carry OPA & OTel sidecars, meshed with mTLS.',
+      ] },
+      { heading: 'Data & state', bullets: [
+        'Amazon RDS (PostgreSQL) — relational state for the application.',
+        'Amazon ElastiCache (Redis) — caching and fast lookups; cache hits reduce billable governed requests.',
+        'Amazon S3 (multi-region) — data lake, backups, and media.',
+        'AWS NAT Gateway — controlled egress for private subnets.',
+      ] },
+      { heading: 'Observability', bullets: [
+        'OTel collector sidecars export traces and metrics to the observability backend.',
+        'Amazon CloudWatch (logs, metrics), AWS X-Ray (tracing), and Amazon Managed Prometheus / Grafana.',
+        'The same evidence stream feeds the control-plane audit and compliance surfaces.',
+      ] },
     ],
   },
   {
