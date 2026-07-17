@@ -23,38 +23,20 @@ inside the customer's own cloud, VPC, sovereign infrastructure, or air-gapped
 network. Model access is **BYOK by default** (the customer pays their provider /
 AWS directly) with an optional **PLCY-managed** credits layer.
 
-```mermaid
-flowchart TB
-  Admin["PLCY team · Admin Console"]
-  CustAdmin["Customer admins"]
+**Logical architecture** — the SaaS control plane, the customer-hosted data
+plane, and model access:
 
-  subgraph SaaS["PLCY SaaS · Control Plane"]
-    Console["Admin Console (this repo) · React SPA"]
-    API["Control-plane API (planned: Go)"]
-    Gov["Policy & governance engine · evidence"]
-    Bill["Billing · Stripe · pricing catalog"]
-    Audit["Audit · compliance reporting"]
-  end
+![PLCY logical architecture — SaaS control plane, customer-hosted data plane, and model access](docs/diagrams/architecture.svg)
 
-  subgraph CustEnv["Customer environment · Cloud / VPC / Sovereign / Air-gapped"]
-    DP["Open-source data plane · real-time enforcement"]
-    Apps["Customer AI apps · agents · workflows"]
-  end
+**Network & deployment topology** — how the data plane runs inside a customer
+AWS VPC (load balancing, EKS pods with OPA/OTel sidecars, data stores, and the
+observability backend):
 
-  BYOK["BYOK · customer's provider / AWS Bedrock"]
-  Managed["PLCY-managed · metered credits"]
+![AWS network & deployment topology — the PLCY data plane inside a customer VPC](docs/diagrams/network-topology.svg)
 
-  Admin --> Console --> API
-  CustAdmin --> API
-  API --> Gov
-  API --> Bill
-  API --> Audit
-  API -. policies / config .-> DP
-  DP -. telemetry / evidence .-> API
-  Apps --> DP
-  DP -->|enforced request| BYOK
-  DP -->|enforced request| Managed
-```
+> These figures are also in the console under **Documentation → Technical**
+> (Architecture overview · Network & deployment topology), rendered from the
+> same source.
 
 ---
 
