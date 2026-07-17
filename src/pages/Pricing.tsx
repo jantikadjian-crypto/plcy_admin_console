@@ -7,13 +7,14 @@ import { useSession } from '@/context/Session'
 import {
   loadPlans, savePlans, loadAddOns, saveAddOns, loadDiscounts, saveDiscounts,
   newPlanId, newAddOnId, CAPACITY_META, FEATURE_ENUMS, FEATURE_TEXTS, FEATURE_BOOLS,
-  THROUGHPUT_TIERS, ENTITLEMENTS,
+  THROUGHPUT_TIERS, ENTITLEMENTS, DEDICATED_TIERS,
   money, money2, pct, compact, effectivePrice, packUnitPrice, packSavingsPct, computeQuote,
 } from '@/data/pricing'
-import type { Plan, PlanCapacity, PlanFeatures, AddOn, Discounts, Cadence, QuoteInput } from '@/data/pricing'
-import { bedrockModels, bedrockModalities, PROVIDER_TONE, modalityTone } from '@/data/bedrock'
-import type { Modality } from '@/data/bedrock'
+import type { Plan, PlanCapacity, PlanFeatures, AddOn, Discounts, Cadence, QuoteInput, DedicatedTier } from '@/data/pricing'
+import { loadBedrockModels, saveBedrockModels, newBedrockId, bedrockModalities, PROVIDER_TONE, modalityTone } from '@/data/bedrock'
+import type { Modality, BedrockModel } from '@/data/bedrock'
 import { planRollups, reconcileTotals } from '@/data/planReconcile'
+import { AWS_REGIONS } from '@/context/DeploymentConfig'
 import { downloadCSV, downloadMarkdown, reportStem } from '@/lib/download'
 
 type Tab = 'Plans' | 'Add-ons' | 'Discounts' | 'Quote' | 'Bedrock'
@@ -32,10 +33,12 @@ export default function Pricing() {
   const [plans, setPlans] = useState<Plan[]>(loadPlans)
   const [addOns, setAddOns] = useState<AddOn[]>(loadAddOns)
   const [discounts, setDiscounts] = useState<Discounts>(loadDiscounts)
+  const [bedrock, setBedrock] = useState<BedrockModel[]>(loadBedrockModels)
 
   useEffect(() => savePlans(plans), [plans])
   useEffect(() => saveAddOns(addOns), [addOns])
   useEffect(() => saveDiscounts(discounts), [discounts])
+  useEffect(() => saveBedrockModels(bedrock), [bedrock])
 
   return (
     <>
@@ -62,8 +65,8 @@ export default function Pricing() {
       {tab === 'Plans' && <PlansTab plans={plans} setPlans={setPlans} canManage={canManage} log={logAction} />}
       {tab === 'Add-ons' && <AddOnsTab addOns={addOns} setAddOns={setAddOns} canManage={canManage} log={logAction} />}
       {tab === 'Discounts' && <DiscountsTab discounts={discounts} setDiscounts={setDiscounts} canManage={canManage} />}
-      {tab === 'Quote' && <QuoteTab plans={plans} addOns={addOns} discounts={discounts} log={logAction} />}
-      {tab === 'Bedrock' && <BedrockTab plans={plans} />}
+      {tab === 'Quote' && <QuoteTab plans={plans} addOns={addOns} discounts={discounts} bedrock={bedrock} log={logAction} />}
+      {tab === 'Bedrock' && <BedrockTab plans={plans} models={bedrock} setModels={setBedrock} canManage={canManage} log={logAction} />}
     </>
   )
 }
@@ -405,7 +408,7 @@ function DiscountsTab({ discounts, setDiscounts, canManage }: { discounts: Disco
 /* ================================================================== */
 /* Quote builder                                                       */
 /* ================================================================== */
-function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: AddOn[]; discounts: Discounts; log: Log }) {
+function QuoteTab({ plans, addOns, discounts, bedrock, log }: { plans: Plan[]; addOns: AddOn[]; discounts: Discounts; bedrock: BedrockModel[]; log: Log }) {
   const active = plans.filter((p) => !p.archived)
   const [client, setClient] = useState('Acme Customer, Inc.')
   const [input, setInput] = useState<QuoteInput>(() => {
@@ -414,7 +417,9 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
       planId: p?.id ?? '', cadence: 'Annual', termMonths: 12, commercialPct: 0,
       demand: p ? { ...p.capacity } : { requests: 0, seats: 0, apps: 0, packs: 0, primitives: 0, promptGb: 0, logGb: 0, cacheGb: 0, retentionDays: 0 },
       throughputTier: p?.features.throughputTier ?? 'Standard',
+      dedicatedTier: 'None', dedicatedRegion: AWS_REGIONS[0],
       entitlements: { sso: false, scim: false, immutableLogs: false, advancedReporting: true, hitl: true, bedrock: false, customModels: false },
+      bedrockModelIds: [],
       premiumSupport: false, cacheHitRate: 0,
       modelAccess: 'BYOK', managedCreditsMonthly: 0, setupFee: 1000, trainingFee: 500, migrationFee: 0,
     }
@@ -424,6 +429,14 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
 
   const quote = useMemo(() => computeQuote(input, plans, addOns, discounts), [input, plans, addOns, discounts])
 
+  // Bedrock models unlocked at the selected plan tier and available in the deal's access mode.
+  const planTierIdx = plans.findIndex((p) => p.id === input.planId)
+  const availableBedrock = bedrock.filter((m) => {
+    const unlocked = plans.findIndex((p) => p.name === m.minTier) <= planTierIdx
+    return unlocked && (input.modelAccess === 'Managed' ? m.managed : m.byok)
+  })
+  const selectedModels = input.entitlements.bedrock ? bedrock.filter((m) => input.bedrockModelIds.includes(m.id)) : []
+
   const exportCSV = () => {
     downloadCSV(`${reportStem('quote')}.csv`, ['Line item', 'Basis', 'Monthly', 'Notes'], quote.lines.map((l) => [l.label, l.basis, l.monthly, l.notes]))
     log({ action: 'pricing.quote.export', target: client, category: 'settings' })
@@ -431,6 +444,7 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
   const exportMD = () => {
     const L = [`# Quote — ${client}`, '', `**Plan:** ${quote.plan?.name} · **Cadence:** ${input.cadence} · **Term:** ${input.termMonths} mo`, '', '| Line item | Basis | Monthly |', '| --- | --- | --- |']
     quote.lines.forEach((l) => L.push(`| ${l.label} | ${l.basis} | ${money(l.monthly)} |`))
+    if (selectedModels.length) L.push('', `**Bedrock models in scope:** ${selectedModels.map((m) => m.name).join(', ')}`)
     L.push('', `**Net monthly:** ${money(quote.netMonthly)} · **Annual ACV:** ${money(quote.annualAcv)} · **First-year booking:** ${money(quote.firstYear)}`)
     downloadMarkdown(`${reportStem('quote')}.md`, L.join('\n'))
     log({ action: 'pricing.quote.export', target: client, category: 'settings' })
@@ -496,6 +510,24 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
               <p className="mt-1 text-[11px] leading-snug text-ink-400">Share of requests served from prompt cache. Cached prompts are discounted off billable requests — they aren't charged as new requests.</p>
             </div>
           </div>
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-500">Dedicated Cloud</label>
+              <select className="input" value={input.dedicatedTier} onChange={(e) => set({ dedicatedTier: e.target.value as DedicatedTier })}>
+                {DEDICATED_TIERS.map((t) => <option key={t.name} value={t.name}>{t.name === 'None' ? 'None (shared SaaS)' : `${t.name} — ${money(t.monthly)}/mo`}</option>)}
+              </select>
+              <p className="mt-1 text-[11px] leading-snug text-ink-400">Single-tenant deployment. Included on Enterprise Cloud ($0); a priced add-on on other plans.</p>
+            </div>
+            {input.dedicatedTier !== 'None' && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink-500">AWS region</label>
+                <select className="input" value={input.dedicatedRegion} onChange={(e) => set({ dedicatedRegion: e.target.value })}>
+                  {AWS_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <p className="mt-1 text-[11px] leading-snug text-ink-400">Customer selects region + size tier, not individual compute nodes.</p>
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {ENTITLEMENTS.map((e) => {
               const isBedrock = e.key === 'bedrock'
@@ -511,6 +543,25 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
             })}
             <OptToggle label={`Premium support (+${pct(discounts.premiumSupport)})`} desc="Priority support with an SLA and a named contact. Adds an uplift on the recurring subscription." on={input.premiumSupport} onClick={() => set({ premiumSupport: !input.premiumSupport })} />
           </div>
+
+          {input.entitlements.bedrock && (
+            <div className="mt-3 rounded-xl border border-slate-200 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">Bedrock models in scope</p>
+              <p className="mb-2 text-[11px] leading-snug text-ink-400">Which Bedrock models are included for this deal — those unlocked at the plan tier and available in {input.modelAccess === 'Managed' ? 'PLCY-managed' : 'BYOK'} mode. Access is covered by the entitlement; no per-model charge.</p>
+              <div className="flex flex-wrap gap-1.5">
+                {availableBedrock.map((m) => {
+                  const on = input.bedrockModelIds.includes(m.id)
+                  return (
+                    <button key={m.id} onClick={() => setInput((p) => ({ ...p, bedrockModelIds: on ? p.bedrockModelIds.filter((x) => x !== m.id) : [...p.bedrockModelIds, m.id] }))}
+                      className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition-colors ${on ? 'border-brand-300 bg-brand-50 text-brand-700' : 'border-slate-200 text-ink-500 hover:border-slate-300'}`}>
+                      {m.name}{on && <Check className="h-3 w-3" />}
+                    </button>
+                  )
+                })}
+                {availableBedrock.length === 0 && <span className="text-xs text-ink-400">No Bedrock models unlocked at this plan tier / access mode.</span>}
+              </div>
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-ink-500">Model access</label>
@@ -581,6 +632,13 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
             <Stat label="First-year booking" value={money(quote.firstYear)} accent />
           </div>
 
+          {selectedModels.length > 0 && (
+            <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Bedrock models in scope</p>
+              <p className="mt-0.5 text-xs text-ink-600">{selectedModels.map((m) => m.name).join(', ')}</p>
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
             <button className="btn-secondary flex-1" onClick={exportCSV}><Download className="h-4 w-4" />CSV</button>
             <button className="btn-secondary flex-1" onClick={exportMD}><FileText className="h-4 w-4" />Markdown</button>
@@ -594,12 +652,25 @@ function QuoteTab({ plans, addOns, discounts, log }: { plans: Plan[]; addOns: Ad
 /* ================================================================== */
 /* Bedrock model catalog                                               */
 /* ================================================================== */
-function BedrockTab({ plans }: { plans: Plan[] }) {
+function BedrockTab({ plans, models, setModels, canManage, log }: { plans: Plan[]; models: BedrockModel[]; setModels: (f: (m: BedrockModel[]) => BedrockModel[]) => void; canManage: boolean; log: Log }) {
   const [modality, setModality] = useState<'All' | Modality>('All')
   const [mode, setMode] = useState<'All' | 'byok' | 'managed'>('All')
+  const [edit, setEdit] = useState<BedrockModel | null>(null)
+  const [creating, setCreating] = useState(false)
   const tierRankOf = (name: string) => { const i = plans.findIndex((p) => p.name === name); return i < 0 ? 99 : i }
 
-  const rows = bedrockModels
+  const save = (m: BedrockModel) => {
+    setModels((prev) => (prev.some((x) => x.id === m.id) ? prev.map((x) => (x.id === m.id ? m : x)) : [...prev, m]))
+    log({ action: 'pricing.bedrock.save', target: m.name, category: 'settings' })
+    setEdit(null); setCreating(false)
+  }
+  const remove = (m: BedrockModel) => {
+    setModels((prev) => prev.filter((x) => x.id !== m.id))
+    log({ action: 'pricing.bedrock.remove', target: m.name, category: 'settings' })
+  }
+  const empty = (): BedrockModel => ({ id: newBedrockId(), name: 'New model', provider: 'Anthropic', modality: 'Text', strengths: '', minTier: plans[0]?.name ?? 'Team', byok: true, managed: false })
+
+  const rows = models
     .filter((m) => (modality === 'All' || m.modality === modality) && (mode === 'All' || (mode === 'byok' ? m.byok : m.managed)))
     .slice()
     .sort((a, b) => tierRankOf(a.minTier) - tierRankOf(b.minTier) || a.provider.localeCompare(b.provider))
@@ -622,6 +693,7 @@ function BedrockTab({ plans }: { plans: Plan[] }) {
             <option value="byok">BYOK-enabled</option>
             <option value="managed">PLCY-managed</option>
           </select>
+          <GatedButton cap="license.manage" className="btn-primary py-1.5 text-sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" />Model</GatedButton>
         </div>
       </div>
 
@@ -636,6 +708,7 @@ function BedrockTab({ plans }: { plans: Plan[] }) {
                 <th className="px-4 py-2.5 font-medium">Best for</th>
                 <th className="px-4 py-2.5 font-medium">Unlocks at</th>
                 <th className="px-4 py-2.5 font-medium">Access</th>
+                {canManage && <th className="px-4 py-2.5" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -652,14 +725,48 @@ function BedrockTab({ plans }: { plans: Plan[] }) {
                       {m.managed && <Badge tone="green">Managed</Badge>}
                     </div>
                   </td>
+                  {canManage && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button className="rounded-md p-1.5 text-ink-400 hover:bg-slate-100 hover:text-brand-600" onClick={() => setEdit(m)} aria-label="Edit"><Pencil className="h-4 w-4" /></button>
+                        <button className="rounded-md p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose-600" onClick={() => remove(m)} aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-ink-400">No models match this filter.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-sm text-ink-400">No models match this filter.</td></tr>}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {(edit || creating) && <BedrockModal model={edit ?? empty()} plans={plans} onClose={() => { setEdit(null); setCreating(false) }} onSave={save} />}
     </>
+  )
+}
+
+const BEDROCK_PROVIDERS = ['Anthropic', 'Amazon', 'Meta', 'Mistral', 'Cohere', 'AI21', 'DeepSeek', 'Stability AI']
+function BedrockModal({ model, plans, onClose, onSave }: { model: BedrockModel; plans: Plan[]; onClose: () => void; onSave: (m: BedrockModel) => void }) {
+  const [d, setD] = useState<BedrockModel>(() => ({ ...model }))
+  const providers = BEDROCK_PROVIDERS.includes(d.provider) ? BEDROCK_PROVIDERS : [d.provider, ...BEDROCK_PROVIDERS]
+  return (
+    <Modal open onClose={onClose} title={model.name === 'New model' ? 'New Bedrock model' : `Edit ${model.name}`} subtitle="Catalog entry, unlock tier, and access modes" maxWidth="max-w-lg"
+      footer={<><button className="btn-ghost" onClick={onClose}>Cancel</button><button className="btn-primary" onClick={() => onSave(d)}><Check className="h-4 w-4" />Save model</button></>}>
+      <div className="space-y-4">
+        <div><label className="mb-1 block text-xs font-medium text-ink-500">Model name</label><input className="input" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></div>
+        <div className="grid grid-cols-3 gap-3">
+          <div><label className="mb-1 block text-xs font-medium text-ink-500">Provider</label><select className="input" value={d.provider} onChange={(e) => setD({ ...d, provider: e.target.value })}>{providers.map((p) => <option key={p}>{p}</option>)}</select></div>
+          <div><label className="mb-1 block text-xs font-medium text-ink-500">Modality</label><select className="input" value={d.modality} onChange={(e) => setD({ ...d, modality: e.target.value as Modality })}>{bedrockModalities.map((m) => <option key={m}>{m}</option>)}</select></div>
+          <div><label className="mb-1 block text-xs font-medium text-ink-500">Unlocks at</label><select className="input" value={d.minTier} onChange={(e) => setD({ ...d, minTier: e.target.value })}>{plans.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
+        </div>
+        <div><label className="mb-1 block text-xs font-medium text-ink-500">Best for</label><input className="input" value={d.strengths} onChange={(e) => setD({ ...d, strengths: e.target.value })} placeholder="Short positioning note" /></div>
+        <div className="flex gap-2">
+          <button onClick={() => setD({ ...d, byok: !d.byok })} className={`flex-1 rounded-lg border px-3 py-2 text-sm ${d.byok ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 text-ink-500'}`}>BYOK-enabled {d.byok ? '✓' : ''}</button>
+          <button onClick={() => setD({ ...d, managed: !d.managed })} className={`flex-1 rounded-lg border px-3 py-2 text-sm ${d.managed ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-ink-500'}`}>PLCY-managed {d.managed ? '✓' : ''}</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

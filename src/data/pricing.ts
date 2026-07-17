@@ -105,6 +105,15 @@ export const THROUGHPUT_TIERS: ThroughputTier[] = [
 export const tierPrice = (name: string): number => THROUGHPUT_TIERS.find((t) => t.name === name)?.monthly ?? 0
 export const tierRank = (name: string): number => { const i = THROUGHPUT_TIERS.findIndex((t) => t.name === name); return i < 0 ? 0 : i }
 
+export type DedicatedTier = 'None' | 'Small' | 'Medium' | 'Large'
+export const DEDICATED_TIERS: { name: DedicatedTier; monthly: number; note: string }[] = [
+  { name: 'None', monthly: 0, note: 'Shared multi-tenant SaaS' },
+  { name: 'Small', monthly: 2000, note: 'Single-tenant · light workloads' },
+  { name: 'Medium', monthly: 5000, note: 'Single-tenant · standard production' },
+  { name: 'Large', monthly: 12000, note: 'Single-tenant · high scale / HA' },
+]
+export const dedicatedPrice = (name: DedicatedTier): number => DEDICATED_TIERS.find((t) => t.name === name)?.monthly ?? 0
+
 export const FEATURE_ENUMS: { key: 'rbac' | 'throughputTier' | 'deployment'; label: string; options: string[] }[] = [
   { key: 'rbac', label: 'RBAC', options: RBAC_OPTIONS },
   { key: 'throughputTier', label: 'Throughput tier', options: THROUGHPUT_TIERS.map((t) => t.name) },
@@ -253,8 +262,12 @@ export interface QuoteInput {
   commercialPct: number
   demand: PlanCapacity
   throughputTier: string
+  dedicatedTier: DedicatedTier
+  dedicatedRegion: string
   /** Individually toggleable entitlements (keys of ENTITLEMENTS). */
   entitlements: Record<BoolFeatureKey, boolean>
+  /** Bedrock model ids in scope for the deal (informational; access via entitlement). */
+  bedrockModelIds: string[]
   premiumSupport: boolean
   cacheHitRate: number
   modelAccess: 'BYOK' | 'Managed'
@@ -306,6 +319,17 @@ export function computeQuote(input: QuoteInput, plans: Plan[], addOns: AddOn[], 
   if (tierRank(input.throughputTier) > tierRank(plan.features.throughputTier)) {
     const delta = tierPrice(input.throughputTier) - tierPrice(plan.features.throughputTier)
     lines.push({ label: `Throughput — ${input.throughputTier}`, basis: `upgrade from ${plan.features.throughputTier}`, monthly: delta, notes: THROUGHPUT_TIERS.find((t) => t.name === input.throughputTier)?.note ?? '' })
+  }
+
+  // Dedicated Cloud (single-tenant). Free when the plan already includes it.
+  if (input.dedicatedTier !== 'None') {
+    const includedDedicated = plan.features.deployment.includes('Dedicated single-tenant included')
+    lines.push({
+      label: `Dedicated Cloud — ${input.dedicatedTier}`,
+      basis: `${input.dedicatedRegion}${includedDedicated ? ' · included in plan' : ''}`,
+      monthly: includedDedicated ? 0 : dedicatedPrice(input.dedicatedTier),
+      notes: DEDICATED_TIERS.find((t) => t.name === input.dedicatedTier)?.note ?? '',
+    })
   }
 
   const cacheHit = Math.min(1, Math.max(0, input.cacheHitRate)) * discounts.cacheHitDiscount

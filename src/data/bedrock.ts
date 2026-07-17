@@ -58,5 +58,25 @@ export const bedrockModels: BedrockModel[] = [
   { id: 'bm_nova_canvas', name: 'Nova Canvas / Sonic', provider: 'Amazon', modality: 'Image', strengths: 'Image (Canvas) and speech (Sonic) generation', minTier: 'Business', byok: true, managed: false },
 ]
 
-export const bedrockProviders = [...new Set(bedrockModels.map((m) => m.provider))]
 export const bedrockModalities: Modality[] = ['Text', 'Multimodal', 'Embeddings', 'Image', 'Speech']
+
+/* ---- Persistence (editable catalog) ---- */
+const STORAGE_KEY = 'plcy_bedrock_models'
+export function loadBedrockModels(): BedrockModel[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as BedrockModel[]) : bedrockModels.map((m) => ({ ...m }))
+  } catch {
+    return bedrockModels.map((m) => ({ ...m }))
+  }
+}
+export function saveBedrockModels(list: BedrockModel[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
+  } catch {
+    /* ignore */
+  }
+}
+export function newBedrockId(): string {
+  return 'bm_' + Math.random().toString(36).slice(2, 8)
+}
