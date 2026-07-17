@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import {
   Search,
   Book,
+  ListChecks,
   Cpu,
   Sparkles,
   Shield,
@@ -33,14 +34,16 @@ import {
 } from '@/data/glossary'
 import type { GlossaryGroup, GlossaryTerm } from '@/data/glossary'
 
-const CAT_ICON: Record<'book' | 'cpu' | 'sparkles' | 'shield', LucideIcon> = {
+const CAT_ICON: Record<'book' | 'steps' | 'cpu' | 'sparkles' | 'shield', LucideIcon> = {
   book: Book,
+  steps: ListChecks,
   cpu: Cpu,
   sparkles: Sparkles,
   shield: Shield,
 }
 const CAT_TONE: Record<DocCategory, Tone> = {
   'System Usage': 'blue',
+  'How-to': 'red',
   Technical: 'purple',
   Features: 'green',
   Policies: 'orange',
@@ -236,6 +239,16 @@ function Article({ doc, onBack }: { doc: DocArticle; onBack: () => void }) {
             {s.paras?.map((p, j) => (
               <p key={j} className="mb-2 text-sm leading-relaxed text-ink-700">{p}</p>
             ))}
+            {s.steps && (
+              <ol className="mt-1 space-y-2.5">
+                {s.steps.map((st, j) => (
+                  <li key={j} className="flex items-start gap-3 text-sm leading-relaxed text-ink-700">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white">{j + 1}</span>
+                    <span className="flex-1 pt-0.5">{st}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
             {s.bullets && (
               <ul className="mt-1 space-y-1.5">
                 {s.bullets.map((b, j) => (
@@ -372,8 +385,9 @@ function TermCard({ t, highlight, onSee }: { t: GlossaryTerm; highlight: boolean
 }
 
 /* Full class strings so Tailwind keeps them; category tone → swatch. */
-const CAT_SWATCH: Record<'blue' | 'purple' | 'green' | 'orange', string> = {
+const CAT_SWATCH: Record<'blue' | 'red' | 'purple' | 'green' | 'orange', string> = {
   blue: 'bg-blue-50 text-blue-600',
+  red: 'bg-rose-50 text-rose-600',
   purple: 'bg-violet-50 text-violet-600',
   green: 'bg-emerald-50 text-emerald-600',
   orange: 'bg-orange-50 text-orange-600',

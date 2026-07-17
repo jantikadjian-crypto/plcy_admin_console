@@ -4,12 +4,14 @@
  * are plain structured content (no markdown runtime) so they render consistently
  * and stay searchable by title, summary, tags, and body text.
  */
-export type DocCategory = 'System Usage' | 'Technical' | 'Features' | 'Policies'
+export type DocCategory = 'System Usage' | 'How-to' | 'Technical' | 'Features' | 'Policies'
 
 export interface DocSection {
   heading?: string
   paras?: string[]
   bullets?: string[]
+  /** Ordered, numbered steps — for How-to guides. */
+  steps?: string[]
   /** Renders an inline-SVG figure (see components/diagrams.tsx). */
   diagram?: 'network' | 'architecture'
 }
@@ -25,8 +27,9 @@ export interface DocArticle {
   sections: DocSection[]
 }
 
-export const DOC_CATEGORIES: { key: DocCategory; icon: 'book' | 'cpu' | 'sparkles' | 'shield'; tone: 'blue' | 'purple' | 'green' | 'orange'; blurb: string }[] = [
+export const DOC_CATEGORIES: { key: DocCategory; icon: 'book' | 'steps' | 'cpu' | 'sparkles' | 'shield'; tone: 'blue' | 'red' | 'purple' | 'green' | 'orange'; blurb: string }[] = [
   { key: 'System Usage', icon: 'book', tone: 'blue', blurb: 'Navigating and operating the console day to day.' },
+  { key: 'How-to', icon: 'steps', tone: 'red', blurb: 'Step-by-step guides for the core workflows.' },
   { key: 'Technical', icon: 'cpu', tone: 'purple', blurb: 'Architecture, deployment, and integration details.' },
   { key: 'Features', icon: 'sparkles', tone: 'green', blurb: 'How each major capability works.' },
   { key: 'Policies', icon: 'shield', tone: 'orange', blurb: 'Standards, controls, and compliance references.' },
@@ -87,6 +90,186 @@ export const docs: DocArticle[] = [
         'Upcoming Rotation is editable; "Make current" applies a week to the live assignment.',
       ] },
       { heading: 'Signals', paras: ['Cluster, supply-chain, SLA, billing (dunning, failed payments, disputes), and device-trust events all feed the router. Add a routing rule to close any coverage gap.'] },
+    ],
+  },
+
+  /* ---------------- How-to ---------------- */
+  {
+    id: 'howto_onboard', slug: 'howto-onboard-customer', title: 'Onboard a new customer', category: 'How-to',
+    summary: 'Create a customer record, place them on a plan, and set their deployment & entitlements.',
+    tags: ['onboard', 'customer', 'new', 'setup', 'plan', 'entitlements'], updated: '2026-07-17',
+    sections: [
+      { paras: ['Onboarding creates the customer, puts them on a catalog plan, and configures how their deployment runs. You need the customer.manage capability.'] },
+      { heading: 'Steps', steps: [
+        'Open Customers, or use + New → New customer from the top bar.',
+        'Enter the company name, primary domain, and select a plan tier (Trial / Growth / Business / Enterprise).',
+        'Choose the deployment: shared SaaS, Dedicated Cloud (region + size), or air-gapped.',
+        'Save. The customer appears in the roster with a Stripe-modeled subscription.',
+        'Open the customer, then the Billing tab, to confirm the catalog plan and toggle entitlements (SSO, SCIM, immutable logs, HITL, Bedrock).',
+        'Set the sidebar customer scope to the new account to work inside it (reports and pages re-scope).',
+      ] },
+      { paras: ['Tip: for a paid deal, build the numbers in the quote builder first (see “Build and export a quote”), then create the customer on the matching plan.'] },
+    ],
+  },
+  {
+    id: 'howto_quote', slug: 'howto-build-quote', title: 'Build and export a quote', category: 'How-to',
+    summary: 'Price a deal in the quote builder and export the order form.',
+    tags: ['quote', 'pricing', 'order form', 'deal', 'export', 'discount'], updated: '2026-07-17',
+    sections: [
+      { paras: ['The quote builder prices a plan plus usage, options, and discounts, and produces an order form you can export.'] },
+      { heading: 'Steps', steps: [
+        'Open Pricing & Plans and switch to the Quote tab.',
+        'Pick a plan, a billing cadence (monthly / annual), and a term.',
+        'Set the Demand fields — governed requests and seats; the plan’s capacity pre-fills them.',
+        'Set Options — throughput tier, Dedicated Cloud tier + region, cache-hit rate, and BYOK vs PLCY-managed model access.',
+        'Toggle entitlements on or off; apply any discount levers.',
+        'Review the live total and the per-line breakdown (overages price at the cheaper of unit vs pack).',
+        'Export the order form as CSV or Markdown.',
+      ] },
+      { paras: ['Tip: the quote reconciles to real customers — each plan card shows who’s on it and their MRR.'] },
+    ],
+  },
+  {
+    id: 'howto_deploy_change', slug: 'howto-change-deployment', title: 'Change a deployment (region or size)', category: 'How-to',
+    summary: 'Raise a provisioning change-request and schedule it into a maintenance window.',
+    tags: ['provisioning', 'deployment', 'region', 'size', 'maintenance', 'change-request'], updated: '2026-07-16',
+    sections: [
+      { paras: ['Region, size, and connectivity changes are handled as reviewed change-requests scheduled into a maintenance window — never applied ad hoc. You need the provision.manage capability.'] },
+      { heading: 'Steps', steps: [
+        'Open the customer (or Provisioning) and start a configuration change-request.',
+        'Choose the target — new region, size tier (Small / Medium / Large), or connectivity.',
+        'Submit the request; it enters the review queue with a diff of what changes.',
+        'Review and approve the change-request.',
+        'Schedule it into a maintenance window on SLA & Maintenance so the customer has notice.',
+        'The change executes in the window; confirm the deployment reflects the new config afterward.',
+      ] },
+    ],
+  },
+  {
+    id: 'howto_enroll_device', slug: 'howto-enroll-device', title: 'Enroll a managed device', category: 'How-to',
+    summary: 'Register a device so it can reach the console under “Require managed devices”.',
+    tags: ['device', 'enroll', 'mdm', 'posture', 'trusted', 'security'], updated: '2026-07-16',
+    sections: [
+      { paras: ['Enrolling issues a one-time code; on check-in the device reports a hardware-bound Device ID and passes a posture check before it’s trusted.'] },
+      { heading: 'Steps', steps: [
+        'Go to Settings → Security → Managed devices and choose Enroll device.',
+        'Share the one-time enrollment code with the device owner (QR code + install command are provided).',
+        'On the device, run the install; it checks in and reports its Device ID (Hardware UUID + motherboard serial).',
+        'Confirm the posture checks pass — disk encryption, current OS, screen lock, not jailbroken, MDM-enrolled, and company VPN.',
+        'Verify the device shows as Trusted in the list.',
+        'When ready, turn on “Require managed devices” so only Trusted devices can access the console.',
+      ] },
+      { paras: ['Tip: a device that later drifts shows as At risk; a non-compliant one is Blocked and cannot sign in while the requirement is on.'] },
+    ],
+  },
+  {
+    id: 'howto_rotate_key', slug: 'howto-rotate-api-key', title: 'Rotate an API key', category: 'How-to',
+    summary: 'Issue a fresh credential and retire the old one without downtime.',
+    tags: ['api', 'key', 'rotate', 'credential', 'secret', 'security'], updated: '2026-07-14',
+    sections: [
+      { paras: ['Rotating replaces a key’s secret. The secret is shown once — capture it before leaving the screen. You need the settings.modify capability.'] },
+      { heading: 'Steps', steps: [
+        'Open Admin Security and find the key in the API Keys table.',
+        'Click Rotate to generate a new secret for the same name and scopes.',
+        'Copy the new secret immediately — it is displayed only once.',
+        'Update the consuming system (CI, webhook, integration) with the new secret.',
+        'Confirm traffic resumes and the key’s “last used” updates.',
+        'Revoke or let the old secret expire once nothing depends on it.',
+      ] },
+      { paras: ['Tip: keep tokens least-privilege — issue read-only keys for exports and reserve write/admin scopes for systems that need them.'] },
+    ],
+  },
+  {
+    id: 'howto_dsar', slug: 'howto-handle-dsar', title: 'Handle a data-subject request (DSAR)', category: 'How-to',
+    summary: 'Work a DSAR from intake to fulfilment before its statutory deadline.',
+    tags: ['dsar', 'privacy', 'gdpr', 'deadline', 'data request', 'fulfilment'], updated: '2026-07-15',
+    sections: [
+      { paras: ['DSARs are tracked against a statutory clock. The goal is to fulfil (access, export, or delete) before the deadline and leave an evidence trail.'] },
+      { heading: 'Steps', steps: [
+        'Open Data Requests and select the incoming request.',
+        'Verify the requester’s identity and confirm the data subject and jurisdiction.',
+        'Assign an owner and note the statutory deadline.',
+        'Determine the request type — access, export, rectification, or erasure — and gather or action the data.',
+        'Record the outcome and mark the request fulfilled before the deadline.',
+        'Check the DSAR Fulfilment report to confirm it scores On track / Closed rather than At risk / Breached.',
+      ] },
+    ],
+  },
+  {
+    id: 'howto_incident', slug: 'howto-incident-postmortem', title: 'Triage an incident & produce a post-mortem', category: 'How-to',
+    summary: 'Log and work an AI-governance incident, then generate its post-mortem.',
+    tags: ['incident', 'triage', 'post-mortem', 'severity', 'root cause', 'remediation'], updated: '2026-07-15',
+    sections: [
+      { paras: ['Incident Management captures severity, ownership, timeline, root cause, and remediation, and the Post-Mortem report rolls it up with the obligations it triggers.'] },
+      { heading: 'Steps', steps: [
+        'Open Incident Management and Report incident (or + New → Report incident).',
+        'Set the severity, status, and owner.',
+        'Log the timeline as facts come in; edit severity/status/assignee in place as it evolves.',
+        'Investigate to a root cause and record the remediation.',
+        'Move the incident to Resolved once the fix is verified.',
+        'Generate the Incident Post-Mortem report for the review and any regulatory notifications.',
+      ] },
+    ],
+  },
+  {
+    id: 'howto_billing_signal', slug: 'howto-billing-signal', title: 'Respond to a billing signal', category: 'How-to',
+    summary: 'Handle a failed payment, dunning, or dispute routed to on-call.',
+    tags: ['billing', 'dunning', 'dispute', 'failed payment', 'chargeback', 'on-call'], updated: '2026-07-16',
+    sections: [
+      { paras: ['Failed payments, dunning, and disputes route into Notifications and page on-call. Work them from Billing Health.'] },
+      { heading: 'Steps', steps: [
+        'From the Notifications alert (or Billing Health), open the flagged customer and invoice.',
+        'Identify the signal — failed payment, dunning stage, or dispute / chargeback.',
+        'Take the matching action: retry or update the payment method, contact the customer, or contest a dispute with evidence.',
+        'Update the invoice / account status to reflect the resolution.',
+        'Confirm the signal clears and no further escalation is queued.',
+      ] },
+      { paras: ['Tip: repeated dunning without resolution escalates toward suspension — act before it reaches the final stage.'] },
+    ],
+  },
+  {
+    id: 'howto_oncall', slug: 'howto-edit-oncall', title: 'Edit on-call & rotation', category: 'How-to',
+    summary: 'Reassign the on-call responders and advance the rotation.',
+    tags: ['on-call', 'rotation', 'escalation', 'notifications', 'pagerduty'], updated: '2026-07-16',
+    sections: [
+      { paras: ['The Primary responder drives every routed signal, so keep on-call current — you can edit it directly from the Notifications page.'] },
+      { heading: 'Steps', steps: [
+        'Open Notifications and find the On-Call card.',
+        'Click Edit and reassign Primary, Secondary, and Manager from the team roster.',
+        'Save — the “On-call now” tile and PagerDuty routing update immediately.',
+        'To advance the schedule, edit the Upcoming Rotation and use “Make current” to apply a week to the live assignment.',
+        'Verify the change by checking who the router now shows as on-call.',
+      ] },
+    ],
+  },
+  {
+    id: 'howto_report', slug: 'howto-generate-report', title: 'Generate & export a report', category: 'How-to',
+    summary: 'Produce a point-in-time report for a review, auditor, or customer.',
+    tags: ['report', 'export', 'csv', 'markdown', 'pdf', 'scope'], updated: '2026-07-15',
+    sections: [
+      { paras: ['Reports are scope-aware — set the sidebar customer scope first if you want a per-customer report rather than a fleet-wide one.'] },
+      { heading: 'Steps', steps: [
+        'Set the customer scope in the sidebar (or leave All Customers for a fleet report).',
+        'Open the Reports hub and pick a generator (Posture, Compliance, Security, SLA, Cost & Margin, Incident, DSAR, or Customer Account).',
+        'Review the RAG status banner and the report body.',
+        'Export with Download CSV or Download Markdown, or use Print / Save as PDF for the formatted version.',
+      ] },
+      { paras: ['Tip: many pages can launch their own report directly (e.g. Generate report on Cost & Margin).'] },
+    ],
+  },
+  {
+    id: 'howto_posture', slug: 'howto-raise-posture', title: 'Raise the security posture score', category: 'How-to',
+    summary: 'Tune the org security policy to close the highest-weight gaps.',
+    tags: ['security', 'posture', 'score', 'mfa', 'sso', 'hardening', 'policy'], updated: '2026-07-17',
+    sections: [
+      { paras: ['The posture score is computed live from the security policy and weighted — a few high-impact controls move it most. You need the settings.modify capability.'] },
+      { heading: 'Steps', steps: [
+        'Open Settings → Security and read the current score and its top gaps.',
+        'Enable the high-weight controls first: require MFA, prefer phishing-resistant factors, enforce SSO, and enforce the IP allowlist.',
+        'Tighten sessions and API access (timeouts, scoped tokens, token lifetimes).',
+        'Watch the score climb as each control turns on.',
+        'Confirm the same score and cleared gaps now show on Admin Security and Fleet Posture.',
+      ] },
     ],
   },
 
@@ -293,6 +476,6 @@ export const docsByCategory = (cat: DocCategory): DocArticle[] => docs.filter((d
 
 /** Full searchable text for a doc — title, summary, tags, and body. */
 export function docSearchText(d: DocArticle): string {
-  const body = d.sections.flatMap((s) => [s.heading ?? '', ...(s.paras ?? []), ...(s.bullets ?? [])]).join(' ')
+  const body = d.sections.flatMap((s) => [s.heading ?? '', ...(s.paras ?? []), ...(s.bullets ?? []), ...(s.steps ?? [])]).join(' ')
   return `${d.title} ${d.summary} ${d.tags.join(' ')} ${body}`.toLowerCase()
 }
