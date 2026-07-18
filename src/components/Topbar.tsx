@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Menu,
   Search,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { flatNav, hubSubPages } from '@/config/navigation'
+import { Breadcrumbs } from './Breadcrumbs'
 import { models, instances } from '@/data/mock'
 import { packs as policyPacks, controls as policyControls, familyOf } from '@/data/policy'
 import { reports } from '@/data/reports'
@@ -68,14 +69,11 @@ const sevDot: Record<AlertSeverity, string> = {
 }
 
 export default function Topbar({ onMenu }: { onMenu: () => void }) {
-  const { pathname } = useLocation()
   const navigate = useNavigate()
   const { setScope } = useCustomerScope()
   const { list: customers } = useCustomers()
   const { can } = useSession()
   const allDocs = useDocs()
-  const current = flatNav.find((n) => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)))
-  const title = current?.label ?? 'Dashboard'
 
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -142,7 +140,9 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
         <Menu className="h-5 w-5" />
       </button>
 
-      <h2 className="text-sm font-semibold text-ink-700">{title}</h2>
+      <div className="hidden min-w-0 max-w-[42vw] sm:block">
+        <Breadcrumbs />
+      </div>
 
       <div className="relative ml-auto hidden max-w-sm flex-1 md:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />

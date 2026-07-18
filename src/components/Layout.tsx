@@ -12,7 +12,6 @@ import { DeploymentConfigProvider } from '@/context/DeploymentConfig'
 import { MaintenanceWindowsProvider } from '@/context/MaintenanceWindows'
 import { StripeProvider } from '@/context/Stripe'
 import OnboardingReturnBanner from './OnboardingReturnBanner'
-import { Breadcrumbs } from './Breadcrumbs'
 
 /** Reset scroll to the top of the page on every route change. */
 function ScrollToTop() {
@@ -44,7 +43,6 @@ export default function Layout() {
           <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">
               <OnboardingReturnBanner />
-              <Breadcrumbs />
               <Outlet />
             </div>
           </main>

@@ -69,23 +69,6 @@ const TYPE_TONE: Record<DocType, Tone> = { Document: 'blue', Guide: 'red', Graph
 type CatFilter = DocCategory | 'All'
 type TypeFilter = DocType | 'All'
 
-function Breadcrumbs({ items }: { items: { label: string; onClick?: () => void }[] }) {
-  return (
-    <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
-      {items.map((it, i) => (
-        <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <ChevronRight className="h-3 w-3 text-ink-300" />}
-          {it.onClick ? (
-            <button onClick={it.onClick} className="font-medium text-ink-500 transition-colors hover:text-brand-600">{it.label}</button>
-          ) : (
-            <span className="font-medium text-ink-800">{it.label}</span>
-          )}
-        </span>
-      ))}
-    </nav>
-  )
-}
-
 export default function Docs() {
   const { slug } = useParams()
   const { pathname } = useLocation()
@@ -281,25 +264,6 @@ function Guides({
 
       {/* Right pane — editor, article, or landing */}
       <div className="min-w-0">
-        <Breadcrumbs
-          items={
-            editing === 'new'
-              ? [{ label: 'Documentation', onClick: onCancel }, { label: 'New article' }]
-              : editing
-              ? [
-                  { label: 'Documentation', onClick: onCancel },
-                  { label: editing.category },
-                  { label: `Editing · ${editing.title}` },
-                ]
-              : active
-              ? [
-                  { label: 'Documentation', onClick: () => { setCat('All'); setType('All'); navigate('/docs') } },
-                  { label: active.category, onClick: () => { setCat(active.category); navigate('/docs') } },
-                  { label: `${docType(active)} · ${active.title}` },
-                ]
-              : [{ label: 'Documentation' }, { label: 'Guides' }]
-          }
-        />
         {editing !== null ? (
           <ArticleEditor
             initial={editing === 'new' ? undefined : editing}
@@ -441,10 +405,8 @@ function Article({ doc, onBack, onEdit }: { doc: DocArticle; onBack: () => void;
 type GroupFilter = GlossaryGroup | 'All'
 
 function GlossaryView() {
-  const navigate = useNavigate()
   const [params] = useSearchParams()
   const deepLinked = params.get('term') ?? ''
-  const deepTerm = deepLinked ? glossaryById(deepLinked) : undefined
   const [q, setQ] = useState(deepLinked)
   const [group, setGroup] = useState<GroupFilter>('All')
 
@@ -469,13 +431,6 @@ function GlossaryView() {
 
   return (
     <div>
-      <Breadcrumbs
-        items={[
-          { label: 'Documentation', onClick: () => navigate('/docs') },
-          { label: 'Glossary', onClick: deepTerm ? () => { setQ(''); navigate('/docs/glossary') } : undefined },
-          ...(deepTerm ? [{ label: deepTerm.term }] : []),
-        ]}
-      />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
