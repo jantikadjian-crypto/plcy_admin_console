@@ -20,7 +20,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { flatNav } from '@/config/navigation'
+import { flatNav, hubSubPages } from '@/config/navigation'
 import { models, instances } from '@/data/mock'
 import { packs as policyPacks, controls as policyControls, familyOf } from '@/data/policy'
 import { reports } from '@/data/reports'
@@ -108,6 +108,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
       ...allDocs.map((d) => ({ kind: 'Doc', icon: BookOpen, label: d.title, sub: d.category, to: `/docs/${d.slug}`, keywords: docSearchText(d) })),
       ...glossary.map((t) => ({ kind: 'Term', icon: BookOpen, label: t.full ? `${t.term} — ${t.full}` : t.term, sub: t.group, to: `/docs/glossary?term=${glossaryId(t.term)}`, keywords: glossarySearchText(t) })),
       ...flatNav.map((n) => ({ kind: 'Page', icon: LayoutDashboard, label: n.label, sub: 'Go to page', to: n.to })),
+      ...hubSubPages.map((p) => ({ kind: 'Page', icon: LayoutDashboard, label: p.label, sub: 'Go to page', to: p.to })),
     ],
     [customers, allDocs],
   )
