@@ -23,12 +23,14 @@ import {
   DatabaseZap,
   AlertTriangle,
   Users,
+  Crown,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import ManagedDevices from '@/components/ManagedDevices'
 import Team from './Team'
+import SuperAdmin from './SuperAdmin'
 import { useSession } from '@/context/Session'
 import {
   MFA_METHODS,
@@ -73,6 +75,7 @@ type TabKey =
   | 'Integrations'
   | 'Roles & Permissions'
   | 'Security'
+  | 'Super Admin'
 
 const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'General', icon: SettingsIcon },
@@ -83,6 +86,7 @@ const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'Integrations', icon: Plug },
   { key: 'Roles & Permissions', icon: KeyRound },
   { key: 'Security', icon: Shield },
+  { key: 'Super Admin', icon: Crown },
 ]
 
 type AccessMap = Record<EAccessFeature, EAccessRole[]>
@@ -931,6 +935,8 @@ export default function Settings() {
           {active === 'Security' && (
             <SecuritySettings policy={securityPolicy} onChange={setSecurityPolicy} />
           )}
+
+          {active === 'Super Admin' && <SuperAdmin />}
         </div>
       </div>
     </>

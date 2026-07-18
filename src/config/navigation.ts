@@ -11,7 +11,6 @@ import {
   TriangleAlert,
   Lock,
   TerminalSquare,
-  Crown,
   Settings,
   Package,
   Rocket,
@@ -94,7 +93,6 @@ export const navGroups: NavGroup[] = [
       { label: 'Supply Chain', to: '/supply-chain', icon: PackageCheck },
       { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
       { label: 'Documentation', to: '/docs', icon: BookOpen },
-      { label: 'Super Admin', to: '/super-admin', icon: Crown },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],
   },
@@ -135,6 +133,7 @@ export const hubSubPages: { label: string; to: string }[] = [
   { label: 'Supply Chain', to: '/supply-chain?tab=supply' },
   { label: 'Container Registry', to: '/supply-chain?tab=registry' },
   { label: 'Team', to: '/settings?tab=Team' },
+  { label: 'Super Admin', to: '/settings?tab=Super Admin' },
 ]
 
 export { ShieldCheck }

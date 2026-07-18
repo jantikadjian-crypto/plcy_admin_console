@@ -18,7 +18,6 @@ import Incidents from './pages/Incidents'
 import Risk from './pages/Risk'
 import Notifications from './pages/Notifications'
 import DeveloperTools from './pages/DeveloperTools'
-import SuperAdmin from './pages/SuperAdmin'
 import Settings from './pages/Settings'
 import Docs from './pages/Docs'
 import Reports from './pages/Reports'
@@ -64,7 +63,7 @@ export default function App() {
         <Route path="/risk" element={<Risk />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/developer-tools" element={<DeveloperTools />} />
-        <Route path="/super-admin" element={<SuperAdmin />} />
+        <Route path="/super-admin" element={<Navigate to="/settings?tab=Super Admin" replace />} />
         <Route path="/settings" element={<Settings />} />
 
         {/* Documentation */}
