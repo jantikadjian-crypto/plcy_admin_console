@@ -4,7 +4,6 @@ import Dashboard from './pages/Dashboard'
 import FleetOverview from './pages/FleetOverview'
 import Customers from './pages/Customers'
 import CustomerDetail from './pages/CustomerDetail'
-import Team from './pages/Team'
 import EmployeeDetail from './pages/EmployeeDetail'
 import Instances from './pages/Instances'
 import ClusterDetail from './pages/ClusterDetail'
@@ -51,7 +50,7 @@ export default function App() {
         <Route path="/fleet" element={<FleetOverview />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
-        <Route path="/team" element={<Team />} />
+        <Route path="/team" element={<Navigate to="/settings?tab=Team" replace />} />
         <Route path="/team/:id" element={<EmployeeDetail />} />
         <Route path="/instances" element={<Instances />} />
         <Route path="/pricing" element={<Pricing />} />

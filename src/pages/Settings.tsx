@@ -22,11 +22,13 @@ import {
   KeySquare,
   DatabaseZap,
   AlertTriangle,
+  Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import ManagedDevices from '@/components/ManagedDevices'
+import Team from './Team'
 import { useSession } from '@/context/Session'
 import {
   MFA_METHODS,
@@ -65,6 +67,7 @@ import {
 type TabKey =
   | 'General'
   | 'Branding'
+  | 'Team'
   | 'Notifications'
   | 'Billing'
   | 'Integrations'
@@ -74,6 +77,7 @@ type TabKey =
 const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'General', icon: SettingsIcon },
   { key: 'Branding', icon: Palette },
+  { key: 'Team', icon: Users },
   { key: 'Notifications', icon: Bell },
   { key: 'Billing', icon: CreditCard },
   { key: 'Integrations', icon: Plug },
@@ -786,6 +790,8 @@ export default function Settings() {
               </div>
             </Card>
           )}
+
+          {active === 'Team' && <Team />}
 
           {active === 'Notifications' && (
             <Card>

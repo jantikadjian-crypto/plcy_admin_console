@@ -24,7 +24,6 @@ import {
   Layers,
   Gauge,
   Receipt,
-  UserCog,
   BadgeDollarSign,
   BookOpen,
   type LucideIcon,
@@ -93,7 +92,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Security', to: '/admin-security', icon: Lock },
       { label: 'Supply Chain', to: '/supply-chain', icon: PackageCheck },
-      { label: 'Team', to: '/team', icon: UserCog },
       { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
       { label: 'Documentation', to: '/docs', icon: BookOpen },
       { label: 'Super Admin', to: '/super-admin', icon: Crown },
@@ -136,6 +134,7 @@ export const hubSubPages: { label: string; to: string }[] = [
   { label: 'Audit Log', to: '/admin-security?tab=audit' },
   { label: 'Supply Chain', to: '/supply-chain?tab=supply' },
   { label: 'Container Registry', to: '/supply-chain?tab=registry' },
+  { label: 'Team', to: '/settings?tab=Team' },
 ]
 
 export { ShieldCheck }
