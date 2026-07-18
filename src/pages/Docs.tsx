@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Search,
   Book,
@@ -11,6 +11,7 @@ import {
   Clock,
   Hash,
   ArrowLeft,
+  ArrowUpRight,
   BookText,
   Library,
   FileText,
@@ -30,6 +31,7 @@ import {
   DOC_TYPES,
   docSearchText,
   docType,
+  docRoute,
 } from '@/data/docs'
 import type { DocArticle, DocCategory, DocType } from '@/data/docs'
 import { useDocs, upsertDoc, deleteDoc } from '@/data/docsStore'
@@ -327,9 +329,16 @@ function Article({ doc, onBack, onEdit }: { doc: DocArticle; onBack: () => void;
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 transition-colors hover:text-ink-800">
           <ArrowLeft className="h-3.5 w-3.5" /> All documentation
         </button>
-        <GatedButton cap="settings.modify" className="btn-secondary bg-slate-200 px-2.5 py-1 text-xs hover:bg-slate-300" onClick={onEdit}>
-          <Pencil className="h-3.5 w-3.5" /> Edit
-        </GatedButton>
+        <div className="flex items-center gap-2">
+          {docRoute(doc.slug) && (
+            <Link to={docRoute(doc.slug)!} className="btn-secondary px-2.5 py-1 text-xs">
+              <ArrowUpRight className="h-3.5 w-3.5" /> Open in console
+            </Link>
+          )}
+          <GatedButton cap="settings.modify" className="btn-secondary bg-slate-200 px-2.5 py-1 text-xs hover:bg-slate-300" onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </GatedButton>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

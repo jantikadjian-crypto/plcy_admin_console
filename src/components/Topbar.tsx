@@ -22,6 +22,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { flatNav, hubSubPages } from '@/config/navigation'
 import { Breadcrumbs } from './Breadcrumbs'
+import { HeaderDocLink } from './HeaderDocLink'
 import { models, instances } from '@/data/mock'
 import { packs as policyPacks, controls as policyControls, familyOf } from '@/data/policy'
 import { reports } from '@/data/reports'
@@ -211,6 +212,9 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
           </div>
         )}
       </div>
+
+      {/* Contextual docs */}
+      <HeaderDocLink />
 
       {/* + New */}
       <div className="relative">

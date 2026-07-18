@@ -563,3 +563,63 @@ export function docSearchText(d: DocArticle): string {
   const body = d.sections.flatMap((s) => [s.heading ?? '', ...(s.paras ?? []), ...(s.bullets ?? []), ...(s.steps ?? [])]).join(' ')
   return `${d.title} ${d.summary} ${d.tags.join(' ')} ${body}`.toLowerCase()
 }
+
+/**
+ * Slug → the console location the article documents. Single source of truth for
+ * both directions of doc ↔ feature linking:
+ *  - doc → feature: `docRoute(slug)` gives the "Open in console" target.
+ *  - feature → doc: `docForRoute(location)` finds the best article for a page.
+ * Insertion order sets priority when several articles map to the same page
+ * (the feature explainer is listed before its How-to guide).
+ */
+export const DOC_ROUTES: Record<string, string> = {
+  // Features / explainers first (preferred for the on-page help link)
+  'pricing-quotes': '/pricing',
+  'security-posture': '/settings?tab=Security',
+  'device-trust': '/settings?tab=Security',
+  'notifications-oncall': '/notifications',
+  'incidents-dsar': '/incidents',
+  'policy-packs': '/policy',
+  'model-access': '/models',
+  'model-routing-residency': '/residency',
+  'observability-loop': '/observability',
+  'reports': '/reports',
+  'licensing': '/billing?tab=licensing',
+  'api-keys': '/admin-security',
+  'audit-log': '/admin-security?tab=audit',
+  'policy-compliance': '/compliance',
+  'policy-access-control': '/settings?tab=Roles & Permissions',
+  'policy-security-standards': '/settings?tab=Security',
+  'policy-data-retention': '/residency',
+  'customer-scope': '/customers',
+  'deployment-models': '/provisioning',
+  // How-to guides link to the page where you do the task
+  'howto-build-quote': '/pricing',
+  'howto-onboard-customer': '/customers',
+  'howto-change-deployment': '/provisioning',
+  'howto-enroll-device': '/settings?tab=Security',
+  'howto-rotate-api-key': '/admin-security',
+  'howto-handle-dsar': '/residency?tab=dsar',
+  'howto-incident-postmortem': '/incidents',
+  'howto-billing-signal': '/billing?tab=health',
+  'howto-edit-oncall': '/notifications',
+  'howto-generate-report': '/reports',
+  'howto-raise-posture': '/settings?tab=Security',
+}
+
+/** The console route an article documents, if any. */
+export const docRoute = (slug: string): string | undefined => DOC_ROUTES[slug]
+
+/**
+ * The best article for a console location. `location` may include a `?tab=`
+ * (e.g. `/settings?tab=Security`). Prefers an exact route match, then a
+ * same-path match ignoring the tab; ties break by DOC_ROUTES order.
+ */
+export function docForRoute(location: string): DocArticle | undefined {
+  const path = location.split('?')[0]
+  const entries = Object.entries(DOC_ROUTES)
+  const exact = entries.find(([, route]) => route === location)
+  if (exact) return docBySlug(exact[0])
+  const byPath = entries.find(([, route]) => route.split('?')[0] === path)
+  return byPath ? docBySlug(byPath[0]) : undefined
+}
