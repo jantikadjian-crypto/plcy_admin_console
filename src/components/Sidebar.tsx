@@ -7,23 +7,25 @@ import { currentUser, roleDefs } from '@/data/roles'
 import { customers } from '@/data/mock'
 import { useCustomerScope, ALL } from '@/context/CustomerScope'
 import { useSession } from '@/context/Session'
+import { useOrgSettings } from '@/data/orgSettings'
 
 /**
- * PLCY brand mark. Renders the logo image at /plcy-logo.png (falling back to
- * /plcy-logo.svg). `object-contain` preserves the artwork's aspect ratio so it
- * is never stretched.
+ * Brand mark. Prefers the org's uploaded logo (Settings → Branding); otherwise
+ * falls back to the bundled logo at /plcy-logo.png (then /plcy-logo.svg).
+ * `object-contain` preserves aspect ratio so the artwork is never stretched.
  */
 const LOGO_CANDIDATES = ['/plcy-logo.png', '/plcy-logo.svg']
 
 function BrandMark() {
+  const { logo, orgName } = useOrgSettings()
   const [idx, setIdx] = useState(0)
-  const src = LOGO_CANDIDATES[Math.min(idx, LOGO_CANDIDATES.length - 1)]
+  const src = logo || LOGO_CANDIDATES[Math.min(idx, LOGO_CANDIDATES.length - 1)]
   return (
     <img
       src={src}
-      alt="PLCY"
+      alt={orgName || 'PLCY'}
       className="h-10 w-auto max-w-[180px] object-contain object-left"
-      onError={() => setIdx((i) => i + 1)}
+      onError={() => !logo && setIdx((i) => i + 1)}
     />
   )
 }

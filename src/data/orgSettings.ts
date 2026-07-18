@@ -1,8 +1,10 @@
 /**
  * Org-wide General & Branding settings behind Settings → General / Branding.
- * Persisted to localStorage so edits survive a reload, like the security
- * policy and RBAC access map.
+ * Persisted to localStorage and exposed as a tiny observable so branding edits
+ * (e.g. an uploaded logo) show up live in the sidebar via useSyncExternalStore.
  */
+import { useSyncExternalStore } from 'react'
+
 export interface OrgSettings {
   orgName: string
   supportEmail: string
@@ -10,6 +12,8 @@ export interface OrgSettings {
   defaultPlan: string
   accentColor: string
   tagline: string
+  /** Uploaded logo as a data URL (PNG/SVG/JPEG); empty falls back to the default mark. */
+  logo?: string
 }
 
 export const defaultOrgSettings: OrgSettings = {
@@ -19,11 +23,12 @@ export const defaultOrgSettings: OrgSettings = {
   defaultPlan: 'Business',
   accentColor: '#1f47f5',
   tagline: 'Govern every model. Enforce every policy.',
+  logo: '',
 }
 
 const STORAGE_KEY = 'plcy_org_settings'
 
-export function loadOrgSettings(): OrgSettings {
+function read(): OrgSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...defaultOrgSettings }
@@ -33,10 +38,30 @@ export function loadOrgSettings(): OrgSettings {
   }
 }
 
+let state: OrgSettings = read()
+const listeners = new Set<() => void>()
+
+/** A snapshot copy — safe to edit locally without mutating the store. */
+export function loadOrgSettings(): OrgSettings {
+  return { ...state }
+}
+
 export function saveOrgSettings(s: OrgSettings) {
+  state = { ...s }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {
-    /* ignore */
+    /* ignore (e.g. quota exceeded from a large logo) */
   }
+  listeners.forEach((l) => l())
+}
+
+function subscribe(fn: () => void): () => void {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
+/** React binding — re-renders on any saved change (used by the sidebar brand mark). */
+export function useOrgSettings(): OrgSettings {
+  return useSyncExternalStore(subscribe, () => state, () => state)
 }

@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Users,
   Crown,
+  Upload,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
@@ -626,6 +627,24 @@ export default function Settings() {
   const [active, setActive] = useState<TabKey>(initialTab)
   const [org, setOrg] = useState<OrgSettings>(loadOrgSettings)
   const setOrgField = (patch: Partial<OrgSettings>) => setOrg((p) => ({ ...p, ...patch }))
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [logoErr, setLogoErr] = useState('')
+
+  const onLogoFile = (file?: File | null) => {
+    if (!file) return
+    if (!/^image\/(png|svg\+xml|jpeg)$/.test(file.type)) {
+      setLogoErr('Use a PNG, SVG, or JPEG image.')
+      return
+    }
+    if (file.size > 1024 * 1024) {
+      setLogoErr('Image must be under 1 MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => { setOrgField({ logo: String(reader.result) }); setLogoErr('') }
+    reader.onerror = () => setLogoErr('Could not read that file.')
+    reader.readAsDataURL(file)
+  }
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     notifyIncidents: true,
     notifyViolations: true,
@@ -784,9 +803,36 @@ export default function Settings() {
               <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                   <p className="mb-2 text-sm font-medium text-ink-700">Logo</p>
-                  <div className="flex h-28 items-center justify-center rounded-xl border-2 border-dashed border-slate-200 text-sm text-ink-400">
-                    Drop a PNG or SVG here
-                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/svg+xml,image/jpeg"
+                    className="hidden"
+                    onChange={(e) => onLogoFile(e.target.files?.[0])}
+                  />
+                  {org.logo ? (
+                    <div className="flex items-center gap-4 rounded-xl border border-slate-200 p-4">
+                      <img src={org.logo} alt="Logo preview" className="h-12 w-auto max-w-[160px] object-contain" />
+                      <div className="flex gap-2">
+                        <button className="btn-secondary" onClick={() => logoInputRef.current?.click()}>Replace</button>
+                        <button className="btn-ghost text-rose-600 hover:bg-rose-50" onClick={() => { setOrgField({ logo: '' }); setLogoErr('') }}>Remove</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); onLogoFile(e.dataTransfer.files?.[0]) }}
+                      className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-200 text-sm text-ink-400 transition-colors hover:border-brand-300 hover:text-brand-600"
+                    >
+                      <Upload className="h-5 w-5" />
+                      Click to upload or drop a PNG / SVG
+                      <span className="text-xs text-ink-300">Max 1 MB</span>
+                    </button>
+                  )}
+                  {logoErr && <p className="mt-1.5 text-xs text-rose-600">{logoErr}</p>}
+                  <p className="mt-2 text-xs text-ink-400">Shown in the sidebar. Click “Save changes” to apply it across the console.</p>
                 </div>
                 <Field label="Login page tagline">
                   <input className="input" value={org.tagline} onChange={(e) => setOrgField({ tagline: e.target.value })} />
