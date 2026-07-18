@@ -10,7 +10,6 @@ import {
   AlertOctagon,
   TriangleAlert,
   Lock,
-  TerminalSquare,
   Settings,
   Package,
   Rocket,
@@ -91,7 +90,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Security', to: '/admin-security', icon: Lock },
       { label: 'Supply Chain', to: '/supply-chain', icon: PackageCheck },
-      { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
       { label: 'Documentation', to: '/docs', icon: BookOpen },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],

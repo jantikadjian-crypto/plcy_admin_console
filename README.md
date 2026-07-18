@@ -85,16 +85,21 @@ flowchart LR
 
 ## Navigation map
 
+The sidebar is organized into **6 groups**; related pages are consolidated into
+**tabbed section hubs** (addressed by `?tab=`), so a hub is one sidebar entry
+with several pages inside.
+
 | Group | Screens |
 |---|---|
 | **Overview** | Dashboard · Fleet Overview · **Reports** (8 generators) |
-| **Customers** | Customers (drill-down + config change-requests) · Instances · **Pricing & Plans** · Billing & Usage · Billing Integration (Stripe) · Billing Health · Cost & Margin (FinOps) |
-| **Fleet** | Provisioning · Bulk Operations · Releases · Update Bundles · Cluster Health · Fleet Posture · Backups & DR · Licensing |
-| **Sovereignty** | Regions · Residency Controls · Data Transfers · Sub-processors · Model Routing · Data Requests (DSAR) |
-| **Governance** | AI Models · Model Registry · Data Classification |
-| **Policy** | Policy Packs (Control ⊂ Primitive ⊂ Composite) · Policy Editor · Enforcement Controls |
-| **Operations** | Observability · Compliance Reporting · Incident Management · SLA & Maintenance · Risk Assessment |
-| **Platform** | Team · Audit Log · Admin Security · Privileged Access · Supply Chain · Container Registry · Notifications · Developer Tools · Super Admin · Settings |
+| **Customers & Billing** | Customers (drill-down + config change-requests) · Instances · **Pricing & Plans** · **Billing** hub (Usage · Stripe · Health · Cost & Margin · Licensing) |
+| **Fleet** | Provisioning · Bulk Operations · **Releases** hub (Releases · Update Bundles) · **Clusters** hub (Cluster Health · Fleet Posture) · Backups & DR |
+| **Governance** | **Models** hub (AI Models · Registry · Model Routing · Data Classification) · **Policy** hub (Packs · Editor · Enforcement) · **Residency** hub (Regions · Controls · Transfers · Sub-processors · DSAR) |
+| **Operations** | Observability · Compliance Reporting · Incident Management · SLA & Maintenance · Risk Assessment · Notifications |
+| **Administration** | **Security** hub (Admin Security · Privileged Access · Audit Log) · **Supply Chain** hub (Supply Chain · Container Registry) · Documentation · **Settings** (General · Branding · Team · Notifications · Billing · Integrations · Roles & Permissions · Security · Super Admin) |
+
+Old standalone routes redirect into the matching hub tab, so deep links keep
+working.
 
 ---
 

@@ -17,7 +17,6 @@ import Compliance from './pages/Compliance'
 import Incidents from './pages/Incidents'
 import Risk from './pages/Risk'
 import Notifications from './pages/Notifications'
-import DeveloperTools from './pages/DeveloperTools'
 import Settings from './pages/Settings'
 import Docs from './pages/Docs'
 import Reports from './pages/Reports'
@@ -62,7 +61,7 @@ export default function App() {
         <Route path="/incidents" element={<Incidents />} />
         <Route path="/risk" element={<Risk />} />
         <Route path="/notifications" element={<Notifications />} />
-        <Route path="/developer-tools" element={<DeveloperTools />} />
+        <Route path="/developer-tools" element={<Navigate to="/" replace />} />
         <Route path="/super-admin" element={<Navigate to="/settings?tab=Super Admin" replace />} />
         <Route path="/settings" element={<Settings />} />
 
