@@ -6,6 +6,7 @@ import {
   Gauge,
   Copy,
   Code2,
+  Rocket,
 } from 'lucide-react'
 import {
   Card,
@@ -77,8 +78,43 @@ export default function DeveloperTools() {
         }
       />
 
+      {/* Orientation — what this page is and how to use it */}
+      <div className="rounded-2xl border border-brand-100 bg-brand-50/60 p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
+            <Rocket className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-ink-900">Build on the PLCY API</h2>
+            <p className="mt-1 text-sm leading-relaxed text-ink-600">
+              This is the developer portal for integrating with the platform. PLCY governs every AI request in
+              real time — send requests to the API and it evaluates them against your policy packs before they
+              reach a model. Use the tabs below to get set up:
+            </p>
+            <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <li className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                <Terminal className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                <span><span className="font-semibold text-ink-900">REST</span> — call <code className="rounded bg-slate-100 px-1 font-mono text-xs">POST /v1/evaluate</code> with an API key. Copy the sample to try it.</span>
+              </li>
+              <li className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                <Webhook className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                <span><span className="font-semibold text-ink-900">Webhooks</span> — subscribe an endpoint to events (violations, blocks, incidents) and watch delivery health.</span>
+              </li>
+              <li className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                <Code2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                <span><span className="font-semibold text-ink-900">SDKs</span> — install an official client (Python, Node, Go, Java) instead of calling the API by hand.</span>
+              </li>
+            </ul>
+            <p className="mt-3 text-xs text-ink-500">
+              Need a key first? Generate and scope API keys under <span className="font-medium text-ink-700">Administration → Security → Admin Security</span>.
+              Full endpoint docs are behind <span className="font-medium text-ink-700">API reference</span> (top right).
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Stat row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="API calls today" value={fmtCompact(842013)} icon={Terminal} tone="blue" footer="+8.2% vs yesterday" />
         <StatCard label="Active keys" value={3} icon={KeyRound} tone="purple" footer="1 expired" />
         <StatCard label="Webhooks" value={webhooks.length} icon={Webhook} tone="orange" footer="2 endpoints unhealthy" />
