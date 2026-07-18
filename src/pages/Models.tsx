@@ -65,9 +65,16 @@ export default function Models() {
   const [rows, setRows] = useState<AIModel[]>(models)
   const [sel, setSel] = useState<AIModel | null>(null)
   const [registering, setRegistering] = useState(false)
+  const [providerFilter, setProviderFilter] = useState('All providers')
+  const [typeFilter, setTypeFilter] = useState('All types')
   useCreateIntent(() => setRegistering(true))
 
   const scoped = isAll ? rows : rows.filter((m) => m.customer === scope)
+  const shown = scoped.filter(
+    (m) =>
+      (providerFilter === 'All providers' || m.provider === providerFilter) &&
+      (typeFilter === 'All types' || m.type === typeFilter),
+  )
 
   const totalModels = scoped.length
   const activeModels = scoped.filter((m) => m.status === 'Active').length
@@ -126,13 +133,13 @@ export default function Models() {
         <Card className="lg:col-span-2">
           <CardTitle title="Model Inventory" subtitle="Filter and inspect governed models" />
           <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-            <select className="input sm:max-w-xs">
+            <select className="input sm:max-w-xs" value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}>
               <option>All providers</option>
               {providers.map((p) => (
                 <option key={p}>{p}</option>
               ))}
             </select>
-            <select className="input sm:max-w-xs">
+            <select className="input sm:max-w-xs" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               <option>All types</option>
               {types.map((t) => (
                 <option key={t}>{t}</option>
@@ -140,7 +147,7 @@ export default function Models() {
             </select>
           </div>
           <Table columns={['Model', 'Provider', 'Type', 'Customer', 'Risk', 'Status', 'Requests', '']}>
-            {scoped.map((m) => (
+            {shown.map((m) => (
               <Tr key={m.id}>
                 <Td>
                   <button className="text-left" onClick={() => setSel(m)}>
@@ -169,6 +176,11 @@ export default function Models() {
                 </Td>
               </Tr>
             ))}
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-sm text-ink-400">No models match these filters.</td>
+              </tr>
+            )}
           </Table>
         </Card>
 

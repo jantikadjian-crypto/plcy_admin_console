@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ShieldCheck,
@@ -47,8 +48,15 @@ const scopeTone: Record<string, 'red' | 'blue' | 'green' | 'orange' | 'slate' | 
 
 const mfaEnrolled = Math.round((admins.filter((a) => a.mfa).length / admins.length) * 100)
 
+const SSO_ROWS = [
+  { key: 'enforce', label: 'Enforce SSO for all users' },
+  { key: 'scim', label: 'Auto-provision new members (SCIM)' },
+  { key: 'fallback', label: 'Allow password fallback' },
+] as const
+
 export default function AdminSecurity() {
   const posture = scoreSecurity(loadSecurityPolicy())
+  const [sso, setSso] = useState<Record<string, boolean>>({ enforce: true, scim: true, fallback: false })
   return (
     <>
       <PageHeader
@@ -129,22 +137,24 @@ export default function AdminSecurity() {
             </div>
           </div>
           <div className="mt-4 divide-y divide-slate-100">
-            {[
-              { label: 'Enforce SSO for all users', on: true },
-              { label: 'Auto-provision new members (SCIM)', on: true },
-              { label: 'Allow password fallback', on: false },
-            ].map((s) => (
-              <div key={s.label} className="flex items-center justify-between py-3">
-                <span className="text-sm text-ink-700">{s.label}</span>
-                <div
-                  className={`flex h-6 w-11 items-center rounded-full px-0.5 ${
-                    s.on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'
-                  }`}
-                >
-                  <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+            {SSO_ROWS.map((s) => {
+              const on = sso[s.key]
+              return (
+                <div key={s.key} className="flex items-center justify-between py-3">
+                  <span className="text-sm text-ink-700">{s.label}</span>
+                  <button
+                    onClick={() => setSso((p) => ({ ...p, [s.key]: !p[s.key] }))}
+                    aria-pressed={on}
+                    aria-label={s.label}
+                    className={`flex h-6 w-11 items-center rounded-full px-0.5 transition-colors ${
+                      on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'
+                    }`}
+                  >
+                    <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
 
