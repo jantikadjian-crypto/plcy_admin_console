@@ -23,7 +23,7 @@ import { Card, PageHeader, Badge } from '@/components/ui'
 import type { Tone } from '@/components/ui'
 import { Diagram } from '@/components/diagrams'
 import { GatedButton } from '@/components/GatedButton'
-import { DocEditorModal } from '@/components/DocEditorModal'
+import { ArticleEditor } from '@/components/ArticleEditor'
 import { useSession } from '@/context/Session'
 import {
   DOC_CATEGORIES,
@@ -132,7 +132,7 @@ export default function Docs() {
                 <Library className="h-4 w-4" /> Glossary
               </button>
             </div>
-            {!glossaryMode && (
+            {!glossaryMode && editing === null && (
               <GatedButton cap="settings.modify" className="btn-primary" onClick={() => setEditing('new')}>
                 <Plus className="h-4 w-4" /> Add doc
               </GatedButton>
@@ -141,15 +141,18 @@ export default function Docs() {
         }
       />
 
-      {glossaryMode ? <GlossaryView /> : <Guides slug={slug} onEdit={(d) => setEditing(d)} />}
-
-      <DocEditorModal
-        open={editing !== null}
-        initial={editing === 'new' || editing === null ? undefined : editing}
-        onClose={() => setEditing(null)}
-        onSave={handleSave}
-        onDelete={handleDelete}
-      />
+      {glossaryMode ? (
+        <GlossaryView />
+      ) : (
+        <Guides
+          slug={slug}
+          editing={editing}
+          onEdit={(d) => setEditing(d)}
+          onSave={handleSave}
+          onCancel={() => setEditing(null)}
+          onDelete={handleDelete}
+        />
+      )}
     </>
   )
 }
@@ -157,7 +160,21 @@ export default function Docs() {
 /* ------------------------------------------------------------------ */
 /* Guides (articles)                                                   */
 /* ------------------------------------------------------------------ */
-function Guides({ slug, onEdit }: { slug?: string; onEdit: (d: DocArticle) => void }) {
+function Guides({
+  slug,
+  editing,
+  onEdit,
+  onSave,
+  onCancel,
+  onDelete,
+}: {
+  slug?: string
+  editing: DocArticle | 'new' | null
+  onEdit: (d: DocArticle) => void
+  onSave: (article: DocArticle, isNew: boolean) => void
+  onCancel: () => void
+  onDelete: (id: string) => void
+}) {
   const navigate = useNavigate()
   const allDocs = useDocs()
   const [q, setQ] = useState('')
@@ -262,11 +279,19 @@ function Guides({ slug, onEdit }: { slug?: string; onEdit: (d: DocArticle) => vo
         </Card>
       </div>
 
-      {/* Right pane — article or landing */}
+      {/* Right pane — editor, article, or landing */}
       <div className="min-w-0">
         <Breadcrumbs
           items={
-            active
+            editing === 'new'
+              ? [{ label: 'Documentation', onClick: onCancel }, { label: 'New article' }]
+              : editing
+              ? [
+                  { label: 'Documentation', onClick: onCancel },
+                  { label: editing.category },
+                  { label: `Editing · ${editing.title}` },
+                ]
+              : active
               ? [
                   { label: 'Documentation', onClick: () => { setCat('All'); setType('All'); navigate('/docs') } },
                   { label: active.category, onClick: () => { setCat(active.category); navigate('/docs') } },
@@ -275,7 +300,18 @@ function Guides({ slug, onEdit }: { slug?: string; onEdit: (d: DocArticle) => vo
               : [{ label: 'Documentation' }, { label: 'Guides' }]
           }
         />
-        {active ? <Article doc={active} onBack={() => navigate('/docs')} onEdit={() => onEdit(active)} /> : <Landing onOpen={(s) => navigate(`/docs/${s}`)} />}
+        {editing !== null ? (
+          <ArticleEditor
+            initial={editing === 'new' ? undefined : editing}
+            onSave={onSave}
+            onCancel={onCancel}
+            onDelete={onDelete}
+          />
+        ) : active ? (
+          <Article doc={active} onBack={() => navigate('/docs')} onEdit={() => onEdit(active)} />
+        ) : (
+          <Landing onOpen={(s) => navigate(`/docs/${s}`)} />
+        )}
       </div>
     </div>
   )
