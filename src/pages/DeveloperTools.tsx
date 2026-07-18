@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Terminal,
   KeyRound,
@@ -18,7 +19,8 @@ import {
 } from '@/components/ui'
 import { fmtCompact } from '@/data/mock'
 
-const tabs = ['REST', 'Webhooks', 'SDKs']
+const tabs = ['REST', 'Webhooks', 'SDKs'] as const
+type Tab = (typeof tabs)[number]
 
 const curlSample = `curl https://api.plcy.app/v1/evaluate \\
   -H "Authorization: Bearer plcy_live_…a1b2" \\
@@ -61,6 +63,7 @@ const sdks: Sdk[] = [
 ]
 
 export default function DeveloperTools() {
+  const [tab, setTab] = useState<Tab>('REST')
   return (
     <>
       <PageHeader
@@ -84,13 +87,15 @@ export default function DeveloperTools() {
 
       {/* Segmented tabs */}
       <div className="mt-6 inline-flex rounded-xl bg-slate-100 p-1">
-        {tabs.map((t, i) => (
+        {tabs.map((t) => (
           <button
             key={t}
+            onClick={() => setTab(t)}
+            aria-pressed={tab === t}
             className={
-              i === 0
+              tab === t
                 ? 'rounded-lg bg-white px-4 py-1.5 text-sm font-medium text-ink-900 shadow-sm'
-                : 'rounded-lg px-4 py-1.5 text-sm font-medium text-ink-500 hover:text-ink-700'
+                : 'rounded-lg px-4 py-1.5 text-sm font-medium text-ink-500 transition-colors hover:text-ink-700'
             }
           >
             {t}
@@ -98,67 +103,73 @@ export default function DeveloperTools() {
         ))}
       </div>
 
-      {/* Code sample */}
-      <Card className="mt-6 bg-slate-900" padded={false}>
-        <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Terminal className="h-4 w-4" />
-            <span className="font-mono text-xs">POST /v1/evaluate</span>
+      {/* REST — code sample */}
+      {tab === 'REST' && (
+        <Card className="mt-6 bg-slate-900" padded={false}>
+          <div className="flex items-center justify-between border-b border-slate-700/60 px-4 py-3">
+            <div className="flex items-center gap-2 text-slate-300">
+              <Terminal className="h-4 w-4" />
+              <span className="font-mono text-xs">POST /v1/evaluate</span>
+            </div>
+            <button className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white">
+              <Copy className="h-3.5 w-3.5" />
+              Copy
+            </button>
           </div>
-          <button className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white">
-            <Copy className="h-3.5 w-3.5" />
-            Copy
-          </button>
-        </div>
-        <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed text-slate-100">
-          {curlSample}
-        </pre>
-      </Card>
+          <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed text-slate-100">
+            {curlSample}
+          </pre>
+        </Card>
+      )}
 
       {/* Webhooks table */}
-      <Card className="mt-6">
-        <CardTitle title="Webhooks" subtitle="Configured event subscriptions and delivery health" />
-        <Table columns={['Event', 'Endpoint', 'Status', 'Last delivery', 'Success rate']}>
-          {webhooks.map((w) => (
-            <Tr key={w.endpoint}>
-              <Td>
-                <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-ink-700">
-                  {w.event}
-                </span>
-              </Td>
-              <Td className="font-mono text-xs text-ink-500">{w.endpoint}</Td>
-              <Td>
-                <StatusBadge status={w.status} />
-              </Td>
-              <Td className="text-ink-700">{w.lastDelivery}</Td>
-              <Td className="font-medium text-ink-900">{w.successRate}</Td>
-            </Tr>
-          ))}
-        </Table>
-      </Card>
+      {tab === 'Webhooks' && (
+        <Card className="mt-6">
+          <CardTitle title="Webhooks" subtitle="Configured event subscriptions and delivery health" />
+          <Table columns={['Event', 'Endpoint', 'Status', 'Last delivery', 'Success rate']}>
+            {webhooks.map((w) => (
+              <Tr key={w.endpoint}>
+                <Td>
+                  <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-ink-700">
+                    {w.event}
+                  </span>
+                </Td>
+                <Td className="font-mono text-xs text-ink-500">{w.endpoint}</Td>
+                <Td>
+                  <StatusBadge status={w.status} />
+                </Td>
+                <Td className="text-ink-700">{w.lastDelivery}</Td>
+                <Td className="font-medium text-ink-900">{w.successRate}</Td>
+              </Tr>
+            ))}
+          </Table>
+        </Card>
+      )}
 
       {/* SDK cards */}
-      <Card className="mt-6">
-        <CardTitle title="SDKs & Libraries" subtitle="Official client libraries for the PLCY API" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {sdks.map((s) => (
-            <div key={s.name} className="rounded-xl border border-slate-200 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                    <Code2 className="h-4 w-4" />
+      {tab === 'SDKs' && (
+        <Card className="mt-6">
+          <CardTitle title="SDKs & Libraries" subtitle="Official client libraries for the PLCY API" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {sdks.map((s) => (
+              <div key={s.name} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                      <Code2 className="h-4 w-4" />
+                    </div>
+                    <p className="font-semibold text-ink-900">{s.name}</p>
                   </div>
-                  <p className="font-semibold text-ink-900">{s.name}</p>
+                  <span className="text-xs text-ink-400">{s.version}</span>
                 </div>
-                <span className="text-xs text-ink-400">{s.version}</span>
+                <div className="mt-3 overflow-x-auto rounded-lg bg-slate-900 px-3 py-2">
+                  <code className="whitespace-nowrap font-mono text-xs text-slate-100">$ {s.install}</code>
+                </div>
               </div>
-              <div className="mt-3 overflow-x-auto rounded-lg bg-slate-900 px-3 py-2">
-                <code className="whitespace-nowrap font-mono text-xs text-slate-100">$ {s.install}</code>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
     </>
   )
 }
