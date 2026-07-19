@@ -47,8 +47,9 @@ import {
   scoreSecurity,
 } from '@/data/security'
 import type { SecurityPolicy, MfaMethod, AllowlistMode, PostureRag } from '@/data/security'
-import { loadOrgSettings, saveOrgSettings } from '@/data/orgSettings'
+import { loadOrgSettings, saveOrgSettings, defaultOrgSettings } from '@/data/orgSettings'
 import type { OrgSettings } from '@/data/orgSettings'
+import { applyBrandColor } from '@/lib/theme'
 import {
   roleDefs,
   assignedCount,
@@ -630,6 +631,12 @@ export default function Settings() {
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [logoErr, setLogoErr] = useState('')
 
+  // Set the accent color and preview it across the console immediately.
+  const setAccent = (hex: string) => {
+    setOrgField({ accentColor: hex })
+    applyBrandColor(hex)
+  }
+
   const onLogoFile = (file?: File | null) => {
     if (!file) return
     if (!/^image\/(png|svg\+xml|jpeg)$/.test(file.type)) {
@@ -783,24 +790,34 @@ export default function Settings() {
           {active === 'Branding' && (
             <Card>
               <CardTitle title="Branding" subtitle="Customize the console appearance" />
-              <p className="mb-3 text-sm font-medium text-ink-700">Accent color</p>
-              <div className="flex flex-wrap gap-3">
+              <p className="mb-1 text-sm font-medium text-ink-700">Accent color</p>
+              <p className="mb-3 text-xs text-ink-500">Recolors buttons, links, active navigation, and highlights across the console — live.</p>
+              <div className="flex flex-wrap items-center gap-3">
                 {swatches.map((s) => (
                   <button
                     key={s.hex}
-                    onClick={() => setOrgField({ accentColor: s.hex })}
+                    onClick={() => setAccent(s.hex)}
                     className="flex h-11 w-11 items-center justify-center rounded-xl ring-2 ring-offset-2 transition"
                     style={{
                       backgroundColor: s.hex,
-                      boxShadow: org.accentColor === s.hex ? `0 0 0 2px ${s.hex}` : 'none',
+                      boxShadow: org.accentColor.toLowerCase() === s.hex.toLowerCase() ? `0 0 0 2px ${s.hex}` : 'none',
                     }}
                     aria-label={s.name}
                   >
-                    {org.accentColor === s.hex && <Check className="h-5 w-5 text-white" />}
+                    {org.accentColor.toLowerCase() === s.hex.toLowerCase() && <Check className="h-5 w-5 text-white" />}
                   </button>
                 ))}
+                {/* Custom color */}
+                <label className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-ink-600 hover:border-slate-300">
+                  <span className="inline-block h-5 w-5 rounded-md ring-1 ring-inset ring-black/10" style={{ backgroundColor: org.accentColor }} />
+                  <span className="font-mono text-xs uppercase">{org.accentColor}</span>
+                  <input type="color" className="sr-only" value={org.accentColor} onChange={(e) => setAccent(e.target.value)} aria-label="Custom accent color" />
+                </label>
+                <button className="btn-ghost text-xs" onClick={() => setAccent(defaultOrgSettings.accentColor)} title="Reset to PLCY blue">
+                  <RotateCcw className="h-3.5 w-3.5" /> Reset
+                </button>
               </div>
-              <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div className="mt-6">
                 <div>
                   <p className="mb-2 text-sm font-medium text-ink-700">Logo</p>
                   <input
@@ -834,9 +851,6 @@ export default function Settings() {
                   {logoErr && <p className="mt-1.5 text-xs text-rose-600">{logoErr}</p>}
                   <p className="mt-2 text-xs text-ink-400">Shown in the sidebar. Click “Save changes” to apply it across the console.</p>
                 </div>
-                <Field label="Login page tagline">
-                  <input className="input" value={org.tagline} onChange={(e) => setOrgField({ tagline: e.target.value })} />
-                </Field>
               </div>
             </Card>
           )}

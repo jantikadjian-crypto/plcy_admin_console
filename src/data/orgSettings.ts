@@ -11,7 +11,6 @@ export interface OrgSettings {
   defaultRegion: string
   defaultPlan: string
   accentColor: string
-  tagline: string
   /** Uploaded logo as a data URL (PNG/SVG/JPEG); empty falls back to the default mark. */
   logo?: string
 }
@@ -22,7 +21,6 @@ export const defaultOrgSettings: OrgSettings = {
   defaultRegion: 'US-East',
   defaultPlan: 'Business',
   accentColor: '#1f47f5',
-  tagline: 'Govern every model. Enforce every policy.',
   logo: '',
 }
 
