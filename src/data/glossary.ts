@@ -11,6 +11,8 @@ export type GlossaryGroup =
   | 'Operations & Fleet'
 
 export interface GlossaryTerm {
+  /** Stable id (assigned by the glossary store; lets same-named acronyms coexist). */
+  id?: string
   /** The term or acronym as shown. */
   term: string
   /** Expansion for an acronym, e.g. "Bring Your Own Key". */
@@ -102,7 +104,8 @@ const raw: GlossaryTerm[] = [
   { term: 'SLA', full: 'Service Level Agreement', group: 'Operations & Fleet', def: 'A committed service target (e.g. uptime). Missing it can trigger service credits.', where: 'SLA & Maintenance; SLA report.', see: ['SLA credit'] },
   { term: 'SLA credit', group: 'Operations & Fleet', def: 'A billing credit owed to a customer when an SLA target is breached.', where: 'SLA & Maintenance; Dashboard.', see: ['SLA'] },
   { term: 'Drift', group: 'Operations & Fleet', def: 'When a cluster is not running what it should — an image behind the promoted tag, or infrastructure that differs from Terraform.', where: 'Fleet Posture; Cluster Health.', see: ['Terraform drift'] },
-  { term: 'Terraform drift', full: 'TF drift', group: 'Operations & Fleet', def: 'Infrastructure that no longer matches its Terraform definition, shown as a count of drifted resources.', where: 'Fleet Posture (TF · N res).', see: ['Drift'] },
+  { term: 'Terraform', group: 'Operations & Fleet', def: 'HashiCorp’s infrastructure-as-code (IaC) tool: cloud infrastructure is declared in configuration and applied reproducibly, rather than changed by hand. PLCY tracks when a cluster’s real infrastructure drifts from its Terraform definition.', where: 'Fleet Posture (drift); Provisioning.', see: ['Terraform drift', 'Drift'] },
+  { term: 'Terraform drift', full: 'TF drift', group: 'Operations & Fleet', def: 'Infrastructure that no longer matches its Terraform definition, shown as a count of drifted resources.', where: 'Fleet Posture (TF · N res).', see: ['Terraform', 'Drift'] },
   { term: 'PSA', full: 'Pod Security Admission', group: 'Operations & Fleet', def: 'The Kubernetes control that enforces pod-security standards per namespace (privileged / baseline / restricted), in enforce/audit/warn modes.', where: 'Fleet Posture; Cluster guardrails.', see: ['EKS'] },
   { term: 'Quota pressure', group: 'Operations & Fleet', def: 'How close a namespace is to its CPU / memory / pod limits. "Hot" means at or above 90% and at risk of hitting the ceiling.', where: 'Fleet Posture.' },
   { term: 'CVE', full: 'Common Vulnerabilities and Exposures', group: 'Operations & Fleet', def: 'A publicly catalogued security vulnerability, referenced by ID. Critical CVEs on a running image trigger a re-scan or quarantine.', where: 'Supply Chain; Dashboard.', see: ['SBOM'] },
@@ -117,7 +120,8 @@ const raw: GlossaryTerm[] = [
   { term: 'Policy pack', group: 'Operations & Fleet', def: 'A composable governance bundle: Controls (atomic checks) ⊂ Primitives (grouped controls) ⊂ Composite packs (deployable, market-ready — e.g. HIPAA, Financial Services).', where: 'Policy Packs; Policy-packs doc.', see: ['Enforcement mode'] },
   { term: 'Enforcement mode', group: 'Operations & Fleet', def: 'How a policy acts on a matching request: Monitor (log only), Warn (flag/annotate), or Block (stop before sensitive data leaves).', where: 'Enforcement Controls; Policy Editor.', see: ['Policy pack'] },
   { term: 'Observability', group: 'Operations & Fleet', def: 'Seeing what the system is doing from its telemetry (metrics, traces, logs). PLCY exports evidence and traces via OTel to CloudWatch, X-Ray, and Prometheus/Grafana.', where: 'Observability.', see: ['OTel'] },
-  { term: 'RAG', full: 'Red / Amber / Green', group: 'Operations & Fleet', def: 'The status language used throughout the console: green = healthy, amber/orange = warning, red = danger.', where: 'Everywhere (status badges).', see: ['Posture score'] },
+  { term: 'RAG', full: 'Red / Amber / Green', group: 'Operations & Fleet', def: 'The status language used throughout the console: green = healthy, amber/orange = warning, red = danger. (Not to be confused with Retrieval-Augmented Generation.)', where: 'Everywhere (status badges).', see: ['Posture score'] },
+  { term: 'RAG', full: 'Retrieval-Augmented Generation', group: 'Platform & Architecture', def: 'An AI technique where a model retrieves relevant documents or data and includes them in its prompt to ground the response in real sources. PLCY governs RAG pipelines like any other AI request — both the retrieved context and the prompt are subject to policy enforcement.', where: 'Governed like any AI request.', see: ['Data plane', 'Data classification'] },
   { term: 'Incident', group: 'Operations & Fleet', def: 'A logged AI-governance event with severity, status, owner, timeline, root cause, and remediation; rolled up in the Post-Mortem report with the obligations it triggers.', where: 'Incident Management; Incident report.', see: ['DSAR'] },
   { term: 'Licensing', group: 'Operations & Fleet', def: 'The entitlement and seat/usage limits granted to a customer’s deployment, tracked and enforced per tenant.', where: 'Licensing.' },
 ]
@@ -128,8 +132,6 @@ export const glossary: GlossaryTerm[] = [...raw].sort((a, b) => a.term.localeCom
 export function glossaryId(term: string): string {
   return term.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
-
-export const glossaryById = (id: string): GlossaryTerm | undefined => glossary.find((t) => glossaryId(t.term) === id)
 
 /** Full searchable text for a term — term, expansion, group, definition, and related. */
 export function glossarySearchText(t: GlossaryTerm): string {

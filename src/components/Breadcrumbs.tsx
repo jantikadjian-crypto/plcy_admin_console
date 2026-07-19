@@ -4,7 +4,7 @@ import { navGroups, flatNav, hubSubPages } from '@/config/navigation'
 import { useCustomers } from '@/context/Customers'
 import { useEmployees } from '@/context/Employees'
 import { useDocs } from '@/data/docsStore'
-import { glossaryById } from '@/data/glossary'
+import { termById } from '@/data/glossaryStore'
 
 /**
  * The single, system-wide breadcrumb trail. Rendered in the sticky top bar so
@@ -57,7 +57,7 @@ export function Breadcrumbs() {
     if (pathname.startsWith('/docs/glossary')) {
       crumbs.push({ label: 'Glossary', to: '/docs/glossary' })
       const term = params.get('term')
-      const t = term ? glossaryById(term) : undefined
+      const t = term ? termById(term) : undefined
       if (t) crumbs.push({ label: t.term })
     } else if (pathname.startsWith('/docs/')) {
       const slug = pathname.slice('/docs/'.length).split('/')[0]

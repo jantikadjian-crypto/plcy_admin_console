@@ -36,13 +36,13 @@ import {
 import type { DocArticle, DocCategory, DocType } from '@/data/docs'
 import { useDocs, upsertDoc, deleteDoc } from '@/data/docsStore'
 import {
-  glossary,
-  glossaryById,
   GLOSSARY_GROUPS,
-  glossaryId,
   glossarySearchText,
 } from '@/data/glossary'
-import type { GlossaryGroup, GlossaryTerm } from '@/data/glossary'
+import type { GlossaryGroup } from '@/data/glossary'
+import { useGlossary, upsertTerm, deleteTerm, termById } from '@/data/glossaryStore'
+import type { StoredTerm } from '@/data/glossaryStore'
+import { TermEditor } from '@/components/TermEditor'
 
 const CAT_ICON: Record<'book' | 'steps' | 'cpu' | 'sparkles' | 'shield', LucideIcon> = {
   book: Book,
@@ -414,15 +414,23 @@ function Article({ doc, onBack, onEdit }: { doc: DocArticle; onBack: () => void;
 type GroupFilter = GlossaryGroup | 'All'
 
 function GlossaryView() {
+  const terms = useGlossary()
+  const { logAction } = useSession()
   const [params] = useSearchParams()
   const deepLinked = params.get('term') ?? ''
-  const [q, setQ] = useState(deepLinked)
+  const [q, setQ] = useState('')
   const [group, setGroup] = useState<GroupFilter>('All')
+  const [editing, setEditing] = useState<StoredTerm | 'new' | null>(null)
 
-  // A ⌘K deep-link (?term=…) navigates here while this view may already be
+  const sorted = useMemo(
+    () => [...terms].sort((a, b) => a.term.localeCompare(b.term, 'en', { sensitivity: 'base' })),
+    [terms],
+  )
+
+  // A ⌘K deep-link (?term=<id>) navigates here while this view may already be
   // mounted, so sync the search box whenever the term param changes.
   useEffect(() => {
-    const t = deepLinked ? glossaryById(deepLinked) : undefined
+    const t = deepLinked ? termById(deepLinked) : undefined
     if (t) {
       setQ(t.term)
       setGroup('All')
@@ -431,12 +439,24 @@ function GlossaryView() {
 
   const query = q.trim().toLowerCase()
   const filtered = useMemo(() => {
-    return glossary.filter((t) => {
+    return sorted.filter((t) => {
       if (group !== 'All' && t.group !== group) return false
       if (query && !glossarySearchText(t).includes(query)) return false
       return true
     })
-  }, [group, query])
+  }, [sorted, group, query])
+
+  const handleSave = (term: StoredTerm, isNew: boolean) => {
+    upsertTerm(term)
+    logAction({ action: isNew ? 'Created glossary term' : 'Updated glossary term', target: term.term, category: 'documentation' })
+    setEditing(null)
+  }
+  const handleDelete = (id: string) => {
+    const t = editing !== 'new' && editing ? editing : undefined
+    deleteTerm(id)
+    if (t) logAction({ action: 'Deleted glossary term', target: t.term, category: 'documentation' })
+    setEditing(null)
+  }
 
   return (
     <div>
@@ -451,7 +471,10 @@ function GlossaryView() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <p className="shrink-0 text-xs text-ink-400">{filtered.length} of {glossary.length} terms</p>
+        <p className="shrink-0 text-xs text-ink-400">{filtered.length} of {sorted.length} terms</p>
+        <GatedButton cap="settings.modify" className="btn-primary shrink-0" onClick={() => setEditing('new')}>
+          <Plus className="h-4 w-4" /> Add term
+        </GatedButton>
       </div>
 
       <div className="mb-5 flex flex-wrap gap-1.5">
@@ -475,19 +498,28 @@ function GlossaryView() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((t) => (
-            <TermCard key={t.term} t={t} highlight={glossaryId(t.term) === deepLinked} onSee={(name) => setQ(name)} />
+            <TermCard key={t.id} t={t} highlight={t.id === deepLinked} onSee={(name) => setQ(name)} onEdit={() => setEditing(t)} />
           ))}
         </div>
       )}
+
+      <TermEditor
+        key={editing === 'new' ? 'new' : editing?.id ?? 'closed'}
+        open={editing !== null}
+        initial={editing === 'new' || editing === null ? undefined : editing}
+        onClose={() => setEditing(null)}
+        onSave={handleSave}
+        onDelete={handleDelete}
+      />
     </div>
   )
 }
 
-function TermCard({ t, highlight, onSee }: { t: GlossaryTerm; highlight: boolean; onSee: (term: string) => void }) {
+function TermCard({ t, highlight, onSee, onEdit }: { t: StoredTerm; highlight: boolean; onSee: (term: string) => void; onEdit: () => void }) {
   const tone = GLOSSARY_GROUPS.find((g) => g.key === t.group)?.tone ?? 'slate'
   return (
     <div
-      id={glossaryId(t.term)}
+      id={t.id}
       className={`flex flex-col rounded-xl border bg-white p-4 transition-shadow ${highlight ? 'border-brand-400 ring-2 ring-brand-200' : 'border-slate-200'}`}
     >
       <div className="mb-1.5 flex items-start justify-between gap-2">
@@ -495,7 +527,12 @@ function TermCard({ t, highlight, onSee }: { t: GlossaryTerm; highlight: boolean
           <h3 className="text-sm font-semibold text-ink-900">{t.term}</h3>
           {t.full && <p className="text-xs text-ink-400">{t.full}</p>}
         </div>
-        <Badge tone={tone}>{t.group.split(' ')[0]}</Badge>
+        <div className="flex shrink-0 items-center gap-1">
+          <Badge tone={tone}>{t.group.split(' ')[0]}</Badge>
+          <GatedButton cap="settings.modify" showLock={false} onClick={onEdit} title="Edit term" className="rounded-md p-1 text-ink-300 transition-colors hover:bg-slate-100 hover:text-brand-600">
+            <Pencil className="h-3.5 w-3.5" />
+          </GatedButton>
+        </div>
       </div>
       <p className="text-sm leading-relaxed text-ink-700">{t.def}</p>
       {t.where && (
