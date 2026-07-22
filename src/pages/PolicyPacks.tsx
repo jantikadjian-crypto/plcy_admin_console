@@ -255,11 +255,26 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
         Each control ID reads <span className="font-mono text-ink-700">FAMILY-NUMBER</span> — the prefix names its control family (e.g. <span className="font-mono text-ink-700">DR-01</span> = 1st control in <span className="font-medium text-ink-700">Data Residency &amp; Sovereignty</span>). Filter by family:
       </p>
       <div className="mb-4 flex flex-wrap gap-1.5">
-        {families.map((f) => (
-          <button key={f} onClick={() => setFamily(f)} className={clsx('rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset transition-colors', family === f ? 'bg-brand-50 text-brand-700 ring-brand-600/20' : 'bg-slate-100 text-ink-700 ring-slate-500/10 hover:bg-slate-200/70')} title={f === 'All' ? 'All families' : familyOf(f)}>
-            {f}{f !== 'All' && <span className="ml-1 text-ink-400">{controls.filter((c) => c.prefix === f).length}</span>}
-          </button>
-        ))}
+        {families.map((f) => {
+          const active = family === f
+          const count = controls.filter((c) => c.prefix === f).length
+          return (
+            <button
+              key={f}
+              onClick={() => setFamily(f)}
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-full py-1 pl-2.5 pr-2 text-xs font-medium ring-1 ring-inset transition-colors',
+                active ? 'bg-brand-50 text-brand-700 ring-brand-600/20' : 'bg-slate-100 text-ink-700 ring-slate-500/10 hover:bg-slate-200/70',
+              )}
+            >
+              <span className="font-mono font-semibold">{f}</span>
+              {f !== 'All' && <span className="font-normal">{familyOf(f)}</span>}
+              {f !== 'All' && (
+                <span className={clsx('rounded-full px-1.5 text-[11px] tabular-nums', active ? 'bg-brand-100 text-brand-700' : 'bg-slate-200 text-ink-500')}>{count}</span>
+              )}
+            </button>
+          )
+        })}
       </div>
       <Card>
         <CardTitle title="Controls" subtitle={`${family !== 'All' ? `${family} · ${familyOf(family)} — ` : ''}${filtered.length} of ${controls.length} atomic runtime controls · click for detection, decision & evidence`} />
