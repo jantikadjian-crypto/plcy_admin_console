@@ -6,6 +6,7 @@ import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { transfers as seed } from '@/data/privacy'
 import type { Transfer, TransferMechanism } from '@/data/privacy'
+import { mechanismFull } from '@/data/privacy'
 import { regionByCode } from '@/data/fleet'
 import { loadPolicies, evaluateResidency } from '@/data/residency'
 import type { Mechanism, ResidencyDecision, ResidencyResult } from '@/data/residency'
@@ -98,20 +99,25 @@ export default function Transfers() {
               <Td className="text-ink-700">{t.customer}</Td>
               <Td>
                 {t.from === t.to ? (
-                  <span className="flex items-center gap-2 font-mono text-xs text-ink-700">
-                    {t.from}
+                  <span className="flex items-center gap-2 text-xs text-ink-700">
+                    <span title={t.from}>{regionByCode(t.from)?.name ?? t.from}</span>
                     <Badge tone="green">in-region</Badge>
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1.5 font-mono text-xs text-ink-700">
-                    {t.from}
-                    <ArrowRight className="h-3.5 w-3.5 text-ink-400" />
-                    {t.to}
+                  <span className="flex items-center gap-1.5 text-xs text-ink-700">
+                    <span title={t.from}>{regionByCode(t.from)?.name ?? t.from}</span>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                    <span title={t.to}>{regionByCode(t.to)?.name ?? t.to}</span>
                   </span>
                 )}
               </Td>
               <Td className="text-ink-700">{t.dataCategory}</Td>
-              <Td><Badge tone={mechanismTone[t.mechanism]}>{t.mechanism}</Badge></Td>
+              <Td>
+                <span className="flex items-center gap-1.5">
+                  <Badge tone={mechanismTone[t.mechanism]}>{t.mechanism}</Badge>
+                  {mechanismFull(t.mechanism) && <span className="text-xs text-ink-500">{mechanismFull(t.mechanism)}</span>}
+                </span>
+              </Td>
               <Td>
                 <div className="flex items-center gap-1.5">
                   <Badge tone={decisionTone[v.decision]} dot>{v.decision}</Badge>

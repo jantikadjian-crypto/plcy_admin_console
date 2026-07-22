@@ -37,6 +37,22 @@ export const regions: Region[] = [
 
 export const regionByCode = (code: string) => regions.find((r) => r.code === code)
 
+/**
+ * Full names for the abbreviated privacy/compliance laws shown on region cards
+ * and detail. Returns undefined for already-spelled-out entries (e.g.
+ * "Cross-border transfer rules") so callers skip the redundant label.
+ */
+export const LAW_FULL: Record<string, string> = {
+  GDPR: 'General Data Protection Regulation',
+  HIPAA: 'Health Insurance Portability and Accountability Act',
+  'SOC 2': 'System & Organization Controls 2',
+  'CCPA / CPRA': 'California Consumer Privacy Act / Privacy Rights Act',
+  'EU AI Act': 'European Union Artificial Intelligence Act',
+  'BSI C5': 'BSI Cloud Computing Compliance Criteria Catalogue',
+  PDPA: 'Personal Data Protection Act',
+}
+export const lawFull = (law: string): string | undefined => LAW_FULL[law]
+
 /* ------------------------------------------------------------------ */
 /* Releases                                                            */
 /* ------------------------------------------------------------------ */

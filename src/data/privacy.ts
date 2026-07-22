@@ -10,6 +10,18 @@
 /* ------------------------------------------------------------------ */
 export type TransferMechanism = 'In-region only' | 'Adequacy decision' | 'SCCs' | 'Air-gapped (no egress)' | 'Blocked'
 export type TransferStatus = 'Approved' | 'Under review' | 'Blocked'
+
+/**
+ * Full names for the acronym transfer-safeguard mechanisms (shared by the
+ * Transfers register and the Residency policy editor). Only genuine acronyms
+ * are expanded — self-describing values (e.g. "Adequacy decision") return
+ * undefined so callers can skip the redundant label.
+ */
+export const MECHANISM_FULL: Record<string, string> = {
+  SCCs: 'Standard Contractual Clauses',
+  BCRs: 'Binding Corporate Rules',
+}
+export const mechanismFull = (m: string): string | undefined => MECHANISM_FULL[m]
 export type TIA = 'Complete' | 'Pending' | 'N/A'
 
 export interface Transfer {

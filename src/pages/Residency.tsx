@@ -14,6 +14,7 @@ import {
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td } from '@/components/ui'
 import { useSession } from '@/context/Session'
 import { regions, regionByCode } from '@/data/fleet'
+import { mechanismFull } from '@/data/privacy'
 import {
   evaluateResidency,
   loadPolicies,
@@ -249,7 +250,7 @@ export default function Residency() {
 
                   <PolicyRow label="Mechanisms">
                     {MECHANISMS.map((m) => (
-                      <Chip key={m} label={m} on={p.allowedMechanisms.includes(m)} editable={editing} onClick={() => toggleIn(r.code, 'allowedMechanisms', m)} />
+                      <Chip key={m} label={mechanismFull(m) ? `${m} — ${mechanismFull(m)}` : m} on={p.allowedMechanisms.includes(m)} editable={editing} onClick={() => toggleIn(r.code, 'allowedMechanisms', m)} />
                     ))}
                   </PolicyRow>
 
@@ -288,8 +289,8 @@ export default function Residency() {
               <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{e.time}</Td>
               <Td className="font-medium text-ink-900">{e.customer}</Td>
               <Td className="text-ink-700">{e.operation}</Td>
-              <Td className="font-mono text-xs text-ink-600">{e.source}</Td>
-              <Td className="font-mono text-xs text-ink-600">{e.target}</Td>
+              <Td className="text-xs text-ink-600"><span title={e.source}>{regionByCode(e.source)?.name ?? e.source}</span></Td>
+              <Td className="text-xs text-ink-600"><span title={e.target}>{regionByCode(e.target)?.name ?? e.target}</span></Td>
               <Td className="text-ink-600">{e.detail}</Td>
               <Td>
                 <Badge tone={decisionTone[e.decision]} dot>{e.decision}</Badge>

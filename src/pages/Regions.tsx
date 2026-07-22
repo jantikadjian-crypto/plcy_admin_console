@@ -19,7 +19,7 @@ import {
   Progress,
   Modal,
 } from '@/components/ui'
-import { regions, deployments, fleetTotals } from '@/data/fleet'
+import { regions, deployments, fleetTotals, lawFull } from '@/data/fleet'
 import type { Region, SovereigntyTier } from '@/data/fleet'
 
 const tooltipStyle = { borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px -2px rgba(15,23,42,0.1)', fontSize: 12 }
@@ -108,7 +108,7 @@ export default function Regions() {
 
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {r.laws.map((law) => (
-                  <Badge key={law} tone="slate">{law}</Badge>
+                  <Badge key={law} tone="slate"><span title={lawFull(law)}>{law}</span></Badge>
                 ))}
               </div>
 
@@ -156,7 +156,8 @@ export default function Regions() {
                 {sel.laws.map((law) => (
                   <li key={law} className="flex items-center gap-3 px-4 py-2.5">
                     <Scale className="h-4 w-4 shrink-0 text-ink-400" />
-                    <span className="text-sm text-ink-700">{law}</span>
+                    <span className="text-sm font-medium text-ink-800">{law}</span>
+                    {lawFull(law) && <span className="text-xs text-ink-500">{lawFull(law)}</span>}
                   </li>
                 ))}
               </ul>
