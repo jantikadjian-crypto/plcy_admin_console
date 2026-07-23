@@ -13,7 +13,7 @@
  * the UI can say so explicitly.
  */
 import { CONTROL_FAMILIES, familyOf } from './policy'
-import { deployments } from './fleet'
+import { deployments, regionByCode } from './fleet'
 import { models } from './mock'
 
 /* ------------------------------------------------------------------ */
@@ -21,6 +21,32 @@ import { models } from './mock'
 /* ------------------------------------------------------------------ */
 export const connectedDeployments = deployments.filter((d) => d.connectivity !== 'Air-gapped')
 export const airgappedCount = deployments.filter((d) => d.connectivity === 'Air-gapped').length
+
+/**
+ * Where a red-team campaign is aimed. `platform` = the whole connected SaaS
+ * fleet; `selection` = a chosen set of instances (clusters) by id. Air-gapped
+ * deployments can never be a target — they are validated separately.
+ */
+export interface TargetSpec {
+  kind: 'platform' | 'selection'
+  instanceIds: string[]
+}
+
+export const resolveTargets = (t?: TargetSpec) => {
+  if (!t || t.kind === 'platform') return connectedDeployments
+  const ids = new Set(t.instanceIds)
+  return connectedDeployments.filter((d) => ids.has(d.id))
+}
+
+export function describeTarget(t?: TargetSpec): string {
+  const ds = resolveTargets(t)
+  if (!t || t.kind === 'platform') return `PLCY SaaS platform · ${ds.length} connected instances`
+  if (ds.length === 0) return 'No targets selected'
+  if (ds.length === 1) return `${ds[0].customer} · ${regionByCode(ds[0].regionCode)?.name ?? ds[0].regionCode}`
+  const customers = new Set(ds.map((d) => d.customer)).size
+  const regions = new Set(ds.map((d) => d.regionCode)).size
+  return `${ds.length} instances · ${customers} customer${customers === 1 ? '' : 's'} · ${regions} region${regions === 1 ? '' : 's'}`
+}
 
 /** Distinct, non-blocked models PLCY routes to — the eval/red-team target list. */
 export const evalModels: string[] = Array.from(
@@ -223,6 +249,7 @@ export interface RedTeamCampaign {
   findings: Finding[]
   schedule?: Schedule
   nextRun?: string
+  target?: TargetSpec
 }
 
 export const SEVERITIES: Severity[] = ['Critical', 'High', 'Medium', 'Low']

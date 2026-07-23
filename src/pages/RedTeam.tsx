@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus, CalendarClock, BookOpen } from 'lucide-react'
+import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus, BookOpen, Server } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Table, Tr, Td, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -8,8 +8,10 @@ import { useEvals, upsertCampaign, setFindingStatus, updateFinding, retestFindin
 import {
   OWASP_LLM, owaspName, familyOf, bypassRate, connectedDeployments, attemptsFor, bypassResistanceTrend,
   MITRE_ATLAS, atlasName, atlasTactic, atlasForOwasp, campaignTemplates, templateById, SCHEDULES,
+  describeTarget, resolveTargets,
 } from '@/data/evals'
-import type { RedTeamCampaign, Finding, Severity, Schedule } from '@/data/evals'
+import type { RedTeamCampaign, Finding, Severity, Schedule, TargetSpec } from '@/data/evals'
+import { regionByCode } from '@/data/fleet'
 
 const NOW = '2026-07-23'
 type LogFn = (i: { action: string; target: string; category?: string }) => void
@@ -17,7 +19,6 @@ const sevTone: Record<Severity, 'red' | 'orange' | 'yellow' | 'slate'> = { Criti
 const statusTone = (s: RedTeamCampaign['status']) => (s === 'Running' ? 'blue' : s === 'Triaging' ? 'orange' : 'green')
 const findingTone = (s: Finding['status']) => (s === 'open' ? 'red' : s === 'mitigated' ? 'green' : 'slate')
 const scheduleTone = (s?: Schedule) => (s === 'Continuous' ? 'blue' : s === 'One-off' || !s ? 'slate' : 'purple')
-const SCOPES = ['PLCY SaaS platform', ...connectedDeployments.map((d) => `${d.customer} (${d.regionCode})`)]
 const ageDays = (from?: string) => (from ? Math.max(0, Math.round((Date.parse(NOW) - Date.parse(from)) / 86400000)) : null)
 
 export function RedTeam() {
@@ -323,6 +324,12 @@ function CampaignModal({ campaign, onClose, logAction }: { campaign: RedTeamCamp
       footer={<button className="btn-secondary" onClick={onClose}>Close</button>}
     >
       <div className="space-y-5">
+        {campaign.target?.kind === 'selection' && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs text-ink-600">
+            <span className="font-semibold text-ink-800">Targets ({resolveTargets(campaign.target).length}):</span>{' '}
+            {resolveTargets(campaign.target).map((d) => `${d.customer} (${regionByCode(d.regionCode)?.name ?? d.regionCode})`).join(', ')}
+          </div>
+        )}
         <AttemptsTable campaignId={campaign.id} />
         <section className="space-y-3">
           <h4 className="text-sm font-semibold text-ink-900">Findings ({campaign.findings.length})</h4>
@@ -334,21 +341,101 @@ function CampaignModal({ campaign, onClose, logAction }: { campaign: RedTeamCamp
   )
 }
 
+function TargetPicker({ value, onChange }: { value: TargetSpec; onChange: (t: TargetSpec) => void }) {
+  const [region, setRegion] = useState('all')
+  const [customer, setCustomer] = useState('all')
+  const [tier, setTier] = useState('all')
+  const insts = connectedDeployments
+  const regionCodes = Array.from(new Set(insts.map((d) => d.regionCode)))
+  const customers = Array.from(new Set(insts.map((d) => d.customer)))
+  const tiers = Array.from(new Set(insts.map((d) => d.sovereignty)))
+  const filtered = insts.filter((d) =>
+    (region === 'all' || d.regionCode === region) &&
+    (customer === 'all' || d.customer === customer) &&
+    (tier === 'all' || d.sovereignty === tier),
+  )
+  const sel = new Set(value.instanceIds)
+  const toggle = (id: string) => {
+    const next = new Set(sel)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    onChange({ kind: 'selection', instanceIds: [...next] })
+  }
+  const selectAll = () => onChange({ kind: 'selection', instanceIds: [...new Set([...value.instanceIds, ...filtered.map((d) => d.id)])] })
+  const clear = () => onChange({ kind: 'selection', instanceIds: [] })
+  const selectStyle = 'rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-ink-700'
+
+  return (
+    <div>
+      <div className="mb-2 flex gap-1 rounded-lg bg-slate-100 p-0.5 text-xs font-medium">
+        {(['platform', 'selection'] as const).map((k) => (
+          <button key={k} type="button" onClick={() => onChange({ kind: k, instanceIds: value.instanceIds })}
+            className={clsx('flex-1 rounded-md px-2.5 py-1.5 transition-colors', value.kind === k ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500')}>
+            {k === 'platform' ? `Entire SaaS platform (${insts.length})` : 'Select clusters / customers'}
+          </button>
+        ))}
+      </div>
+
+      {value.kind === 'platform' ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-ink-600">
+          Targets <span className="font-semibold text-ink-800">all {insts.length} connected instances</span> across {new Set(insts.map((d) => d.regionCode)).size} regions and {new Set(insts.map((d) => d.customer)).size} customers. Air-gapped deployments are excluded (validated separately).
+        </div>
+      ) : (
+        <div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <select className={selectStyle} value={region} onChange={(e) => setRegion(e.target.value)}>
+              <option value="all">All regions</option>
+              {regionCodes.map((r) => <option key={r} value={r}>{regionByCode(r)?.name ?? r}</option>)}
+            </select>
+            <select className={selectStyle} value={customer} onChange={(e) => setCustomer(e.target.value)}>
+              <option value="all">All customers</option>
+              {customers.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select className={selectStyle} value={tier} onChange={(e) => setTier(e.target.value)}>
+              <option value="all">All tiers</option>
+              {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button type="button" onClick={selectAll} className="rounded-lg bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-600/20">Select all ({filtered.length})</button>
+            <button type="button" onClick={clear} className="rounded-lg px-2 py-1 text-xs font-medium text-ink-500 hover:text-ink-700">Clear</button>
+          </div>
+          <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200">
+            {filtered.length === 0 && <p className="p-4 text-center text-xs text-ink-400">No instances match these filters.</p>}
+            {filtered.map((d) => (
+              <label key={d.id} className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-3 py-2 last:border-0 hover:bg-slate-50">
+                <input type="checkbox" checked={sel.has(d.id)} onChange={() => toggle(d.id)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+                <Server className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                <span className="min-w-0 flex-1">
+                  <span className="text-xs font-medium text-ink-900">{d.customer}</span>
+                  <span className="ml-2 text-[11px] text-ink-500">{regionByCode(d.regionCode)?.name ?? d.regionCode}</span>
+                </span>
+                <Badge tone={d.sovereignty === 'Sovereign Cloud' ? 'purple' : 'slate'}>{d.sovereignty}</Badge>
+                <span className="shrink-0 text-[10px] text-ink-400">{d.nodes} nodes · {d.version}</span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs font-medium text-ink-600">Targeting: <span className="text-ink-900">{describeTarget(value)}</span></p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function NewCampaignModal({ templateId, onClose, logAction }: { templateId?: string; onClose: () => void; logAction: LogFn }) {
   const tpl = templateId ? templateById(templateId) : undefined
   const [name, setName] = useState(tpl ? tpl.name : '')
-  const [scope, setScope] = useState(SCOPES[0])
+  const [target, setTarget] = useState<TargetSpec>({ kind: 'platform', instanceIds: [] })
   const [tax, setTax] = useState<string[]>(tpl ? tpl.taxonomy : ['LLM01'])
   const [schedule, setSchedule] = useState<Schedule>(tpl ? tpl.suggestedSchedule : 'One-off')
   const toggle = (id: string) => setTax((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  const valid = name.trim().length > 2 && tax.length > 0
+  const targetCount = resolveTargets(target).length
+  const valid = name.trim().length > 2 && tax.length > 0 && targetCount > 0
 
   const launch = () => {
-    const attempts = 300 + tax.length * 240 + (tpl ? tpl.techniqueIds.length * 60 : 0)
+    const scope = describeTarget(target)
+    const attempts = (300 + tax.length * 240 + (tpl ? tpl.techniqueIds.length * 60 : 0)) * Math.max(1, target.kind === 'platform' ? 1 : targetCount)
     const bypasses = Math.max(1, Math.round(attempts * 0.02))
     const nextRun = schedule === 'Nightly' ? '2026-07-24' : schedule === 'Weekly' ? '2026-07-30' : undefined
     const c: RedTeamCampaign = {
-      id: newId('rt'), name: name.trim(), taxonomy: tax, scope, attempts, bypasses,
+      id: newId('rt'), name: name.trim(), taxonomy: tax, scope, target, attempts, bypasses,
       status: 'Running', owner: 'Trust & Safety', startedAt: new Date().toISOString().slice(0, 10), findings: [],
       schedule, ...(nextRun ? { nextRun } : {}),
     }
@@ -362,11 +449,11 @@ function NewCampaignModal({ templateId, onClose, logAction }: { templateId?: str
       open onClose={onClose}
       title={tpl ? `Launch playbook: ${tpl.name}` : 'Launch red-team campaign'}
       subtitle="Runs against the connected fleet only — air-gapped is validated separately."
-      maxWidth="max-w-lg"
+      maxWidth="max-w-2xl"
       footer={
         <div className="flex w-full items-center justify-end gap-2">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary disabled:opacity-50" disabled={!valid} onClick={launch}>Launch</button>
+          <button className="btn-primary disabled:opacity-50" disabled={!valid} onClick={launch}>Launch{targetCount > 0 ? ` · ${targetCount} target${targetCount === 1 ? '' : 's'}` : ''}</button>
         </div>
       }
     >
@@ -380,20 +467,16 @@ function NewCampaignModal({ templateId, onClose, logAction }: { templateId?: str
           <span className="mb-1 block text-xs font-medium text-ink-600">Campaign name</span>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Q3 Injection Sweep" />
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-600">Target scope</span>
-            <select className="input" value={scope} onChange={(e) => setScope(e.target.value)}>
-              {SCOPES.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-ink-600">Schedule</span>
-            <select className="input" value={schedule} onChange={(e) => setSchedule(e.target.value as Schedule)}>
-              {SCHEDULES.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </label>
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-ink-600">Where to red-team</span>
+          <TargetPicker value={target} onChange={setTarget} />
         </div>
+        <label className="block sm:max-w-[12rem]">
+          <span className="mb-1 block text-xs font-medium text-ink-600">Schedule</span>
+          <select className="input" value={schedule} onChange={(e) => setSchedule(e.target.value as Schedule)}>
+            {SCHEDULES.map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </label>
         <div>
           <span className="mb-1.5 block text-xs font-medium text-ink-600">Attack taxonomy (OWASP LLM Top-10)</span>
           <div className="flex flex-wrap gap-1.5">
