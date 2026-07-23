@@ -35,6 +35,7 @@ import {
   ClustersHub,
   ModelsHub,
   PolicyHub,
+  EvaluationsHub,
   ResidencyHub,
   SecurityHub,
   SupplyChainHub,
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="/clusters/:id" element={<ClusterDetail />} />
         <Route path="/models" element={<ModelsHub />} />
         <Route path="/policy" element={<PolicyHub />} />
+        <Route path="/evaluations" element={<EvaluationsHub />} />
         <Route path="/residency" element={<ResidencyHub />} />
         <Route path="/admin-security" element={<SecurityHub />} />
         <Route path="/supply-chain" element={<SupplyChainHub />} />

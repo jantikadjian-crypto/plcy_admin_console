@@ -24,6 +24,7 @@ import {
   Receipt,
   BadgeDollarSign,
   BookOpen,
+  FlaskConical,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -71,6 +72,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Models', to: '/models', icon: Bot },
       { label: 'Policy', to: '/policy', icon: Package },
+      { label: 'Evaluations', to: '/evaluations', icon: FlaskConical },
       { label: 'Residency', to: '/residency', icon: Globe },
     ],
   },
@@ -120,6 +122,9 @@ export const hubSubPages: { label: string; to: string }[] = [
   { label: 'Policy Packs', to: '/policy?tab=packs' },
   { label: 'Policy Editor', to: '/policy?tab=editor' },
   { label: 'Enforcement Controls', to: '/policy?tab=enforcement' },
+  { label: 'Guardrail Efficacy', to: '/evaluations?tab=efficacy' },
+  { label: 'Red-Team', to: '/evaluations?tab=redteam' },
+  { label: 'Eval Suites', to: '/evaluations?tab=suites' },
   { label: 'Regions', to: '/residency?tab=regions' },
   { label: 'Residency Controls', to: '/residency?tab=controls' },
   { label: 'Data Transfers', to: '/residency?tab=transfers' },

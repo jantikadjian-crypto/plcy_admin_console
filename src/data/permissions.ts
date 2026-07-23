@@ -28,6 +28,8 @@ export type Capability =
   | 'policy.manage'
   | 'model.register'
   | 'incident.manage'
+  | 'evals.view'
+  | 'evals.run'
   | 'settings.modify'
 
 /** Each console action gate resolves to a real production feature. */
@@ -43,6 +45,8 @@ export const CAP_TO_FEATURE: Record<Capability, EAccessFeature> = {
   'policy.manage': EAccessFeature.InstanceManagePackage,
   'model.register': EAccessFeature.PackageList,
   'incident.manage': EAccessFeature.ClusterMonitor,
+  'evals.view': EAccessFeature.ClusterMonitor, // read the efficacy/eval surfaces
+  'evals.run': EAccessFeature.InstanceManagePackage, // launch campaigns / run evals (governance mutation)
   'settings.modify': EAccessFeature.UserManageRoles,
 }
 

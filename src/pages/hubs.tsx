@@ -5,6 +5,7 @@ import {
   Package, Code2, SlidersHorizontal,
   Globe, ShieldCheck, ArrowLeftRight, Network, Inbox,
   Lock, Fingerprint, ScrollText, PackageCheck,
+  Target, Swords, FlaskConical,
 } from 'lucide-react'
 import { Hub } from '@/components/Hub'
 import Billing from './Billing'
@@ -33,6 +34,9 @@ import PrivilegedAccess from './PrivilegedAccess'
 import AuditLog from './AuditLog'
 import SupplyChain from './SupplyChain'
 import Registry from './Registry'
+import { Efficacy } from './Efficacy'
+import { RedTeam } from './RedTeam'
+import { EvalSuites } from './EvalSuites'
 
 export function BillingHub() {
   return (
@@ -95,6 +99,19 @@ export function PolicyHub() {
         { key: 'packs', label: 'Policy Packs', icon: Package, element: <PolicyPacks /> },
         { key: 'editor', label: 'Policy Editor', icon: Code2, element: <PolicyEditor /> },
         { key: 'enforcement', label: 'Enforcement', icon: SlidersHorizontal, element: <Enforcement /> },
+      ]}
+    />
+  )
+}
+
+export function EvaluationsHub() {
+  return (
+    <Hub
+      defaultKey="efficacy"
+      tabs={[
+        { key: 'efficacy', label: 'Efficacy', icon: Target, element: <Efficacy /> },
+        { key: 'redteam', label: 'Red-Team', icon: Swords, element: <RedTeam /> },
+        { key: 'suites', label: 'Eval Suites', icon: FlaskConical, element: <EvalSuites /> },
       ]}
     />
   )
