@@ -1,19 +1,22 @@
 import { useState } from 'react'
-import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus } from 'lucide-react'
+import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus, CalendarClock, BookOpen } from 'lucide-react'
+import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Table, Tr, Td, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useEvals, upsertCampaign, setFindingStatus, updateFinding, retestFinding, newId } from '@/data/evalsStore'
 import {
   OWASP_LLM, owaspName, familyOf, bypassRate, connectedDeployments, attemptsFor, bypassResistanceTrend,
+  MITRE_ATLAS, atlasName, atlasTactic, atlasForOwasp, campaignTemplates, templateById, SCHEDULES,
 } from '@/data/evals'
-import type { RedTeamCampaign, Finding, Severity } from '@/data/evals'
+import type { RedTeamCampaign, Finding, Severity, Schedule } from '@/data/evals'
 
 const NOW = '2026-07-23'
 type LogFn = (i: { action: string; target: string; category?: string }) => void
 const sevTone: Record<Severity, 'red' | 'orange' | 'yellow' | 'slate'> = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'slate' }
 const statusTone = (s: RedTeamCampaign['status']) => (s === 'Running' ? 'blue' : s === 'Triaging' ? 'orange' : 'green')
 const findingTone = (s: Finding['status']) => (s === 'open' ? 'red' : s === 'mitigated' ? 'green' : 'slate')
+const scheduleTone = (s?: Schedule) => (s === 'Continuous' ? 'blue' : s === 'One-off' || !s ? 'slate' : 'purple')
 const SCOPES = ['PLCY SaaS platform', ...connectedDeployments.map((d) => `${d.customer} (${d.regionCode})`)]
 const ageDays = (from?: string) => (from ? Math.max(0, Math.round((Date.parse(NOW) - Date.parse(from)) / 86400000)) : null)
 
@@ -21,13 +24,15 @@ export function RedTeam() {
   const { campaigns } = useEvals()
   const { logAction } = useSession()
   const [sel, setSel] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
+  const [creating, setCreating] = useState<false | { templateId?: string }>(false)
+  const [coverageFw, setCoverageFw] = useState<'owasp' | 'atlas'>('owasp')
 
   const openFindings = campaigns.flatMap((c) => c.findings).filter((f) => f.status === 'open')
   const critHigh = openFindings.filter((f) => f.severity === 'Critical' || f.severity === 'High').length
   const totalAttempts = campaigns.reduce((a, c) => a + c.attempts, 0)
   const totalBypasses = campaigns.reduce((a, c) => a + c.bypasses, 0)
   const covered = new Set(campaigns.flatMap((c) => c.taxonomy))
+  const atlasCovered = new Set(atlasForOwasp([...covered]))
 
   const selected = campaigns.find((c) => c.id === sel)
 
@@ -37,7 +42,7 @@ export function RedTeam() {
         title="Red-Team"
         description="Adversarial campaigns against PLCY's own SaaS platform and connected instances. Air-gapped deployments are tested via the separate offline process."
         actions={
-          <GatedButton cap="evals.run" className="btn-primary" onClick={() => setCreating(true)}>
+          <GatedButton cap="evals.run" className="btn-primary" onClick={() => setCreating({})}>
             <Plus className="h-4 w-4" /> New campaign
           </GatedButton>
         }
@@ -53,8 +58,35 @@ export function RedTeam() {
       <ResistanceTrend />
 
       <Card className="mb-6">
+        <div className="mb-3 flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-ink-400" />
+          <div>
+            <h3 className="text-sm font-semibold text-ink-900">Playbooks</h3>
+            <p className="text-xs text-ink-500">Standardised campaigns — one click to launch from the attack library</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {campaignTemplates.map((t) => (
+            <div key={t.id} className="flex flex-col justify-between rounded-xl border border-slate-200 p-3">
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-ink-900">{t.name}</span>
+                  <Badge tone={scheduleTone(t.suggestedSchedule)}>{t.suggestedSchedule}</Badge>
+                </div>
+                <p className="mt-1 text-xs text-ink-500">{t.description}</p>
+                <p className="mt-1.5 text-[11px] text-ink-400">{t.techniqueIds.length} techniques · {t.taxonomy.join(', ')}</p>
+              </div>
+              <GatedButton cap="evals.run" showLock={false} className="btn-secondary mt-2.5 w-full px-2.5 py-1 text-xs" onClick={() => setCreating({ templateId: t.id })}>
+                Launch
+              </GatedButton>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="mb-6">
         <CardTitle title="Campaigns" subtitle="Click a campaign for its findings and attempt-level transcripts" />
-        <Table columns={['Campaign', 'Scope', 'Taxonomy', 'Attempts', 'Bypasses', 'Status', 'Owner']}>
+        <Table columns={['Campaign', 'Scope', 'Taxonomy', 'Attempts', 'Bypasses', 'Status', 'Schedule', 'Owner']}>
           {campaigns.map((c) => (
             <Tr key={c.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(c.id)}>
               <Td>
@@ -70,6 +102,14 @@ export function RedTeam() {
               <Td className="tabular-nums text-ink-600">{c.attempts.toLocaleString()}</Td>
               <Td><Badge tone={c.bypasses > 20 ? 'red' : c.bypasses > 0 ? 'orange' : 'green'}>{c.bypasses} · {(bypassRate(c) * 100).toFixed(1)}%</Badge></Td>
               <Td><Badge tone={statusTone(c.status)} dot>{c.status}</Badge></Td>
+              <Td>
+                {c.schedule ? (
+                  <span className="flex items-center gap-1.5">
+                    <Badge tone={scheduleTone(c.schedule)}>{c.schedule}</Badge>
+                    {c.nextRun && <span className="whitespace-nowrap text-[11px] text-ink-400">next {c.nextRun}</span>}
+                  </span>
+                ) : <span className="text-xs text-ink-400">—</span>}
+              </Td>
               <Td className="text-xs text-ink-500">{c.owner}</Td>
             </Tr>
           ))}
@@ -77,26 +117,45 @@ export function RedTeam() {
       </Card>
 
       <Card>
-        <CardTitle title="OWASP LLM Top-10 coverage" subtitle="Which attack classes we've exercised across all campaigns" />
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-900">Framework coverage</h3>
+            <p className="text-xs text-ink-500">Which attack classes we've exercised across all campaigns</p>
+          </div>
+          <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5 text-xs font-medium">
+            {(['owasp', 'atlas'] as const).map((f) => (
+              <button key={f} onClick={() => setCoverageFw(f)} className={clsx('rounded-md px-2.5 py-1 transition-colors', coverageFw === f ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500')}>
+                {f === 'owasp' ? 'OWASP LLM' : 'MITRE ATLAS'}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {OWASP_LLM.map((o) => {
-            const on = covered.has(o.id)
-            const bypasses = campaigns.filter((c) => c.taxonomy.includes(o.id)).reduce((a, c) => a + c.bypasses, 0)
-            return (
-              <div key={o.id} className={`flex items-center justify-between gap-3 rounded-xl border p-2.5 text-sm ${on ? 'border-slate-200 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'}`}>
-                <span className="min-w-0">
-                  <span className="font-mono text-xs font-semibold text-ink-700">{o.id}</span>
-                  <span className={`ml-2 ${on ? 'text-ink-800' : 'text-ink-400'}`}>{o.name}</span>
-                </span>
-                {on ? <Badge tone={bypasses ? 'orange' : 'green'}>{bypasses ? `${bypasses} bypass${bypasses === 1 ? '' : 'es'}` : 'held'}</Badge> : <span className="text-xs text-ink-400">not exercised</span>}
-              </div>
-            )
-          })}
+          {coverageFw === 'owasp'
+            ? OWASP_LLM.map((o) => {
+              const on = covered.has(o.id)
+              const bypasses = campaigns.filter((c) => c.taxonomy.includes(o.id)).reduce((a, c) => a + c.bypasses, 0)
+              return (
+                <div key={o.id} className={`flex items-center justify-between gap-3 rounded-xl border p-2.5 text-sm ${on ? 'border-slate-200 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'}`}>
+                  <span className="min-w-0"><span className="font-mono text-xs font-semibold text-ink-700">{o.id}</span><span className={`ml-2 ${on ? 'text-ink-800' : 'text-ink-400'}`}>{o.name}</span></span>
+                  {on ? <Badge tone={bypasses ? 'orange' : 'green'}>{bypasses ? `${bypasses} bypass${bypasses === 1 ? '' : 'es'}` : 'held'}</Badge> : <span className="text-xs text-ink-400">not exercised</span>}
+                </div>
+              )
+            })
+            : MITRE_ATLAS.map((a) => {
+              const on = atlasCovered.has(a.id)
+              return (
+                <div key={a.id} className={`flex items-center justify-between gap-3 rounded-xl border p-2.5 text-sm ${on ? 'border-slate-200 bg-white' : 'border-dashed border-slate-200 bg-slate-50/60'}`}>
+                  <span className="min-w-0"><span className="font-mono text-xs font-semibold text-ink-700">{a.id}</span><span className={`ml-2 ${on ? 'text-ink-800' : 'text-ink-400'}`}>{a.name}</span><span className="ml-1 text-[11px] text-ink-400">· {a.tactic}</span></span>
+                  {on ? <Badge tone="green">exercised</Badge> : <span className="text-xs text-ink-400">not exercised</span>}
+                </div>
+              )
+            })}
         </div>
       </Card>
 
       {selected && <CampaignModal campaign={selected} onClose={() => setSel(null)} logAction={logAction} />}
-      {creating && <NewCampaignModal onClose={() => setCreating(false)} logAction={logAction} />}
+      {creating !== false && <NewCampaignModal templateId={creating.templateId} onClose={() => setCreating(false)} logAction={logAction} />}
     </div>
   )
 }
@@ -275,29 +334,33 @@ function CampaignModal({ campaign, onClose, logAction }: { campaign: RedTeamCamp
   )
 }
 
-function NewCampaignModal({ onClose, logAction }: { onClose: () => void; logAction: (i: { action: string; target: string; category?: string }) => void }) {
-  const [name, setName] = useState('')
+function NewCampaignModal({ templateId, onClose, logAction }: { templateId?: string; onClose: () => void; logAction: LogFn }) {
+  const tpl = templateId ? templateById(templateId) : undefined
+  const [name, setName] = useState(tpl ? tpl.name : '')
   const [scope, setScope] = useState(SCOPES[0])
-  const [tax, setTax] = useState<string[]>(['LLM01'])
+  const [tax, setTax] = useState<string[]>(tpl ? tpl.taxonomy : ['LLM01'])
+  const [schedule, setSchedule] = useState<Schedule>(tpl ? tpl.suggestedSchedule : 'One-off')
   const toggle = (id: string) => setTax((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   const valid = name.trim().length > 2 && tax.length > 0
 
   const launch = () => {
-    const attempts = 300 + tax.length * 240
+    const attempts = 300 + tax.length * 240 + (tpl ? tpl.techniqueIds.length * 60 : 0)
     const bypasses = Math.max(1, Math.round(attempts * 0.02))
+    const nextRun = schedule === 'Nightly' ? '2026-07-24' : schedule === 'Weekly' ? '2026-07-30' : undefined
     const c: RedTeamCampaign = {
       id: newId('rt'), name: name.trim(), taxonomy: tax, scope, attempts, bypasses,
       status: 'Running', owner: 'Trust & Safety', startedAt: new Date().toISOString().slice(0, 10), findings: [],
+      schedule, ...(nextRun ? { nextRun } : {}),
     }
     upsertCampaign(c)
-    logAction({ action: 'evals.redteam.launch', target: `${c.name} · ${scope}`, category: 'governance' })
+    logAction({ action: 'evals.redteam.launch', target: `${c.name} · ${scope} · ${schedule}`, category: 'governance' })
     onClose()
   }
 
   return (
     <Modal
       open onClose={onClose}
-      title="Launch red-team campaign"
+      title={tpl ? `Launch playbook: ${tpl.name}` : 'Launch red-team campaign'}
       subtitle="Runs against the connected fleet only — air-gapped is validated separately."
       maxWidth="max-w-lg"
       footer={
@@ -308,16 +371,29 @@ function NewCampaignModal({ onClose, logAction }: { onClose: () => void; logActi
       }
     >
       <div className="space-y-4">
+        {tpl && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900">
+            From playbook <span className="font-semibold">{tpl.name}</span> — {tpl.techniqueIds.length} techniques from the attack library.
+          </div>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-ink-600">Campaign name</span>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Q3 Injection Sweep" />
         </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-ink-600">Target scope</span>
-          <select className="input" value={scope} onChange={(e) => setScope(e.target.value)}>
-            {SCOPES.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-ink-600">Target scope</span>
+            <select className="input" value={scope} onChange={(e) => setScope(e.target.value)}>
+              {SCOPES.map((s) => <option key={s}>{s}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-ink-600">Schedule</span>
+            <select className="input" value={schedule} onChange={(e) => setSchedule(e.target.value as Schedule)}>
+              {SCHEDULES.map((s) => <option key={s}>{s}</option>)}
+            </select>
+          </label>
+        </div>
         <div>
           <span className="mb-1.5 block text-xs font-medium text-ink-600">Attack taxonomy (OWASP LLM Top-10)</span>
           <div className="flex flex-wrap gap-1.5">

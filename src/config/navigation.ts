@@ -124,6 +124,7 @@ export const hubSubPages: { label: string; to: string }[] = [
   { label: 'Enforcement Controls', to: '/policy?tab=enforcement' },
   { label: 'Guardrail Efficacy', to: '/evaluations?tab=efficacy' },
   { label: 'Red-Team', to: '/evaluations?tab=redteam' },
+  { label: 'Attack Library', to: '/evaluations?tab=library' },
   { label: 'Eval Suites', to: '/evaluations?tab=suites' },
   { label: 'Regions', to: '/residency?tab=regions' },
   { label: 'Residency Controls', to: '/residency?tab=controls' },
