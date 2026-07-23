@@ -1,17 +1,21 @@
-import { useMemo, useState } from 'react'
-import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink } from 'lucide-react'
+import { useState } from 'react'
+import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus } from 'lucide-react'
 import { PageHeader, StatCard, Card, CardTitle, Table, Tr, Td, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
-import { useEvals, upsertCampaign, setFindingStatus, updateFinding, newId } from '@/data/evalsStore'
+import { useEvals, upsertCampaign, setFindingStatus, updateFinding, retestFinding, newId } from '@/data/evalsStore'
 import {
-  OWASP_LLM, owaspName, familyOf, bypassRate, connectedDeployments,
+  OWASP_LLM, owaspName, familyOf, bypassRate, connectedDeployments, attemptsFor, bypassResistanceTrend,
 } from '@/data/evals'
 import type { RedTeamCampaign, Finding, Severity } from '@/data/evals'
 
+const NOW = '2026-07-23'
+type LogFn = (i: { action: string; target: string; category?: string }) => void
 const sevTone: Record<Severity, 'red' | 'orange' | 'yellow' | 'slate'> = { Critical: 'red', High: 'orange', Medium: 'yellow', Low: 'slate' }
 const statusTone = (s: RedTeamCampaign['status']) => (s === 'Running' ? 'blue' : s === 'Triaging' ? 'orange' : 'green')
+const findingTone = (s: Finding['status']) => (s === 'open' ? 'red' : s === 'mitigated' ? 'green' : 'slate')
 const SCOPES = ['PLCY SaaS platform', ...connectedDeployments.map((d) => `${d.customer} (${d.regionCode})`)]
+const ageDays = (from?: string) => (from ? Math.max(0, Math.round((Date.parse(NOW) - Date.parse(from)) / 86400000)) : null)
 
 export function RedTeam() {
   const { campaigns } = useEvals()
@@ -46,8 +50,10 @@ export function RedTeam() {
         <StatCard label="OWASP coverage" value={`${covered.size}/10`} icon={Grid3x3} tone="purple" footer="LLM Top-10 categories exercised" />
       </div>
 
+      <ResistanceTrend />
+
       <Card className="mb-6">
-        <CardTitle title="Campaigns" subtitle="Click a campaign for its findings" />
+        <CardTitle title="Campaigns" subtitle="Click a campaign for its findings and attempt-level transcripts" />
         <Table columns={['Campaign', 'Scope', 'Taxonomy', 'Attempts', 'Bypasses', 'Status', 'Owner']}>
           {campaigns.map((c) => (
             <Tr key={c.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(c.id)}>
@@ -95,18 +101,159 @@ export function RedTeam() {
   )
 }
 
-function CampaignModal({ campaign, onClose, logAction }: { campaign: RedTeamCampaign; onClose: () => void; logAction: (i: { action: string; target: string; category?: string }) => void }) {
+function ResistanceTrend() {
+  const data = bypassResistanceTrend
+  const w = 640, h = 92, pad = 10
+  const max = Math.max(...data.map((d) => d.rate))
+  const x = (i: number) => pad + (i / (data.length - 1)) * (w - pad * 2)
+  const y = (v: number) => h - pad - (v / (max || 1)) * (h - pad * 2)
+  const line = data.map((d, i) => `${x(i)},${y(d.rate)}`).join(' ')
+  const area = `${x(0)},${h - pad} ${line} ${x(data.length - 1)},${h - pad}`
+  const delta = data[0].rate - data[data.length - 1].rate
+  return (
+    <Card className="mb-6">
+      <div className="mb-2 flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-ink-900">Bypass resistance</h3>
+          <p className="text-xs text-ink-500">Fleet bypass rate over the last 8 weeks — lower is more resistant</p>
+        </div>
+        <Badge tone={delta >= 0 ? 'green' : 'red'}>{delta >= 0 ? '▼' : '▲'} {Math.abs(delta).toFixed(1)} pts · now {data[data.length - 1].rate}%</Badge>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full text-emerald-500" style={{ height: 92 }}>
+        <polygon points={area} fill="currentColor" opacity="0.10" />
+        <polyline points={line} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.rate)} r="2.5" fill="currentColor" />)}
+      </svg>
+      <div className="mt-1 flex justify-between text-[10px] text-ink-400">
+        {data.map((d) => <span key={d.week}>{d.week}</span>)}
+      </div>
+    </Card>
+  )
+}
+
+function AttemptsTable({ campaignId }: { campaignId: string }) {
+  const [onlyBypass, setOnlyBypass] = useState(false)
+  const all = attemptsFor(campaignId)
+  if (all.length === 0) return null
+  const bypassCount = all.filter((a) => a.verdict === 'bypassed').length
+  const rows = all.filter((a) => !onlyBypass || a.verdict === 'bypassed')
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-ink-900">Attempts <span className="font-normal text-ink-400">· {all.length} sampled · {bypassCount} bypassed</span></h4>
+        <button onClick={() => setOnlyBypass((v) => !v)} className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${onlyBypass ? 'bg-rose-50 text-rose-700 ring-rose-600/20' : 'bg-slate-100 text-ink-600 ring-slate-500/10 hover:bg-slate-200/70'}`}>Only bypasses</button>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-slate-200">
+        {rows.map((a) => (
+          <div key={a.id} className="border-b border-slate-100 px-3 py-2 last:border-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-2">
+                <Badge tone={a.verdict === 'bypassed' ? 'red' : 'green'}>{a.verdict}</Badge>
+                <span className="truncate text-xs font-medium text-ink-700">{a.technique}</span>
+                <span className="shrink-0 font-mono text-[10px] text-ink-400">{a.taxonomy}</span>
+              </span>
+              <span className="shrink-0 text-[10px] text-ink-400">{a.model} · {a.latencyMs}ms</span>
+            </div>
+            <p className="mt-1 truncate font-mono text-[11px] text-ink-600" title={a.prompt}>{a.prompt}</p>
+            <p className="mt-0.5 text-[11px] text-ink-500">
+              {a.verdict === 'blocked' ? <>Caught by <span className="font-medium text-ink-700">{a.detector}</span>. </> : 'Not caught. '}{a.response}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function FindingCard({ campaignId, f, logAction }: { campaignId: string; f: Finding; logAction: LogFn }) {
   const { can } = useSession()
-  const cycle = (f: Finding) => {
+  const [note, setNote] = useState(f.remediationNote ?? '')
+  const cycle = () => {
     const next: Finding['status'] = f.status === 'open' ? 'mitigated' : f.status === 'mitigated' ? 'accepted' : 'open'
-    setFindingStatus(campaign.id, f.id, next)
+    setFindingStatus(campaignId, f.id, next)
     logAction({ action: 'evals.finding.update', target: `${f.id} → ${next}`, category: 'governance' })
   }
-  const createIncident = (f: Finding) => {
+  const createIncident = () => {
     const incId = newId('INC')
-    updateFinding(campaign.id, f.id, { linkedIncidentId: incId, status: 'mitigated' })
+    updateFinding(campaignId, f.id, { linkedIncidentId: incId, status: 'mitigated' })
     logAction({ action: 'evals.incident.create', target: `${f.id} → ${incId}`, category: 'governance' })
   }
+  const assignMe = () => {
+    updateFinding(campaignId, f.id, { assignee: 'You' })
+    logAction({ action: 'evals.finding.assign', target: `${f.id} → You`, category: 'governance' })
+  }
+  const saveNote = () => {
+    updateFinding(campaignId, f.id, { remediationNote: note.trim() })
+    logAction({ action: 'evals.finding.update', target: `${f.id} · remediation note`, category: 'governance' })
+  }
+  const retest = () => {
+    const r = retestFinding(campaignId, f.id)
+    logAction({ action: 'evals.finding.retest', target: `${f.id} → ${r}`, category: 'governance' })
+  }
+  const age = ageDays(f.openedAt)
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Badge tone={sevTone[f.severity]}>{f.severity}</Badge>
+          <span className="font-mono text-xs text-ink-500">{f.attackType} · {owaspName(f.attackType)}</span>
+        </div>
+        <Badge tone={findingTone(f.status)}>{f.status}</Badge>
+      </div>
+      <p className="mt-1.5 text-sm text-ink-700">{f.summary}</p>
+      <p className="mt-1 flex flex-wrap gap-x-2 text-xs text-ink-500">
+        {f.openedAt && <span>Opened {f.openedAt}{age !== null && ` · ${age}d old`}</span>}
+        <span>· {f.assignee ? <>Assignee <span className="font-medium text-ink-700">{f.assignee}</span></> : 'Unassigned'}</span>
+        {f.linkedControlPrefix && <span>· Should be caught by <span className="font-mono text-ink-700">{f.linkedControlPrefix}</span> ({familyOf(f.linkedControlPrefix)})</span>}
+        {f.linkedIncidentId && <span>· <span className="font-medium text-brand-600">Incident {f.linkedIncidentId}</span></span>}
+      </p>
+
+      {f.repro && (
+        <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Reproduction · {f.repro.model}</span>
+            {f.retestedAt && (
+              <Badge tone={f.retestResult === 'blocked' ? 'green' : 'red'}>
+                {f.retestResult === 'blocked' ? '✓ Retest passed' : '✗ Still bypassing'} · {f.retestedAt}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 font-mono text-[11px] text-ink-700">{f.repro.prompt}</p>
+          <GatedButton cap="evals.run" showLock={false} className="btn-secondary mt-2 px-2.5 py-1 text-xs" onClick={retest}>
+            <RefreshCw className="h-3.5 w-3.5" /> Retest
+          </GatedButton>
+        </div>
+      )}
+
+      <label className="mt-2.5 block">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Remediation note</span>
+        <textarea
+          className="input mt-1 h-16 text-xs" value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder="What fixed it — policy change, control tuning…" disabled={!can('evals.run')}
+        />
+      </label>
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        <GatedButton cap="evals.run" showLock={false} className="btn-primary px-2.5 py-1 text-xs disabled:opacity-50" onClick={saveNote} disabled={!can('evals.run') || note.trim() === (f.remediationNote ?? '')}>
+          Save note
+        </GatedButton>
+        <GatedButton cap="evals.run" showLock={false} className="btn-secondary px-2.5 py-1 text-xs" onClick={cycle}>Advance status</GatedButton>
+        {!f.assignee && (
+          <GatedButton cap="evals.run" showLock={false} className="btn-secondary px-2.5 py-1 text-xs" onClick={assignMe}>
+            <UserPlus className="h-3.5 w-3.5" /> Assign to me
+          </GatedButton>
+        )}
+        {!f.linkedIncidentId && (
+          <GatedButton cap="incident.manage" showLock={false} className="btn-secondary px-2.5 py-1 text-xs" onClick={createIncident} disabled={!can('incident.manage')}>
+            <ExternalLink className="h-3.5 w-3.5" /> Create incident
+          </GatedButton>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CampaignModal({ campaign, onClose, logAction }: { campaign: RedTeamCampaign; onClose: () => void; logAction: LogFn }) {
   return (
     <Modal
       open onClose={onClose}
@@ -116,37 +263,13 @@ function CampaignModal({ campaign, onClose, logAction }: { campaign: RedTeamCamp
       headerRight={<Badge tone={statusTone(campaign.status)} dot>{campaign.status}</Badge>}
       footer={<button className="btn-secondary" onClick={onClose}>Close</button>}
     >
-      <div className="space-y-4">
-        <h4 className="text-sm font-semibold text-ink-900">Findings ({campaign.findings.length})</h4>
-        {campaign.findings.length === 0 && <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-ink-400">No findings yet — campaign in progress.</p>}
-        {campaign.findings.map((f) => (
-          <div key={f.id} className="rounded-xl border border-slate-200 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <Badge tone={sevTone[f.severity]}>{f.severity}</Badge>
-                  <span className="font-mono text-xs text-ink-500">{f.attackType} · {owaspName(f.attackType)}</span>
-                </div>
-                <p className="mt-1.5 text-sm text-ink-700">{f.summary}</p>
-                <p className="mt-1 text-xs text-ink-500">
-                  {f.linkedControlPrefix && <>Should be caught by <span className="font-mono text-ink-700">{f.linkedControlPrefix}</span> ({familyOf(f.linkedControlPrefix)}). </>}
-                  {f.linkedIncidentId && <span className="font-medium text-brand-600">Linked incident {f.linkedIncidentId}</span>}
-                </p>
-              </div>
-              <Badge tone={f.status === 'open' ? 'red' : f.status === 'mitigated' ? 'green' : 'slate'}>{f.status}</Badge>
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              <GatedButton cap="evals.run" showLock={false} className="btn-secondary px-2.5 py-1 text-xs" onClick={() => cycle(f)}>
-                Advance status
-              </GatedButton>
-              {!f.linkedIncidentId && (
-                <GatedButton cap="incident.manage" showLock={false} className="btn-secondary px-2.5 py-1 text-xs" onClick={() => createIncident(f)} disabled={!can('incident.manage')}>
-                  <ExternalLink className="h-3.5 w-3.5" /> Create incident
-                </GatedButton>
-              )}
-            </div>
-          </div>
-        ))}
+      <div className="space-y-5">
+        <AttemptsTable campaignId={campaign.id} />
+        <section className="space-y-3">
+          <h4 className="text-sm font-semibold text-ink-900">Findings ({campaign.findings.length})</h4>
+          {campaign.findings.length === 0 && <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-ink-400">No findings yet — campaign in progress.</p>}
+          {campaign.findings.map((f) => <FindingCard key={f.id} campaignId={campaign.id} f={f} logAction={logAction} />)}
+        </section>
       </div>
     </Modal>
   )

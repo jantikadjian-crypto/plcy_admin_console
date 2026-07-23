@@ -73,6 +73,22 @@ export function setFindingStatus(campaignId: string, findingId: string, status: 
   updateFinding(campaignId, findingId, { status })
 }
 
+/**
+ * Re-run a finding's exact reproduction against current policy. A finding only
+ * passes retest once it's been worked (a remediation note or a mitigated status);
+ * an untouched open finding still bypasses. Returns the verdict so the caller can
+ * audit it. On a pass, the finding is marked mitigated with proof.
+ */
+export function retestFinding(campaignId: string, findingId: string): 'blocked' | 'bypassed' {
+  const c = state.campaigns.find((x) => x.id === campaignId)
+  const f = c?.findings.find((x) => x.id === findingId)
+  const fixed = !!(f?.remediationNote?.trim()) || f?.status === 'mitigated'
+  const result: 'blocked' | 'bypassed' = fixed ? 'blocked' : 'bypassed'
+  const at = new Date().toISOString().slice(0, 10)
+  updateFinding(campaignId, findingId, { retestResult: result, retestedAt: at, ...(result === 'blocked' ? { status: 'mitigated' as FindingStatus } : {}) })
+  return result
+}
+
 export function upsertRun(r: EvalRun) {
   const i = state.runs.findIndex((x) => x.id === r.id)
   const runs = i === -1 ? [r, ...state.runs] : state.runs.map((x) => (x.id === r.id ? r : x))
