@@ -4,24 +4,30 @@
  * pattern. Customer health is a static seed (read directly from success.ts).
  */
 import { useSyncExternalStore } from 'react'
-import { ticketSeed, renewalSeed } from './success'
-import type { Ticket, TicketStatus, Renewal, RenewalStage } from './success'
+import { ticketSeed, renewalSeed, activitySeed, taskSeed } from './success'
+import type { Ticket, TicketStatus, Renewal, RenewalStage, Activity, ActivityType, CSTask } from './success'
 
-const KEY = 'plcy.success.v1'
+const KEY = 'plcy.success.v2'
 
 interface SuccessState {
   tickets: Ticket[]
   renewals: Renewal[]
+  activities: Activity[]
+  tasks: CSTask[]
 }
 
-const seed = (): SuccessState => ({ tickets: ticketSeed, renewals: renewalSeed })
+const seed = (): SuccessState => ({ tickets: ticketSeed, renewals: renewalSeed, activities: activitySeed, tasks: taskSeed })
 
 function mergeSeeds(stored: SuccessState): SuccessState {
   const tIds = new Set(stored.tickets.map((t) => t.id))
   const rKeys = new Set(stored.renewals.map((r) => r.customer))
+  const aIds = new Set((stored.activities ?? []).map((a) => a.id))
+  const cIds = new Set((stored.tasks ?? []).map((c) => c.id))
   return {
     tickets: [...ticketSeed.filter((t) => !tIds.has(t.id)), ...stored.tickets],
     renewals: [...renewalSeed.filter((r) => !rKeys.has(r.customer)), ...stored.renewals],
+    activities: [...activitySeed.filter((a) => !aIds.has(a.id)), ...(stored.activities ?? [])],
+    tasks: [...taskSeed.filter((c) => !cIds.has(c.id)), ...(stored.tasks ?? [])],
   }
 }
 
@@ -59,6 +65,22 @@ export const assignTicket = (id: string, assignee: string) => updateTicket(id, {
 
 export function setRenewalStage(customer: string, stage: RenewalStage) {
   state = { ...state, renewals: state.renewals.map((r) => (r.customer === customer ? { ...r, stage } : r)) }
+  emit()
+}
+
+let actSeq = 900
+export function addActivity(customer: string, type: ActivityType, summary: string, by = 'You') {
+  const entry: Activity = { id: `ACT-${++actSeq}`, customer, type, summary, at: today(), by }
+  state = { ...state, activities: [entry, ...state.activities] }
+  emit()
+}
+
+export function toggleTask(id: string) {
+  state = { ...state, tasks: state.tasks.map((t) => (t.id === id ? { ...t, status: t.status === 'done' ? 'open' : 'done' } : t)) }
+  emit()
+}
+export function assignCSTask(id: string, owner: string) {
+  state = { ...state, tasks: state.tasks.map((t) => (t.id === id ? { ...t, owner } : t)) }
   emit()
 }
 

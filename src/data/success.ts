@@ -106,3 +106,144 @@ export const renewalSeed: Renewal[] = [
   { customer: 'Lumen Media', plan: 'Growth', arr: 36000, renewalDate: '2026-12-22', stage: 'On track', owner: 'S. Okafor', probability: 90 },
   { customer: 'Atlas Logistics', plan: 'Business', arr: 84000, renewalDate: '2027-03-08', stage: 'On track', owner: 'S. Okafor', probability: 92 },
 ]
+
+/* ------------------------------------------------------------------ */
+/* Explainable health — weighted sub-scores                            */
+/* ------------------------------------------------------------------ */
+/**
+ * The composite `health` above isn't a black box: it rolls up five weighted
+ * sub-scores. `healthComposite` reproduces the seeded number exactly, so the
+ * drill-down can show *why* an account scores what it does.
+ */
+export type HealthDimKey = 'usage' | 'adoption' | 'support' | 'sentiment' | 'financial'
+export interface HealthDim { key: HealthDimKey; label: string; weight: number; hint: string }
+
+export const HEALTH_WEIGHTS: HealthDim[] = [
+  { key: 'usage', label: 'Product usage', weight: 30, hint: 'Request volume & active-seat trend vs. plan' },
+  { key: 'adoption', label: 'Feature adoption', weight: 25, hint: 'Breadth of governance features in active use' },
+  { key: 'support', label: 'Support health', weight: 20, hint: 'Ticket load, SLA attainment, escalations' },
+  { key: 'sentiment', label: 'Sentiment', weight: 15, hint: 'Exec engagement, NPS, champion strength' },
+  { key: 'financial', label: 'Financial', weight: 10, hint: 'Payment standing & contract commitment' },
+]
+
+export type HealthBreakdown = Record<HealthDimKey, number>
+
+export const healthScores: Record<string, HealthBreakdown> = {
+  'Meridian Bank': { usage: 94, adoption: 88, support: 94, sentiment: 90, financial: 92 },
+  'Vertex Capital': { usage: 88, adoption: 82, support: 88, sentiment: 86, financial: 90 },
+  'Atlas Logistics': { usage: 82, adoption: 74, support: 84, sentiment: 80, financial: 82 },
+  'Lumen Media': { usage: 84, adoption: 77, support: 86, sentiment: 88, financial: 82 },
+  'Pinecrest Insurance': { usage: 80, adoption: 66, support: 82, sentiment: 82, financial: 88 },
+  'Helix Health': { usage: 74, adoption: 70, support: 70, sentiment: 76, financial: 84 },
+  'Ferro Manufacturing': { usage: 64, adoption: 55, support: 74, sentiment: 68, financial: 80 },
+  'Northwind Retail': { usage: 58, adoption: 54, support: 56, sentiment: 54, financial: 80 },
+}
+
+export const healthComposite = (b: HealthBreakdown) =>
+  Math.round(HEALTH_WEIGHTS.reduce((sum, d) => sum + d.weight * b[d.key], 0) / 100)
+
+export const dimTone = (v: number) => (v >= 80 ? 'green' : v >= 65 ? 'yellow' : 'red')
+
+/* ------------------------------------------------------------------ */
+/* Account 360 — contacts & feature adoption                           */
+/* ------------------------------------------------------------------ */
+export type ContactStatus = 'active' | 'departed'
+export interface Contact { name: string; role: string; email: string; champion?: boolean; status: ContactStatus }
+
+export const contactsByCustomer: Record<string, Contact[]> = {
+  'Meridian Bank': [
+    { name: 'Dana Whitfield', role: 'VP, Risk & Compliance', email: 'dana.whitfield@meridianbank.com', champion: true, status: 'active' },
+    { name: 'Omar Haddad', role: 'Head of ML Platform', email: 'omar.haddad@meridianbank.com', status: 'active' },
+  ],
+  'Vertex Capital': [
+    { name: 'Priya Nair', role: 'CISO', email: 'priya.nair@vertexcap.com', champion: true, status: 'active' },
+    { name: 'Tom Beck', role: 'Data Governance Lead', email: 'tom.beck@vertexcap.com', status: 'active' },
+  ],
+  'Atlas Logistics': [
+    { name: 'Marta Kovač', role: 'Director of IT', email: 'marta.kovac@atlaslog.com', champion: true, status: 'active' },
+  ],
+  'Lumen Media': [
+    { name: 'Chris Anand', role: 'Head of AI', email: 'chris.anand@lumenmedia.com', champion: true, status: 'active' },
+  ],
+  'Pinecrest Insurance': [
+    { name: 'Gail Fenn', role: 'Compliance Officer', email: 'gail.fenn@pinecrest.com', champion: true, status: 'active' },
+    { name: 'Raymond Ortiz', role: 'IT Security', email: 'raymond.ortiz@pinecrest.com', status: 'active' },
+  ],
+  'Helix Health': [
+    { name: 'Dr. Susan Vale', role: 'Chief Medical Information Officer', email: 'susan.vale@helixhealth.org', champion: true, status: 'active' },
+    { name: 'Nathan Cole', role: 'Infrastructure Lead', email: 'nathan.cole@helixhealth.org', status: 'active' },
+  ],
+  'Ferro Manufacturing': [
+    { name: 'Luis Moreno', role: 'IT Manager', email: 'luis.moreno@ferromfg.com', status: 'active' },
+  ],
+  'Northwind Retail': [
+    { name: 'Karen Doyle', role: 'VP Digital (former sponsor)', email: 'karen.doyle@northwind.com', champion: true, status: 'departed' },
+    { name: 'Ben Sato', role: 'Interim IT Lead', email: 'ben.sato@northwind.com', status: 'active' },
+  ],
+}
+
+/** The governance features we track adoption of, in rollout order. */
+export const FEATURES = ['Policy Packs', 'Enforcement', 'Model Routing', 'Residency Controls', 'Red-Team Evals', 'SSO / SCIM', 'Audit Export', 'DSAR Automation'] as const
+export type Feature = (typeof FEATURES)[number]
+
+/** Features each customer actively uses (subset of FEATURES). */
+export const featureAdoption: Record<string, Feature[]> = {
+  'Meridian Bank': ['Policy Packs', 'Enforcement', 'Model Routing', 'Residency Controls', 'Red-Team Evals', 'SSO / SCIM', 'Audit Export'],
+  'Vertex Capital': ['Policy Packs', 'Enforcement', 'Model Routing', 'Residency Controls', 'SSO / SCIM', 'Audit Export'],
+  'Atlas Logistics': ['Policy Packs', 'Enforcement', 'Model Routing', 'SSO / SCIM'],
+  'Lumen Media': ['Policy Packs', 'Enforcement', 'Model Routing', 'Audit Export'],
+  'Pinecrest Insurance': ['Policy Packs', 'Enforcement', 'SSO / SCIM'],
+  'Helix Health': ['Policy Packs', 'Enforcement', 'Residency Controls', 'Audit Export'],
+  'Ferro Manufacturing': ['Policy Packs', 'Enforcement'],
+  'Northwind Retail': ['Policy Packs', 'Enforcement', 'SSO / SCIM'],
+}
+
+/* ------------------------------------------------------------------ */
+/* Activity timeline                                                   */
+/* ------------------------------------------------------------------ */
+export type ActivityType = 'note' | 'call' | 'email' | 'ticket' | 'renewal' | 'usage' | 'milestone'
+export interface Activity { id: string; customer: string; type: ActivityType; summary: string; at: string; by: string }
+
+export const activityTone: Record<ActivityType, 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'slate'> = {
+  note: 'slate', call: 'blue', email: 'blue', ticket: 'yellow', renewal: 'purple', usage: 'green', milestone: 'green',
+}
+
+export const activitySeed: Activity[] = [
+  { id: 'ACT-201', customer: 'Northwind Retail', type: 'usage', summary: 'Weekly active seats fell below 40% of licensed seats', at: '2026-07-22', by: 'system' },
+  { id: 'ACT-202', customer: 'Northwind Retail', type: 'milestone', summary: 'Exec sponsor Karen Doyle marked as departed — champion lost', at: '2026-07-20', by: 'A. Rivera' },
+  { id: 'ACT-203', customer: 'Northwind Retail', type: 'call', summary: 'Escalation call with interim IT lead; committed to a save plan', at: '2026-07-18', by: 'A. Rivera' },
+  { id: 'ACT-204', customer: 'Helix Health', type: 'ticket', summary: 'Air-gapped bundle sync failure escalated to deployment eng', at: '2026-07-24', by: 'S. Okafor' },
+  { id: 'ACT-205', customer: 'Pinecrest Insurance', type: 'email', summary: 'Shared consent-gate tuning guide; awaiting confirmation', at: '2026-07-23', by: 'A. Rivera' },
+  { id: 'ACT-206', customer: 'Meridian Bank', type: 'usage', summary: 'Request volume up 12% MoM — expansion signal', at: '2026-07-21', by: 'system' },
+  { id: 'ACT-207', customer: 'Vertex Capital', type: 'renewal', summary: 'Second-region expansion added to renewal scope (+$40k ARR)', at: '2026-07-19', by: 'A. Rivera' },
+  { id: 'ACT-208', customer: 'Ferro Manufacturing', type: 'note', summary: 'Two releases behind (v4.7.9); low seat utilisation persists', at: '2026-07-15', by: 'S. Okafor' },
+]
+
+/* ------------------------------------------------------------------ */
+/* CS tasks & recommended plays                                        */
+/* ------------------------------------------------------------------ */
+export type TaskStatus = 'open' | 'done'
+export interface CSTask { id: string; customer: string; title: string; play?: string; priority: TicketPriority; due: string; status: TaskStatus; owner?: string }
+
+/** Reusable playbooks the CSM can run against an account. */
+export interface Play { id: string; title: string; when: string; steps: string[] }
+export const RECOMMENDED_PLAYS: Play[] = [
+  { id: 'save', title: 'Churn save play', when: 'Health < 65 or renewal < 30 days at risk', steps: ['Book an exec business review within 5 days', 'Rebuild the champion — identify a new economic buyer', 'Agree a 30-day value plan with measurable adoption goals', 'Offer temporary onboarding / enablement support'] },
+  { id: 'adopt', title: 'Adoption uplift play', when: 'Adoption plateaued or usage flat/down', steps: ['Run a feature-gap workshop against unused governance features', 'Enable one high-value feature (e.g. Red-Team Evals) as a pilot', 'Set a 2-week activation checkpoint', 'Share a peer benchmark from a similar account'] },
+  { id: 'expand', title: 'Expansion play', when: 'Health ≥ 80 and usage trending up', steps: ['Quantify overage / seat growth vs. contract', 'Propose the next plan tier or a second region', 'Loop in the champion for an internal business case', 'Time the proposal to the renewal window'] },
+  { id: 'upgrade', title: 'Version upgrade play', when: 'Two or more releases behind', steps: ['Share the low-risk upgrade path and changelog', 'Schedule a staged upgrade with a rollback checkpoint', 'Verify policy packs re-apply post-upgrade'] },
+]
+export const playById = (id?: string) => RECOMMENDED_PLAYS.find((p) => p.id === id)
+
+export const taskSeed: CSTask[] = [
+  { id: 'CST-31', customer: 'Northwind Retail', title: 'Run churn save play before 2026-08-01 renewal', play: 'save', priority: 'Urgent', due: '2026-07-28', status: 'open', owner: 'A. Rivera' },
+  { id: 'CST-32', customer: 'Northwind Retail', title: 'Identify & recruit a new exec sponsor', play: 'save', priority: 'High', due: '2026-07-30', status: 'open' },
+  { id: 'CST-33', customer: 'Ferro Manufacturing', title: 'Guide upgrade off v4.7.9', play: 'upgrade', priority: 'High', due: '2026-08-05', status: 'open', owner: 'S. Okafor' },
+  { id: 'CST-34', customer: 'Ferro Manufacturing', title: 'Adoption workshop — lift seat utilisation', play: 'adopt', priority: 'Normal', due: '2026-08-12', status: 'open' },
+  { id: 'CST-35', customer: 'Pinecrest Insurance', title: 'Close out consent-gate false positives', priority: 'Normal', due: '2026-07-29', status: 'open', owner: 'A. Rivera' },
+  { id: 'CST-36', customer: 'Helix Health', title: 'Confirm air-gapped bundle sync fix landed', priority: 'High', due: '2026-07-26', status: 'open', owner: 'S. Okafor' },
+  { id: 'CST-37', customer: 'Vertex Capital', title: 'Draft expansion proposal for 2nd region', play: 'expand', priority: 'Normal', due: '2026-08-15', status: 'open', owner: 'A. Rivera' },
+  { id: 'CST-38', customer: 'Meridian Bank', title: 'Prep QBR deck — usage up 12%', play: 'expand', priority: 'Low', due: '2026-08-20', status: 'done', owner: 'A. Rivera' },
+]
+
+export const taskStatusTone: Record<TaskStatus, 'yellow' | 'green'> = { open: 'yellow', done: 'green' }

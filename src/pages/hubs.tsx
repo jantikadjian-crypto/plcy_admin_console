@@ -6,7 +6,7 @@ import {
   Globe, ShieldCheck, ArrowLeftRight, Network, Inbox,
   Lock, Fingerprint, ScrollText, PackageCheck,
   Target, Swords, FlaskConical, Crosshair, ClipboardCheck,
-  LifeBuoy, CalendarClock,
+  LifeBuoy, CalendarClock, ListTodo,
 } from 'lucide-react'
 import { Hub } from '@/components/Hub'
 import Billing from './Billing'
@@ -44,6 +44,7 @@ import { ReviewQueue } from './ReviewQueue'
 import { CustomerHealthTab } from './CustomerHealth'
 import { Support } from './Support'
 import { Renewals } from './Renewals'
+import { CSTasks } from './CSTasks'
 
 export function BillingHub() {
   return (
@@ -117,6 +118,7 @@ export function SuccessHub() {
       defaultKey="health"
       tabs={[
         { key: 'health', label: 'Health', icon: HeartPulse, element: <CustomerHealthTab /> },
+        { key: 'tasks', label: 'Tasks & Plays', icon: ListTodo, element: <CSTasks /> },
         { key: 'support', label: 'Support', icon: LifeBuoy, element: <Support /> },
         { key: 'renewals', label: 'Renewals', icon: CalendarClock, element: <Renewals /> },
       ]}
