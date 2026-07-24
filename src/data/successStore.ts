@@ -5,18 +5,27 @@
  */
 import { useSyncExternalStore } from 'react'
 import { ticketSeed, renewalSeed, activitySeed, taskSeed } from './success'
-import type { Ticket, TicketStatus, Renewal, RenewalStage, Activity, ActivityType, CSTask } from './success'
+import type { Ticket, TicketStatus, Renewal, RenewalStage, Activity, ActivityType, CSTask, ChurnCaseStatus } from './success'
 
-const KEY = 'plcy.success.v2'
+const KEY = 'plcy.success.v3'
+
+/** Per-account churn-case working state, keyed by customer. */
+export interface ChurnCase {
+  status: ChurnCaseStatus
+  owner?: string
+  notifiedChannels: string[]
+  notes: { at: string; by: string; text: string }[]
+}
 
 interface SuccessState {
   tickets: Ticket[]
   renewals: Renewal[]
   activities: Activity[]
   tasks: CSTask[]
+  churn: Record<string, ChurnCase>
 }
 
-const seed = (): SuccessState => ({ tickets: ticketSeed, renewals: renewalSeed, activities: activitySeed, tasks: taskSeed })
+const seed = (): SuccessState => ({ tickets: ticketSeed, renewals: renewalSeed, activities: activitySeed, tasks: taskSeed, churn: {} })
 
 function mergeSeeds(stored: SuccessState): SuccessState {
   const tIds = new Set(stored.tickets.map((t) => t.id))
@@ -28,6 +37,7 @@ function mergeSeeds(stored: SuccessState): SuccessState {
     renewals: [...renewalSeed.filter((r) => !rKeys.has(r.customer)), ...stored.renewals],
     activities: [...activitySeed.filter((a) => !aIds.has(a.id)), ...(stored.activities ?? [])],
     tasks: [...taskSeed.filter((c) => !cIds.has(c.id)), ...(stored.tasks ?? [])],
+    churn: stored.churn ?? {},
   }
 }
 
@@ -75,6 +85,13 @@ export function addActivity(customer: string, type: ActivityType, summary: strin
   emit()
 }
 
+let taskSeq = 900
+export function addTask(t: Omit<CSTask, 'id'>): string {
+  const id = `CST-${++taskSeq}`
+  state = { ...state, tasks: [{ id, ...t }, ...state.tasks] }
+  emit()
+  return id
+}
 export function toggleTask(id: string) {
   state = { ...state, tasks: state.tasks.map((t) => (t.id === id ? { ...t, status: t.status === 'done' ? 'open' : 'done' } : t)) }
   emit()
@@ -82,6 +99,36 @@ export function toggleTask(id: string) {
 export function assignCSTask(id: string, owner: string) {
   state = { ...state, tasks: state.tasks.map((t) => (t.id === id ? { ...t, owner } : t)) }
   emit()
+}
+
+/* -------- Churn Watch cases -------- */
+const DEFAULT_CASE: ChurnCase = { status: 'New', notifiedChannels: [], notes: [] }
+export const churnCaseFor = (customer: string, churn: Record<string, ChurnCase>): ChurnCase => churn[customer] ?? DEFAULT_CASE
+
+function patchCase(customer: string, patch: Partial<ChurnCase>) {
+  const cur = state.churn[customer] ?? DEFAULT_CASE
+  state = { ...state, churn: { ...state.churn, [customer]: { ...cur, ...patch } } }
+  emit()
+}
+
+export function assignChurnOwner(customer: string, owner: string) {
+  const cur = state.churn[customer] ?? DEFAULT_CASE
+  // Picking up an unworked case moves it into active investigation.
+  const status: ChurnCaseStatus = cur.status === 'New' || cur.status === 'Acknowledged' ? 'Investigating' : cur.status
+  patchCase(customer, { owner, status })
+}
+export function setChurnStatus(customer: string, status: ChurnCaseStatus) {
+  patchCase(customer, { status })
+}
+export function notifyChurnTeam(customer: string, channels: string[]) {
+  const cur = state.churn[customer] ?? DEFAULT_CASE
+  const merged = Array.from(new Set([...cur.notifiedChannels, ...channels]))
+  const status: ChurnCaseStatus = cur.status === 'New' ? 'Acknowledged' : cur.status
+  patchCase(customer, { notifiedChannels: merged, status })
+}
+export function addChurnNote(customer: string, text: string, by = 'You') {
+  const cur = state.churn[customer] ?? DEFAULT_CASE
+  patchCase(customer, { notes: [{ at: today(), by, text }, ...cur.notes] })
 }
 
 function subscribe(fn: () => void): () => void {

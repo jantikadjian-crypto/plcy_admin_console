@@ -46,6 +46,7 @@ export const routingRules: RoutingRule[] = [
   { id: 'r_device', event: 'Untrusted / non-compliant device', category: 'Device', minSeverity: 'Medium', channels: ['Slack', 'Email'], enabled: true },
   { id: 'r_license', event: 'License expiring / expired', category: 'License', minSeverity: 'Medium', channels: ['Email'], enabled: true },
   { id: 'r_dsar', event: 'DSAR approaching deadline', category: 'DSAR', minSeverity: 'High', channels: ['Email', 'Slack'], enabled: true },
+  { id: 'r_churn', event: 'Customer churn risk elevated', category: 'Customer Success', minSeverity: 'High', channels: ['Slack', 'Email'], enabled: true },
   { id: 'r_transfer', event: 'Cross-border transfer blocked', category: 'Sovereignty', minSeverity: 'High', channels: ['Slack'], enabled: false },
 ]
 
@@ -152,7 +153,9 @@ export interface AlertEvent {
 }
 
 export const recentAlerts: AlertEvent[] = [
+  { id: 'al_churn1', time: '10:44', event: 'Northwind Retail churn risk CRITICAL — health 58, renewal in 8d', category: 'Customer Success', severity: 'Critical', channels: ['Slack', 'Email'], status: 'Delivered' },
   { id: 'al_1', time: '10:41', event: 'Orbit Telecom cluster offline (14d)', category: 'Cluster', severity: 'Critical', channels: ['PagerDuty', 'Slack'], status: 'Delivered' },
+  { id: 'al_churn2', time: '10:29', event: 'Ferro Manufacturing churn risk HIGH — usage down, adoption 55%', category: 'Customer Success', severity: 'High', channels: ['Slack', 'Email'], status: 'Delivered' },
   { id: 'al_2', time: '10:38', event: 'plcy/model-gateway — 1 critical CVE', category: 'Supply chain', severity: 'Critical', channels: ['PagerDuty', 'Slack'], status: 'Delivered' },
   { id: 'al_b1', time: '10:36', event: 'Lumen Media chargeback — needs response', category: 'Disputes', severity: 'High', channels: ['PagerDuty', 'Slack', 'Email'], status: 'Delivered' },
   { id: 'al_3', time: '10:22', event: 'Break-glass root requested — Helix Health', category: 'Access', severity: 'High', channels: ['Slack', 'PagerDuty'], status: 'Delivered' },

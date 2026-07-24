@@ -109,6 +109,7 @@ export const flatNav = navGroups.flatMap((g) => g.items)
  */
 export const hubSubPages: { label: string; to: string }[] = [
   { label: 'Customer Health', to: '/success?tab=health' },
+  { label: 'Churn Watch', to: '/success?tab=churn' },
   { label: 'CS Tasks & Plays', to: '/success?tab=tasks' },
   { label: 'Support', to: '/success?tab=support' },
   { label: 'Renewals', to: '/success?tab=renewals' },

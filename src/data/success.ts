@@ -247,3 +247,71 @@ export const taskSeed: CSTask[] = [
 ]
 
 export const taskStatusTone: Record<TaskStatus, 'yellow' | 'green'> = { open: 'yellow', done: 'green' }
+
+/* ------------------------------------------------------------------ */
+/* Churn Watch — early-warning derived from health + renewal risk      */
+/* ------------------------------------------------------------------ */
+export type ChurnSeverity = 'Critical' | 'High' | 'Medium'
+export const churnSeverityTone: Record<ChurnSeverity, 'red' | 'orange' | 'yellow'> = { Critical: 'red', High: 'orange', Medium: 'yellow' }
+export const CHURN_SEVERITY_RANK: Record<ChurnSeverity, number> = { Critical: 0, High: 1, Medium: 2 }
+
+/** The state a CS rep drives a churn case through. */
+export type ChurnCaseStatus = 'New' | 'Acknowledged' | 'Investigating' | 'Contained' | 'Saved' | 'Lost'
+export const CHURN_STATUSES: ChurnCaseStatus[] = ['New', 'Acknowledged', 'Investigating', 'Contained', 'Saved', 'Lost']
+export const churnStatusTone: Record<ChurnCaseStatus, 'red' | 'orange' | 'blue' | 'yellow' | 'green' | 'slate'> = {
+  New: 'red', Acknowledged: 'orange', Investigating: 'blue', Contained: 'yellow', Saved: 'green', Lost: 'slate',
+}
+/** A closed case no longer counts as open work. */
+export const isChurnClosed = (s: ChurnCaseStatus) => s === 'Saved' || s === 'Lost'
+
+/** The reps a churn case can be routed to for active follow-up. */
+export const CS_REPS = ['A. Rivera', 'S. Okafor', 'You']
+
+/** The channels a churn-risk alert fans out to (mirrors the notification routing rule). */
+export const CHURN_NOTIFY_CHANNELS = ['#cs-churn-watch', 'CS on-call', 'Email'] as const
+
+export interface ChurnAlert {
+  customer: string
+  severity: ChurnSeverity
+  health: number
+  churn: ChurnRisk
+  arr: number
+  renewalDate: string
+  daysToRenewal: number
+  csm: string
+  reasons: string[]
+}
+
+const arrFor = (c: string) => renewalSeed.find((r) => r.customer === c)?.arr ?? 0
+
+/**
+ * Turn the static health portfolio into actionable churn alerts. An account
+ * trips the watch when its risk, health, usage, adoption, or renewal timing
+ * cross a threshold; severity escalates for High churn, sub-60 health, or an
+ * unsecured renewal inside 30 days.
+ */
+export function deriveChurnAlerts(asOf = '2026-07-24'): ChurnAlert[] {
+  const now = Date.parse(asOf)
+  const out: ChurnAlert[] = []
+  for (const h of customerHealth) {
+    const reasons: string[] = []
+    const days = Math.round((Date.parse(h.renewalDate) - now) / 86400000)
+    if (h.churn === 'High') reasons.push('Churn risk flagged High')
+    else if (h.churn === 'Medium') reasons.push('Churn risk flagged Medium')
+    if (h.health < 60) reasons.push(`Health critical (${h.health})`)
+    else if (h.health < 70) reasons.push(`Health below target (${h.health})`)
+    if (h.usageTrend === 'down') reasons.push('Usage trending down')
+    if (h.adoption < 60) reasons.push(`Low feature adoption (${h.adoption}%)`)
+    const drop = h.trend[0] - h.trend[h.trend.length - 1]
+    if (drop >= 8) reasons.push(`Health fell ${drop} pts over 8 weeks`)
+    if (days <= 30 && days >= 0 && h.churn !== 'Low') reasons.push(`Renewal in ${days}d and not secured`)
+    if (reasons.length === 0) continue // healthy — no alert
+
+    let severity: ChurnSeverity = 'Medium'
+    if (h.churn === 'High' || h.health < 60 || (days <= 30 && days >= 0 && h.churn !== 'Low')) severity = 'Critical'
+    else if (h.churn === 'Medium' || h.health < 70 || h.usageTrend === 'down') severity = 'High'
+
+    out.push({ customer: h.customer, severity, health: h.health, churn: h.churn, arr: arrFor(h.customer), renewalDate: h.renewalDate, daysToRenewal: days, csm: h.csm, reasons })
+  }
+  return out.sort((a, b) => CHURN_SEVERITY_RANK[a.severity] - CHURN_SEVERITY_RANK[b.severity] || a.health - b.health)
+}
