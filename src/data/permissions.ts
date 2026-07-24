@@ -26,6 +26,7 @@ export type Capability =
   | 'dsar.manage'
   | 'transfer.approve'
   | 'policy.manage'
+  | 'policy.approve'
   | 'model.register'
   | 'incident.manage'
   | 'evals.view'
@@ -44,6 +45,7 @@ export const CAP_TO_FEATURE: Record<Capability, EAccessFeature> = {
   'dsar.manage': EAccessFeature.UserArchive,
   'transfer.approve': EAccessFeature.InstanceManageInfrastructure,
   'policy.manage': EAccessFeature.InstanceManagePackage,
+  'policy.approve': EAccessFeature.UserManageRoles, // change-approval board — distinct from authoring (SoD)
   'model.register': EAccessFeature.PackageList,
   'incident.manage': EAccessFeature.ClusterMonitor,
   'evals.view': EAccessFeature.ClusterMonitor, // read the efficacy/eval surfaces

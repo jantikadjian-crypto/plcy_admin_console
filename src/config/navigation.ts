@@ -128,6 +128,7 @@ export const hubSubPages: { label: string; to: string }[] = [
   { label: 'Data Classification', to: '/models?tab=classification' },
   { label: 'Policy Packs', to: '/policy?tab=packs' },
   { label: 'Policy Editor', to: '/policy?tab=editor' },
+  { label: 'Policy Change Management', to: '/policy?tab=changes' },
   { label: 'Enforcement Controls', to: '/policy?tab=enforcement' },
   { label: 'Guardrail Efficacy', to: '/evaluations?tab=efficacy' },
   { label: 'QA Review Queue', to: '/evaluations?tab=review' },

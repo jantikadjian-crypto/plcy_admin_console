@@ -2,7 +2,7 @@ import {
   Receipt, CreditCard, HeartPulse, Wallet, BadgeCheck,
   Rocket, Boxes, Cpu, Radar,
   Bot, Database, Route, Tags,
-  Package, Code2, SlidersHorizontal,
+  Package, Code2, SlidersHorizontal, GitBranch,
   Globe, ShieldCheck, ArrowLeftRight, Network, Inbox,
   Lock, Fingerprint, ScrollText, PackageCheck,
   Target, Swords, FlaskConical, Crosshair, ClipboardCheck,
@@ -25,6 +25,7 @@ import DataClassification from './DataClassification'
 import PolicyPacks from './PolicyPacks'
 import PolicyEditor from './PolicyEditor'
 import Enforcement from './Enforcement'
+import { PolicyChanges } from './PolicyChanges'
 import Regions from './Regions'
 import Residency from './Residency'
 import Transfers from './Transfers'
@@ -107,6 +108,7 @@ export function PolicyHub() {
       tabs={[
         { key: 'packs', label: 'Policy Packs', icon: Package, element: <PolicyPacks /> },
         { key: 'editor', label: 'Policy Editor', icon: Code2, element: <PolicyEditor /> },
+        { key: 'changes', label: 'Change Management', icon: GitBranch, element: <PolicyChanges /> },
         { key: 'enforcement', label: 'Enforcement', icon: SlidersHorizontal, element: <Enforcement /> },
       ]}
     />
