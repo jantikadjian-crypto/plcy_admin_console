@@ -37,6 +37,7 @@ import {
   PolicyHub,
   EvaluationsHub,
   ResidencyHub,
+  SuccessHub,
   SecurityHub,
   SupplyChainHub,
 } from './pages/hubs'
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/fleet" element={<FleetOverview />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
+        <Route path="/success" element={<SuccessHub />} />
         <Route path="/team" element={<Navigate to="/settings?tab=Team" replace />} />
         <Route path="/team/:id" element={<EmployeeDetail />} />
         <Route path="/instances" element={<Instances />} />

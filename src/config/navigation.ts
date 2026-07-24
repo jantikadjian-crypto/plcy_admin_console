@@ -25,6 +25,7 @@ import {
   BadgeDollarSign,
   BookOpen,
   FlaskConical,
+  HeartPulse,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -52,6 +53,7 @@ export const navGroups: NavGroup[] = [
     title: 'Customers & Billing',
     items: [
       { label: 'Customers', to: '/customers', icon: Users },
+      { label: 'Customer Success', to: '/success', icon: HeartPulse },
       { label: 'Instances', to: '/instances', icon: Server },
       { label: 'Pricing & Plans', to: '/pricing', icon: BadgeDollarSign },
       { label: 'Billing', to: '/billing', icon: Receipt },
@@ -106,6 +108,9 @@ export const flatNav = navGroups.flatMap((g) => g.items)
  * the right tab, even though the sidebar shows only the hub.
  */
 export const hubSubPages: { label: string; to: string }[] = [
+  { label: 'Customer Health', to: '/success?tab=health' },
+  { label: 'Support', to: '/success?tab=support' },
+  { label: 'Renewals', to: '/success?tab=renewals' },
   { label: 'Billing & Usage', to: '/billing?tab=usage' },
   { label: 'Stripe Integration', to: '/billing?tab=stripe' },
   { label: 'Billing Health', to: '/billing?tab=health' },

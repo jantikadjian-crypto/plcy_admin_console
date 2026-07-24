@@ -6,6 +6,7 @@ import {
   Globe, ShieldCheck, ArrowLeftRight, Network, Inbox,
   Lock, Fingerprint, ScrollText, PackageCheck,
   Target, Swords, FlaskConical, Crosshair, ClipboardCheck,
+  LifeBuoy, CalendarClock,
 } from 'lucide-react'
 import { Hub } from '@/components/Hub'
 import Billing from './Billing'
@@ -40,6 +41,9 @@ import { AttackLibrary } from './AttackLibrary'
 import { EvalSuites } from './EvalSuites'
 import { ModelScorecards } from './ModelScorecards'
 import { ReviewQueue } from './ReviewQueue'
+import { CustomerHealthTab } from './CustomerHealth'
+import { Support } from './Support'
+import { Renewals } from './Renewals'
 
 export function BillingHub() {
   return (
@@ -102,6 +106,19 @@ export function PolicyHub() {
         { key: 'packs', label: 'Policy Packs', icon: Package, element: <PolicyPacks /> },
         { key: 'editor', label: 'Policy Editor', icon: Code2, element: <PolicyEditor /> },
         { key: 'enforcement', label: 'Enforcement', icon: SlidersHorizontal, element: <Enforcement /> },
+      ]}
+    />
+  )
+}
+
+export function SuccessHub() {
+  return (
+    <Hub
+      defaultKey="health"
+      tabs={[
+        { key: 'health', label: 'Health', icon: HeartPulse, element: <CustomerHealthTab /> },
+        { key: 'support', label: 'Support', icon: LifeBuoy, element: <Support /> },
+        { key: 'renewals', label: 'Renewals', icon: CalendarClock, element: <Renewals /> },
       ]}
     />
   )
