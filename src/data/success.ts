@@ -280,9 +280,30 @@ export interface ChurnAlert {
   daysToRenewal: number
   csm: string
   reasons: string[]
+  raisedAt: string
 }
 
-const arrFor = (c: string) => renewalSeed.find((r) => r.customer === c)?.arr ?? 0
+export const renewalArr = (c: string) => renewalSeed.find((r) => r.customer === c)?.arr ?? 0
+const arrFor = renewalArr
+
+/** Reference "now" for the churn desk (date + time so SLA ages compute in hours). */
+export const CHURN_NOW = '2026-07-24T14:00:00'
+/** First-response SLA — hours a case may sit unassigned before it escalates. */
+export const CHURN_SLA_HOURS: Record<ChurnSeverity, number> = { Critical: 4, High: 24, Medium: 72 }
+/** When each alert was first raised (drives SLA aging). Defaults to midday if unlisted. */
+const CHURN_RAISED: Record<string, string> = {
+  'Northwind Retail': '2026-07-24T06:00:00',
+  'Ferro Manufacturing': '2026-07-24T02:00:00',
+  'Helix Health': '2026-07-24T09:00:00',
+  'Pinecrest Insurance': '2026-07-23T20:00:00',
+}
+
+export const hoursBetween = (from: string, to: string) => Math.max(0, (Date.parse(to) - Date.parse(from)) / 3_600_000)
+export const churnAgeHours = (a: ChurnAlert, now = CHURN_NOW) => hoursBetween(a.raisedAt, now)
+/** A case breaches when it is still unassigned past its severity SLA. */
+export const churnSlaBreached = (a: ChurnAlert, assigned: boolean, now = CHURN_NOW) =>
+  !assigned && churnAgeHours(a, now) > CHURN_SLA_HOURS[a.severity]
+export const fmtAge = (h: number) => (h < 1 ? `${Math.round(h * 60)}m` : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`)
 
 /**
  * Turn the static health portfolio into actionable churn alerts. An account
@@ -311,7 +332,39 @@ export function deriveChurnAlerts(asOf = '2026-07-24'): ChurnAlert[] {
     if (h.churn === 'High' || h.health < 60 || (days <= 30 && days >= 0 && h.churn !== 'Low')) severity = 'Critical'
     else if (h.churn === 'Medium' || h.health < 70 || h.usageTrend === 'down') severity = 'High'
 
-    out.push({ customer: h.customer, severity, health: h.health, churn: h.churn, arr: arrFor(h.customer), renewalDate: h.renewalDate, daysToRenewal: days, csm: h.csm, reasons })
+    out.push({ customer: h.customer, severity, health: h.health, churn: h.churn, arr: arrFor(h.customer), renewalDate: h.renewalDate, daysToRenewal: days, csm: h.csm, reasons, raisedAt: CHURN_RAISED[h.customer] ?? `${asOf}T12:00:00` })
   }
   return out.sort((a, b) => CHURN_SEVERITY_RANK[a.severity] - CHURN_SEVERITY_RANK[b.severity] || a.health - b.health)
+}
+
+/* ------------------------------------------------------------------ */
+/* Portfolio retention rollup                                          */
+/* ------------------------------------------------------------------ */
+/** Portfolio baseline for retention math (annualised, $). */
+export const RETENTION_BASE = { baseArr: 1_116_000, expansionArr: 132_000, contractionArr: 24_000 }
+
+/** Saves vs. losses over the trailing 6 months (count of accounts). */
+export interface OutcomeMonth { month: string; saved: number; lost: number }
+export const saveLossTrend: OutcomeMonth[] = [
+  { month: 'Feb', saved: 2, lost: 0 },
+  { month: 'Mar', saved: 1, lost: 1 },
+  { month: 'Apr', saved: 3, lost: 0 },
+  { month: 'May', saved: 2, lost: 1 },
+  { month: 'Jun', saved: 2, lost: 0 },
+  { month: 'Jul', saved: 1, lost: 1 },
+]
+
+export interface RetentionMetrics { base: number; lostArr: number; savedArr: number; nrr: number; gross: number }
+/**
+ * Net & gross revenue retention, adjusting the baseline by live case outcomes:
+ * accounts a rep marks Lost pull retention down, Saved ARR is credited back.
+ */
+export function retentionMetrics(cases: Record<string, { status: ChurnCaseStatus }>): RetentionMetrics {
+  const entries = Object.entries(cases)
+  const lostArr = entries.filter(([, c]) => c.status === 'Lost').reduce((s, [cust]) => s + renewalArr(cust), 0)
+  const savedArr = entries.filter(([, c]) => c.status === 'Saved').reduce((s, [cust]) => s + renewalArr(cust), 0)
+  const { baseArr, expansionArr, contractionArr } = RETENTION_BASE
+  const nrr = ((baseArr + expansionArr - contractionArr - lostArr) / baseArr) * 100
+  const gross = ((baseArr - contractionArr - lostArr) / baseArr) * 100
+  return { base: baseArr, lostArr, savedArr, nrr, gross }
 }

@@ -15,6 +15,8 @@ export interface ChurnCase {
   owner?: string
   notifiedChannels: string[]
   notes: { at: string; by: string; text: string }[]
+  escalatedTo?: string
+  escalatedAt?: string
 }
 
 interface SuccessState {
@@ -129,6 +131,9 @@ export function notifyChurnTeam(customer: string, channels: string[]) {
 export function addChurnNote(customer: string, text: string, by = 'You') {
   const cur = state.churn[customer] ?? DEFAULT_CASE
   patchCase(customer, { notes: [{ at: today(), by, text }, ...cur.notes] })
+}
+export function escalateChurn(customer: string, to: string) {
+  patchCase(customer, { escalatedTo: to, escalatedAt: today() })
 }
 
 function subscribe(fn: () => void): () => void {

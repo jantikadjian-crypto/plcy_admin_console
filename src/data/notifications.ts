@@ -86,6 +86,11 @@ export function primaryResponder(): string {
   return loadOnCall().find((o) => o.role === 'Primary' && o.active)?.name ?? '—'
 }
 
+/** Escalation owner (manager) from the current on-call assignment. */
+export function escalationManager(): string {
+  return loadOnCall().find((o) => o.role === 'Manager')?.name ?? 'Manager'
+}
+
 export interface RotationWeek {
   week: string
   primary: string
