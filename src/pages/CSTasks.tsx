@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ListTodo, AlarmClock, CheckCircle2, PlayCircle, Check, Plus, Pencil, Trash2, ArrowRight, Activity, Trophy } from 'lucide-react'
+import { ListTodo, AlarmClock, CheckCircle2, PlayCircle, Check, Plus, Pencil, Trash2, ArrowRight, Activity, Trophy, X, CalendarClock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -16,6 +16,8 @@ const PRIORITIES: TicketPriority[] = ['Urgent', 'High', 'Normal', 'Low']
 const CUSTOMERS = customerHealth.map((c) => c.customer)
 const STATUS_FILTERS = ['Open', 'Done', 'All']
 
+type EditTarget = CSTask | { preset: Partial<CSTask> } | null
+
 export function CSTasks() {
   const { tasks, plays } = useSuccess()
   const { can, logAction } = useSession()
@@ -24,8 +26,9 @@ export function CSTasks() {
   const [owner, setOwner] = useState('All')
   const [customer, setCustomer] = useState('All')
   const [play, setPlay] = useState<Play | null>(null)
-  const [editTask, setEditTask] = useState<CSTask | 'new' | null>(null)
+  const [editTask, setEditTask] = useState<EditTarget>(null)
   const [editPlay, setEditPlay] = useState<Play | 'new' | null>(null)
+  const [sel, setSel] = useState<Set<string>>(new Set())
 
   const open = tasks.filter((t) => t.status === 'open')
   const overdue = open.filter((t) => daysTo(t.due) < 0).length
@@ -40,6 +43,18 @@ export function CSTasks() {
 
   const complete = (id: string) => { toggleTask(id); logAction({ action: 'success.task.toggle', target: id, category: 'customer' }) }
   const claim = (id: string) => { assignCSTask(id, 'You'); logAction({ action: 'success.task.assign', target: `${id} → You`, category: 'customer' }) }
+
+  /* ---- selection + bulk ---- */
+  const toggleSel = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const clearSel = () => setSel(new Set())
+  const allVisibleSelected = rows.length > 0 && rows.every((t) => sel.has(t.id))
+  const toggleAll = () => setSel(allVisibleSelected ? new Set() : new Set(rows.map((t) => t.id)))
+  const selectedIds = [...sel].filter((id) => rows.some((t) => t.id === id))
+  const bulk = (fn: (id: string) => void, action: string, target: string) => {
+    selectedIds.forEach(fn)
+    logAction({ action, target: `${selectedIds.length} tasks · ${target}`, category: 'customer' })
+    clearSel()
+  }
 
   return (
     <div>
@@ -65,10 +80,15 @@ export function CSTasks() {
 
       <Card className="mb-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <CardTitle title="Task queue" subtitle="Check off a task when the play is run · click a row to edit" />
-          <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => setEditTask('new')} className="btn-primary px-3 py-1.5 text-xs"><Plus className="h-3.5 w-3.5" />New task</GatedButton>
+          <CardTitle title="Task queue" subtitle="Check off a task when the play is run · click a row to edit · select rows for bulk actions" />
+          <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => setEditTask({ preset: {} })} className="btn-primary px-3 py-1.5 text-xs"><Plus className="h-3.5 w-3.5" />New task</GatedButton>
         </div>
         <div className="mb-4 flex flex-wrap items-center gap-2">
+          {manage && (
+            <button onClick={toggleAll} className={clsx('flex h-4 w-4 items-center justify-center rounded border transition-colors', allVisibleSelected ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 hover:bg-slate-50')} aria-label="Select all">
+              {allVisibleSelected && <Check className="h-3 w-3" />}
+            </button>
+          )}
           <div className="flex flex-wrap gap-1.5">
             {STATUS_FILTERS.map((s) => (
               <button key={s} onClick={() => setStatus(s)} className={clsx('rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset transition-colors', status === s ? 'bg-brand-50 text-brand-700 ring-brand-600/20' : 'bg-slate-100 text-ink-700 ring-slate-500/10 hover:bg-slate-200/70')}>{s}</button>
@@ -87,15 +107,46 @@ export function CSTasks() {
           </select>
           <span className="ml-auto text-xs text-ink-400">{rows.length} shown</span>
         </div>
+
+        {/* Bulk action bar */}
+        {selectedIds.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-2">
+            <span className="text-xs font-semibold text-brand-700">{selectedIds.length} selected</span>
+            <span className="mx-1 h-4 w-px bg-brand-200" />
+            <select value="" onChange={(e) => e.target.value && bulk((id) => updateTask(id, { owner: e.target.value === '__unassign__' ? undefined : e.target.value }), 'success.task.bulk.assign', e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-ink-700">
+              <option value="">Reassign…</option>
+              <option value="__unassign__">Unassign</option>
+              {CS_REPS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <select value="" onChange={(e) => e.target.value && bulk((id) => updateTask(id, { priority: e.target.value as TicketPriority }), 'success.task.bulk.priority', e.target.value)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-ink-700">
+              <option value="">Set priority…</option>
+              {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <label className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-ink-600">
+              <CalendarClock className="h-3.5 w-3.5" />
+              <input type="date" onChange={(e) => e.target.value && bulk((id) => updateTask(id, { due: e.target.value }), 'success.task.bulk.reschedule', e.target.value)} className="bg-transparent text-xs outline-none" />
+            </label>
+            <button onClick={() => bulk((id) => updateTask(id, { status: 'done' }), 'success.task.bulk.complete', 'done')} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"><Check className="h-3.5 w-3.5" />Complete</button>
+            <button onClick={() => bulk((id) => deleteTask(id), 'success.task.bulk.delete', 'deleted')} className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" />Delete</button>
+            <button onClick={clearSel} className="ml-auto inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink-700"><X className="h-3.5 w-3.5" />Clear</button>
+          </div>
+        )}
+
         <div className="divide-y divide-slate-100">
           {rows.map((t) => {
             const p = playName(t.play)
             const d = daysTo(t.due)
             const isDone = t.status === 'done'
+            const checked = sel.has(t.id)
             return (
-              <div key={t.id} className="group flex items-start gap-3 py-3">
+              <div key={t.id} className={clsx('group flex items-start gap-3 py-3', checked && 'bg-brand-50/40')}>
+                {manage && (
+                  <button onClick={() => toggleSel(t.id)} className={clsx('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors', checked ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 hover:bg-slate-50')} aria-label="Select task">
+                    {checked && <Check className="h-3 w-3" />}
+                  </button>
+                )}
                 <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => complete(t.id)} aria-label="Toggle complete"
-                  className={clsx('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors', isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 hover:bg-slate-50')}>
+                  className={clsx('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors', isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 hover:bg-slate-50')}>
                   {isDone && <Check className="h-3.5 w-3.5" />}
                 </GatedButton>
                 <button onClick={() => manage && setEditTask(t)} className="min-w-0 flex-1 text-left">
@@ -130,21 +181,24 @@ export function CSTasks() {
           {plays.map((p) => (
             <div key={p.id} className="group relative rounded-xl border border-slate-200 p-4 transition-colors hover:border-brand-300 hover:bg-brand-50/30">
               <button onClick={() => setPlay(p)} className="block w-full text-left">
-                <div className="flex items-center gap-2 pr-8">
+                <div className="flex items-center gap-2 pr-16">
                   <PlayCircle className="h-4 w-4 shrink-0 text-violet-500" />
                   <span className="text-sm font-semibold text-ink-900">{p.title}</span>
                 </div>
                 <p className="mt-1 text-xs text-ink-500">{p.when}</p>
                 <p className="mt-2 text-xs text-ink-400">{p.steps.length} steps</p>
               </button>
-              {manage && <button onClick={() => setEditPlay(p)} className="absolute right-3 top-3 text-ink-300 opacity-0 transition-opacity hover:text-ink-600 group-hover:opacity-100" aria-label="Edit play"><Pencil className="h-3.5 w-3.5" /></button>}
+              <div className="absolute right-3 top-3 flex items-center gap-1">
+                {manage && <button onClick={() => setEditTask({ preset: { play: p.id, title: `Run “${p.title}”` } })} className="rounded-md p-1 text-ink-300 opacity-0 transition-opacity hover:bg-brand-50 hover:text-brand-600 group-hover:opacity-100" aria-label="Create task from play" title="Create task from this play"><Plus className="h-3.5 w-3.5" /></button>}
+                {manage && <button onClick={() => setEditPlay(p)} className="rounded-md p-1 text-ink-300 opacity-0 transition-opacity hover:bg-slate-100 hover:text-ink-600 group-hover:opacity-100" aria-label="Edit play"><Pencil className="h-3.5 w-3.5" /></button>}
+              </div>
             </div>
           ))}
         </div>
       </Card>
 
-      {play && <PlayDetail play={play} canEdit={manage} onEdit={() => { setEditPlay(play); setPlay(null) }} onClose={() => setPlay(null)} />}
-      {editTask && <TaskEditor task={editTask === 'new' ? null : editTask} plays={plays} onClose={() => setEditTask(null)} logAction={logAction} />}
+      {play && <PlayDetail play={play} canEdit={manage} onEdit={() => { setEditPlay(play); setPlay(null) }} onCreateTask={() => { setEditTask({ preset: { play: play.id, title: `Run “${play.title}”` } }); setPlay(null) }} onClose={() => setPlay(null)} />}
+      {editTask && <TaskEditor task={'id' in editTask ? editTask : null} preset={'id' in editTask ? undefined : editTask.preset} plays={plays} onClose={() => setEditTask(null)} logAction={logAction} />}
       {editPlay && <PlayEditor play={editPlay === 'new' ? null : editPlay} onClose={() => setEditPlay(null)} logAction={logAction} />}
     </div>
   )
@@ -161,11 +215,16 @@ function FlowChip({ icon: Icon, label, sub, tone }: { icon: typeof Activity; lab
   )
 }
 
-function PlayDetail({ play, canEdit, onEdit, onClose }: { play: Play; canEdit: boolean; onEdit: () => void; onClose: () => void }) {
+function PlayDetail({ play, canEdit, onEdit, onCreateTask, onClose }: { play: Play; canEdit: boolean; onEdit: () => void; onCreateTask: () => void; onClose: () => void }) {
   return (
     <Modal open onClose={onClose} title={play.title} subtitle={`Run when: ${play.when}`} maxWidth="max-w-lg"
       headerRight={canEdit ? <button onClick={onEdit} className="btn-secondary px-2.5 py-1 text-xs"><Pencil className="h-3.5 w-3.5" />Edit</button> : undefined}
-      footer={<button className="btn-secondary" onClick={onClose}>Close</button>}>
+      footer={
+        <div className="flex items-center justify-between">
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+          {canEdit && <button className="btn-primary" onClick={onCreateTask}><Plus className="h-4 w-4" />Create task from this play</button>}
+        </div>
+      }>
       <ol className="space-y-2">
         {play.steps.map((s, i) => (
           <li key={i} className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-ink-700">
@@ -179,16 +238,17 @@ function PlayDetail({ play, canEdit, onEdit, onClose }: { play: Play; canEdit: b
 }
 
 /* ------------------------------------------------------------------ */
-/* Task editor (create / edit)                                         */
+/* Task editor (create / edit / create-from-play)                      */
 /* ------------------------------------------------------------------ */
-function TaskEditor({ task, plays, onClose, logAction }: { task: CSTask | null; plays: Play[]; onClose: () => void; logAction: (i: { action: string; target: string; category?: string }) => void }) {
+function TaskEditor({ task, preset, plays, onClose, logAction }: { task: CSTask | null; preset?: Partial<CSTask>; plays: Play[]; onClose: () => void; logAction: (i: { action: string; target: string; category?: string }) => void }) {
   const editing = !!task
-  const [customer, setCustomer] = useState(task?.customer ?? CUSTOMERS[0])
-  const [title, setTitle] = useState(task?.title ?? '')
-  const [playId, setPlayId] = useState(task?.play ?? '')
-  const [priority, setPriority] = useState<TicketPriority>(task?.priority ?? 'Normal')
-  const [due, setDue] = useState(task?.due ?? dueInDays(7))
-  const [owner, setOwner] = useState(task?.owner ?? '')
+  const base = task ?? preset ?? {}
+  const [customer, setCustomer] = useState(base.customer ?? CUSTOMERS[0])
+  const [title, setTitle] = useState(base.title ?? '')
+  const [playId, setPlayId] = useState(base.play ?? '')
+  const [priority, setPriority] = useState<TicketPriority>(base.priority ?? 'Normal')
+  const [due, setDue] = useState(base.due ?? dueInDays(7))
+  const [owner, setOwner] = useState(base.owner ?? '')
   const valid = title.trim().length > 0
 
   const save = () => {
@@ -201,7 +261,7 @@ function TaskEditor({ task, plays, onClose, logAction }: { task: CSTask | null; 
   const remove = () => { if (task) { deleteTask(task.id); logAction({ action: 'success.task.delete', target: task.id, category: 'customer' }); onClose() } }
 
   return (
-    <Modal open onClose={onClose} title={editing ? `Edit ${task!.id}` : 'New task'} subtitle={editing ? task!.customer : 'Create a follow-up commitment'} maxWidth="max-w-lg"
+    <Modal open onClose={onClose} title={editing ? `Edit ${task!.id}` : 'New task'} subtitle={editing ? task!.customer : preset?.play ? 'From a playbook' : 'Create a follow-up commitment'} maxWidth="max-w-lg"
       footer={
         <div className="flex w-full items-center justify-between">
           {editing ? <button onClick={remove} className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" />Delete</button> : <span />}
