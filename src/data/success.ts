@@ -300,9 +300,13 @@ const CHURN_RAISED: Record<string, string> = {
 
 export const hoursBetween = (from: string, to: string) => Math.max(0, (Date.parse(to) - Date.parse(from)) / 3_600_000)
 export const churnAgeHours = (a: ChurnAlert, now = CHURN_NOW) => hoursBetween(a.raisedAt, now)
-/** A case breaches when it is still unassigned past its severity SLA. */
-export const churnSlaBreached = (a: ChurnAlert, assigned: boolean, now = CHURN_NOW) =>
-  !assigned && churnAgeHours(a, now) > CHURN_SLA_HOURS[a.severity]
+/**
+ * A case breaches when its owning CSM hasn't responded past the severity SLA.
+ * The account's CSM owns it from the moment it's raised; "responded" means the
+ * case has moved off New (acknowledged / notified / assigned / worked).
+ */
+export const churnSlaBreached = (a: ChurnAlert, responded: boolean, now = CHURN_NOW) =>
+  !responded && churnAgeHours(a, now) > CHURN_SLA_HOURS[a.severity]
 export const fmtAge = (h: number) => (h < 1 ? `${Math.round(h * 60)}m` : h < 48 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`)
 
 /**
