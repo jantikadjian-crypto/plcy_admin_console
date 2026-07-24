@@ -7,7 +7,7 @@ import { useSession } from '@/context/Session'
 import {
   customerHealth, churnTone, healthTone, usageArrow,
   HEALTH_WEIGHTS, healthScores, healthComposite, dimTone,
-  contactsByCustomer, FEATURES, featureAdoption, playById,
+  contactsByCustomer, FEATURES, featureAdoption,
 } from '@/data/success'
 import type { CustomerHealth as CH, ActivityType } from '@/data/success'
 import { activityTone } from '@/data/success'
@@ -76,7 +76,7 @@ export function CustomerHealthTab() {
 /* Account 360 — the full drill-down                                   */
 /* ------------------------------------------------------------------ */
 function Account360({ c, onClose }: { c: CH; onClose: () => void }) {
-  const { tickets, activities, tasks } = useSuccess()
+  const { tickets, activities, tasks, plays } = useSuccess()
   const { can, logAction } = useSession()
   const [note, setNote] = useState('')
   const [noteType, setNoteType] = useState<ActivityType>('note')
@@ -174,7 +174,7 @@ function Account360({ c, onClose }: { c: CH; onClose: () => void }) {
             <h4 className="mb-2 text-sm font-semibold text-ink-900">Open plays &amp; tasks</h4>
             <div className="space-y-1.5">
               {openTasks.map((t) => {
-                const play = playById(t.play)
+                const play = plays.find((p) => p.id === t.play)
                 return (
                   <div key={t.id} className="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2">
                     <GatedButton cap="customer.manage" showLock={false} disabled={!can('customer.manage')}

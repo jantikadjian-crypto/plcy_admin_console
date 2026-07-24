@@ -4,10 +4,10 @@
  * pattern. Customer health is a static seed (read directly from success.ts).
  */
 import { useSyncExternalStore } from 'react'
-import { ticketSeed, renewalSeed, activitySeed, taskSeed } from './success'
-import type { Ticket, TicketStatus, Renewal, RenewalStage, Activity, ActivityType, CSTask, ChurnCaseStatus } from './success'
+import { ticketSeed, renewalSeed, activitySeed, taskSeed, RECOMMENDED_PLAYS } from './success'
+import type { Ticket, TicketStatus, Renewal, RenewalStage, Activity, ActivityType, CSTask, ChurnCaseStatus, Play } from './success'
 
-const KEY = 'plcy.success.v3'
+const KEY = 'plcy.success.v4'
 
 /** Per-account churn-case working state, keyed by customer. */
 export interface ChurnCase {
@@ -25,21 +25,24 @@ interface SuccessState {
   activities: Activity[]
   tasks: CSTask[]
   churn: Record<string, ChurnCase>
+  plays: Play[]
 }
 
-const seed = (): SuccessState => ({ tickets: ticketSeed, renewals: renewalSeed, activities: activitySeed, tasks: taskSeed, churn: {} })
+const seed = (): SuccessState => ({ tickets: ticketSeed, renewals: renewalSeed, activities: activitySeed, tasks: taskSeed, churn: {}, plays: RECOMMENDED_PLAYS })
 
 function mergeSeeds(stored: SuccessState): SuccessState {
   const tIds = new Set(stored.tickets.map((t) => t.id))
   const rKeys = new Set(stored.renewals.map((r) => r.customer))
   const aIds = new Set((stored.activities ?? []).map((a) => a.id))
   const cIds = new Set((stored.tasks ?? []).map((c) => c.id))
+  const pIds = new Set((stored.plays ?? []).map((p) => p.id))
   return {
     tickets: [...ticketSeed.filter((t) => !tIds.has(t.id)), ...stored.tickets],
     renewals: [...renewalSeed.filter((r) => !rKeys.has(r.customer)), ...stored.renewals],
     activities: [...activitySeed.filter((a) => !aIds.has(a.id)), ...(stored.activities ?? [])],
     tasks: [...taskSeed.filter((c) => !cIds.has(c.id)), ...(stored.tasks ?? [])],
     churn: stored.churn ?? {},
+    plays: [...(stored.plays ?? []), ...RECOMMENDED_PLAYS.filter((p) => !pIds.has(p.id))],
   }
 }
 
@@ -100,6 +103,27 @@ export function toggleTask(id: string) {
 }
 export function assignCSTask(id: string, owner: string) {
   state = { ...state, tasks: state.tasks.map((t) => (t.id === id ? { ...t, owner } : t)) }
+  emit()
+}
+export function updateTask(id: string, patch: Partial<CSTask>) {
+  state = { ...state, tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)) }
+  emit()
+}
+export function deleteTask(id: string) {
+  state = { ...state, tasks: state.tasks.filter((t) => t.id !== id) }
+  emit()
+}
+
+/* -------- Playbooks -------- */
+let playSeq = 900
+export function addPlay(p: Omit<Play, 'id'> & { id?: string }): string {
+  const id = p.id ?? `play-${++playSeq}`
+  state = { ...state, plays: [...state.plays, { ...p, id }] }
+  emit()
+  return id
+}
+export function updatePlay(id: string, patch: Partial<Play>) {
+  state = { ...state, plays: state.plays.map((p) => (p.id === id ? { ...p, ...patch } : p)) }
   emit()
 }
 
