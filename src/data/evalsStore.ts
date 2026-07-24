@@ -6,26 +6,30 @@
  * in sync.
  */
 import { useSyncExternalStore } from 'react'
-import { redTeamSeed, evalRuns as runSeed } from './evals'
-import type { RedTeamCampaign, EvalRun, Finding, FindingStatus } from './evals'
+import { redTeamSeed, evalRuns as runSeed, reviewSeed } from './evals'
+import type { RedTeamCampaign, EvalRun, Finding, FindingStatus, ReviewItem, ReviewLabel } from './evals'
 
 const KEY = 'plcy.evals.v1'
 
 interface EvalsState {
   campaigns: RedTeamCampaign[]
   runs: EvalRun[]
+  reviews: ReviewItem[]
 }
 
 function seed(): EvalsState {
-  return { campaigns: redTeamSeed, runs: runSeed }
+  return { campaigns: redTeamSeed, runs: runSeed, reviews: reviewSeed }
 }
 
 function mergeSeeds(stored: EvalsState): EvalsState {
   const campIds = new Set(stored.campaigns.map((c) => c.id))
   const runIds = new Set(stored.runs.map((r) => r.id))
+  const steReviews = stored.reviews ?? []
+  const revIds = new Set(steReviews.map((r) => r.id))
   return {
     campaigns: [...redTeamSeed.filter((c) => !campIds.has(c.id)), ...stored.campaigns],
     runs: [...runSeed.filter((r) => !runIds.has(r.id)), ...stored.runs],
+    reviews: [...reviewSeed.filter((r) => !revIds.has(r.id)), ...steReviews],
   }
 }
 
@@ -93,6 +97,14 @@ export function upsertRun(r: EvalRun) {
   const i = state.runs.findIndex((x) => x.id === r.id)
   const runs = i === -1 ? [r, ...state.runs] : state.runs.map((x) => (x.id === r.id ? r : x))
   state = { ...state, runs }
+  emit()
+}
+
+export function labelReview(id: string, label: ReviewLabel, reviewer = 'You') {
+  state = {
+    ...state,
+    reviews: state.reviews.map((r) => (r.id === id ? { ...r, label, reviewer: label === 'unreviewed' ? undefined : reviewer } : r)),
+  }
   emit()
 }
 

@@ -5,7 +5,7 @@ import {
   Package, Code2, SlidersHorizontal,
   Globe, ShieldCheck, ArrowLeftRight, Network, Inbox,
   Lock, Fingerprint, ScrollText, PackageCheck,
-  Target, Swords, FlaskConical, Crosshair,
+  Target, Swords, FlaskConical, Crosshair, ClipboardCheck,
 } from 'lucide-react'
 import { Hub } from '@/components/Hub'
 import Billing from './Billing'
@@ -38,6 +38,8 @@ import { Efficacy } from './Efficacy'
 import { RedTeam } from './RedTeam'
 import { AttackLibrary } from './AttackLibrary'
 import { EvalSuites } from './EvalSuites'
+import { ModelScorecards } from './ModelScorecards'
+import { ReviewQueue } from './ReviewQueue'
 
 export function BillingHub() {
   return (
@@ -111,8 +113,10 @@ export function EvaluationsHub() {
       defaultKey="efficacy"
       tabs={[
         { key: 'efficacy', label: 'Efficacy', icon: Target, element: <Efficacy /> },
+        { key: 'review', label: 'Review Queue', icon: ClipboardCheck, element: <ReviewQueue /> },
         { key: 'redteam', label: 'Red-Team', icon: Swords, element: <RedTeam /> },
         { key: 'library', label: 'Attack Library', icon: Crosshair, element: <AttackLibrary /> },
+        { key: 'scorecards', label: 'Model Scorecards', icon: Bot, element: <ModelScorecards /> },
         { key: 'suites', label: 'Eval Suites', icon: FlaskConical, element: <EvalSuites /> },
       ]}
     />

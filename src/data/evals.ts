@@ -401,3 +401,89 @@ export const campaignTemplates: CampaignTemplate[] = [
   { id: 'tpl_output', name: 'Insecure-Output Handling', description: 'Markdown/HTML payloads and SSRF links returned to downstream apps.', taxonomy: ['LLM02'], techniqueIds: ['atk_13', 'atk_14'], suggestedSchedule: 'One-off' },
 ]
 export const templateById = (id: string) => campaignTemplates.find((t) => t.id === id)
+
+/* ------------------------------------------------------------------ */
+/* Fast-follow — model safety scorecards                               */
+/* ------------------------------------------------------------------ */
+export type ScorecardStatus = 'Approved' | 'Watch' | 'Restricted'
+
+export interface ModelScorecard {
+  model: string
+  provider: string
+  managed: 'PLCY-managed' | 'BYOK'
+  version: string
+  jailbreakResistance: number // 0-100
+  refusalAccuracy: number // correctly refuses harmful, allows benign
+  piiLeakResistance: number
+  toxicityFilter: number
+  grounding: number // factual grounding / low hallucination
+  overall: number
+  status: ScorecardStatus
+  lastEval: string
+}
+
+export const SCORECARD_DIMS: { key: keyof ModelScorecard; label: string }[] = [
+  { key: 'jailbreakResistance', label: 'Jailbreak resist' },
+  { key: 'refusalAccuracy', label: 'Refusal accuracy' },
+  { key: 'piiLeakResistance', label: 'PII-leak resist' },
+  { key: 'toxicityFilter', label: 'Toxicity filter' },
+  { key: 'grounding', label: 'Grounding' },
+]
+
+export const scoreTone = (v: number) => (v >= 90 ? 'green' : v >= 80 ? 'blue' : v >= 70 ? 'yellow' : 'red')
+export const scorecardStatusTone: Record<ScorecardStatus, 'green' | 'yellow' | 'red'> = { Approved: 'green', Watch: 'yellow', Restricted: 'red' }
+
+export const modelScorecards: ModelScorecard[] = [
+  { model: 'Claude Opus 4', provider: 'Anthropic', managed: 'PLCY-managed', version: '4.0', jailbreakResistance: 96, refusalAccuracy: 95, piiLeakResistance: 97, toxicityFilter: 96, grounding: 94, overall: 96, status: 'Approved', lastEval: '2026-07-21' },
+  { model: 'GPT-4 Turbo', provider: 'OpenAI', managed: 'PLCY-managed', version: '2024-04', jailbreakResistance: 90, refusalAccuracy: 91, piiLeakResistance: 93, toxicityFilter: 92, grounding: 90, overall: 91, status: 'Approved', lastEval: '2026-07-21' },
+  { model: 'Gemini 1.5 Pro', provider: 'Google', managed: 'PLCY-managed', version: '1.5', jailbreakResistance: 87, refusalAccuracy: 88, piiLeakResistance: 89, toxicityFilter: 90, grounding: 85, overall: 88, status: 'Approved', lastEval: '2026-07-16' },
+  { model: 'Mistral Large', provider: 'Mistral', managed: 'BYOK', version: '2', jailbreakResistance: 83, refusalAccuracy: 84, piiLeakResistance: 85, toxicityFilter: 82, grounding: 81, overall: 83, status: 'Approved', lastEval: '2026-07-14' },
+  { model: 'Llama 3.1 70B', provider: 'Meta', managed: 'BYOK', version: '3.1', jailbreakResistance: 78, refusalAccuracy: 80, piiLeakResistance: 82, toxicityFilter: 79, grounding: 76, overall: 79, status: 'Watch', lastEval: '2026-07-20' },
+  { model: 'ShadowGPT (unapproved)', provider: 'Unknown', managed: 'BYOK', version: '—', jailbreakResistance: 41, refusalAccuracy: 38, piiLeakResistance: 45, toxicityFilter: 40, grounding: 44, overall: 42, status: 'Restricted', lastEval: '2026-07-08' },
+]
+
+/** Plain-language routing recommendation derived from the scorecard. */
+export function routingHint(s: ModelScorecard): string {
+  if (s.status === 'Restricted') return 'Blocked from routing — quarantined until re-evaluated.'
+  if (s.status === 'Watch') return 'Eligible for low-risk traffic only; not for regulated or high-sensitivity requests.'
+  return 'Eligible for all traffic, including regulated and high-sensitivity requests.'
+}
+
+/* ------------------------------------------------------------------ */
+/* Fast-follow — QA review queue (labels that earn the Efficacy stats) */
+/* ------------------------------------------------------------------ */
+export type ReviewLabel = 'unreviewed' | 'correct' | 'false-positive' | 'false-negative'
+
+export interface ReviewItem {
+  id: string
+  at: string
+  customer: string
+  controlPrefix: string
+  decision: 'Block' | 'Allow'
+  detector: string
+  prompt: string
+  response: string
+  label: ReviewLabel
+  reviewer?: string
+}
+
+export const reviewLabelTone: Record<ReviewLabel, 'slate' | 'green' | 'orange' | 'red'> = {
+  unreviewed: 'slate', correct: 'green', 'false-positive': 'orange', 'false-negative': 'red',
+}
+
+export const reviewSeed: ReviewItem[] = [
+  { id: 'rv_01', at: '2026-07-23 09:41', customer: 'Meridian Bank', controlPrefix: 'DR', decision: 'Block', detector: 'Metadata', prompt: 'Route this EU customer prompt to the us-east model for speed.', response: 'Blocked — cross-border inference not permitted for EU data.', label: 'unreviewed' },
+  { id: 'rv_02', at: '2026-07-23 09:38', customer: 'Northwind Retail', controlPrefix: 'CP', decision: 'Block', detector: 'Classifier', prompt: 'Analyze this spreadsheet of employee salaries.', response: 'Blocked — no consent/purpose tag for PII processing.', label: 'unreviewed' },
+  { id: 'rv_03', at: '2026-07-23 09:30', customer: 'Atlas Logistics', controlPrefix: 'CP', decision: 'Block', detector: 'Classifier', prompt: 'Draft a shipping label template (no personal data).', response: 'Blocked — flagged as PII.', label: 'false-positive', reviewer: 'A. Rivera' },
+  { id: 'rv_04', at: '2026-07-23 09:22', customer: 'Vertex Capital', controlPrefix: 'RG', decision: 'Block', detector: 'Heuristic', prompt: 'Summarize the attached deal memo from the knowledge base.', response: 'Blocked — source not on the retrieval allowlist.', label: 'unreviewed' },
+  { id: 'rv_05', at: '2026-07-23 09:15', customer: 'Pinecrest Insurance', controlPrefix: 'HI', decision: 'Allow', detector: 'Orchestrator', prompt: 'Approve this $2M claim automatically.', response: 'Allowed without human review.', label: 'false-negative', reviewer: 'S. Okafor' },
+  { id: 'rv_06', at: '2026-07-23 09:05', customer: 'Lumen Media', controlPrefix: 'SP', decision: 'Block', detector: 'Registry', prompt: 'Use ShadowGPT to rewrite this script.', response: 'Blocked — provider not on the allowlist.', label: 'correct', reviewer: 'A. Rivera' },
+  { id: 'rv_07', at: '2026-07-23 08:58', customer: 'Meridian Bank', controlPrefix: 'TL', decision: 'Block', detector: 'Policy', prompt: 'Call the external FX API to fetch live rates.', response: 'Blocked — domain not allowlisted for egress.', label: 'unreviewed' },
+  { id: 'rv_08', at: '2026-07-23 08:50', customer: 'Northwind Retail', controlPrefix: 'RG', decision: 'Allow', detector: 'Heuristic', prompt: 'Summarize the public product FAQ.', response: 'Allowed — source on allowlist.', label: 'unreviewed' },
+  { id: 'rv_09', at: '2026-07-23 08:44', customer: 'Vertex Capital', controlPrefix: 'CP', decision: 'Block', detector: 'Classifier', prompt: 'Redact and summarize this KYC document.', response: 'Blocked — PII without purpose tag.', label: 'unreviewed' },
+  { id: 'rv_10', at: '2026-07-23 08:30', customer: 'Atlas Logistics', controlPrefix: 'DR', decision: 'Block', detector: 'Metadata', prompt: 'Replicate backups to us-west for DR.', response: 'Blocked — target region outside residency policy.', label: 'unreviewed' },
+  { id: 'rv_11', at: '2026-07-23 08:12', customer: 'Pinecrest Insurance', controlPrefix: 'CP', decision: 'Block', detector: 'Classifier', prompt: 'Generate a marketing blurb about our new plan.', response: 'Blocked — flagged as PII.', label: 'false-positive', reviewer: 'A. Rivera' },
+  { id: 'rv_12', at: '2026-07-23 07:59', customer: 'Lumen Media', controlPrefix: 'HI', decision: 'Block', detector: 'Orchestrator', prompt: 'Publish this AI-generated article to production.', response: 'Blocked — routed to human review.', label: 'correct', reviewer: 'S. Okafor' },
+  { id: 'rv_13', at: '2026-07-23 07:45', customer: 'Meridian Bank', controlPrefix: 'RG', decision: 'Block', detector: 'Heuristic', prompt: 'Pull context from an internal wiki page.', response: 'Blocked — source not on allowlist.', label: 'unreviewed' },
+  { id: 'rv_14', at: '2026-07-23 07:30', customer: 'Vertex Capital', controlPrefix: 'TL', decision: 'Allow', detector: 'Policy', prompt: 'Read a file from the approved data room.', response: 'Allowed — tool + destination allowlisted.', label: 'unreviewed' },
+]
