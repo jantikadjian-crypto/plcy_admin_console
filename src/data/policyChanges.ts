@@ -125,6 +125,21 @@ export const changeRequestSeed: ChangeRequest[] = [
     history: [{ at: '2026-07-22', who: 'R. Alvarez', text: 'Opened change request' }, { at: '2026-07-23', who: 'R. Alvarez', text: 'Submitted for review' }],
   },
   {
+    id: 'CR-109', packId: 'P2', packName: 'Consent & Purpose Gate', title: 'Geo-restrict consent capture to request region',
+    summary: 'Require consent records to be captured and stored in the request region — touches the same lawful-basis control CR-108 is changing.',
+    author: 'T. Osei', createdAt: '2026-07-23', status: 'Draft', fromVersion: '1.0', toVersion: '1.1', risk: 'Medium',
+    changes: [
+      { op: 'modify', controlId: 'CP-02', controlName: 'Require lawful basis or consent', field: 'obligation', before: 'Reject if missing', after: 'Reject if missing OR consent stored outside request region' },
+    ],
+    impact: {
+      instances: 42, requestsPerDay: 1_820_000, risk: 'Medium',
+      decisionDelta: [{ label: 'Allow', before: 88, after: 86 }, { label: 'Deny', before: 6, after: 8 }, { label: 'Transform', before: 6, after: 6 }],
+      notes: ['Overlaps CR-108 on CP-02 — reconcile before either ships.'],
+    },
+    reviews: [{ approver: 'D. Whitfield', role: 'Policy Lead', decision: 'pending' }, { approver: 'Priya Nair', role: 'Security Manager', decision: 'pending' }],
+    history: [{ at: '2026-07-23', who: 'T. Osei', text: 'Opened change request (draft)' }],
+  },
+  {
     id: 'CR-107', packId: 'F1', packName: 'GDPR Privacy Pack', title: 'Add EU AI Act transparency logging',
     summary: 'Compose an additional OTel logging obligation so GDPR-scoped flows also emit EU AI Act transparency evidence.',
     author: 'M. Chen', createdAt: '2026-07-20', status: 'Approved', fromVersion: '1.0', toVersion: '1.1', risk: 'Low',
@@ -208,6 +223,52 @@ export const changeRequestSeed: ChangeRequest[] = [
 ]
 
 /* ------------------------------------------------------------------ */
+/* Authoring — defaults, version bumps, impact estimation              */
+/* ------------------------------------------------------------------ */
+/** The standard change-approval board a new CR routes to. */
+export const DEFAULT_REVIEWERS: Review[] = [
+  { approver: 'D. Whitfield', role: 'Policy Lead', decision: 'pending' },
+  { approver: 'Priya Nair', role: 'Security Manager', decision: 'pending' },
+]
+
+/** Bump the minor version (1.2 → 1.3). */
+export const bumpMinor = (v: string) => {
+  const [maj, min = '0'] = v.split('.')
+  return `${maj}.${Number(min) + 1}`
+}
+
+/** Rough per-pack production footprint, for a first-pass impact estimate. */
+export const packAdoption: Record<string, { instances: number; requestsPerDay: number }> = {
+  P2: { instances: 42, requestsPerDay: 1_820_000 },
+  P5: { instances: 61, requestsPerDay: 2_600_000 },
+  P10: { instances: 61, requestsPerDay: 2_600_000 },
+  F1: { instances: 55, requestsPerDay: 2_300_000 },
+  F13: { instances: 18, requestsPerDay: 540_000 },
+}
+
+/**
+ * A first-pass impact estimate from the change scope alone — restrictive edits
+ * (adds/modifies) nudge decisions from Allow toward Deny. Refined by a full
+ * dry-run before apply.
+ */
+export function estimateImpact(packId: string, changes: ChangeLine[], risk: Risk): Impact {
+  const a = packAdoption[packId] ?? { instances: 20, requestsPerDay: 800_000 }
+  const restrictive = changes.filter((c) => c.op === 'add' || c.op === 'modify').length
+  const denyShift = Math.min(8, restrictive * 2)
+  return {
+    instances: a.instances,
+    requestsPerDay: a.requestsPerDay,
+    risk,
+    decisionDelta: [
+      { label: 'Allow', before: 90, after: 90 - denyShift },
+      { label: 'Deny', before: 6, after: 6 + denyShift },
+      { label: 'Transform', before: 4, after: 4 },
+    ],
+    notes: ['Estimated from change scope — run a full dry-run before applying.'],
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 export const changeLineTone = (op: ChangeLine['op']) => (op === 'add' ? 'green' : op === 'remove' ? 'red' : 'blue') as 'green' | 'red' | 'blue'
@@ -217,3 +278,24 @@ export const changeLineSign = (op: ChangeLine['op']) => (op === 'add' ? '+' : op
 export const isCROpen = (s: CRStatus) => s !== 'Applied' && s !== 'Rejected' && s !== 'Rolled back'
 /** Approval is complete when every reviewer has approved. */
 export const allApproved = (cr: ChangeRequest) => cr.reviews.length > 0 && cr.reviews.every((r) => r.decision === 'approved')
+
+/**
+ * Conflicts: other *open* change requests that touch a control this CR also
+ * touches. Two in-flight edits to the same control race each other, so the
+ * board should reconcile them before either ships.
+ */
+export function findConflicts(cr: ChangeRequest, all: ChangeRequest[]): { controlId: string; others: { id: string; status: CRStatus }[] }[] {
+  const mine = new Set(cr.changes.map((c) => c.controlId))
+  const map = new Map<string, { id: string; status: CRStatus }[]>()
+  for (const other of all) {
+    if (other.id === cr.id || !isCROpen(other.status)) continue
+    for (const ch of other.changes) {
+      if (!mine.has(ch.controlId)) continue
+      const arr = map.get(ch.controlId) ?? []
+      if (!arr.some((o) => o.id === other.id)) arr.push({ id: other.id, status: other.status })
+      map.set(ch.controlId, arr)
+    }
+  }
+  return [...map.entries()].map(([controlId, others]) => ({ controlId, others }))
+}
+export const hasConflict = (cr: ChangeRequest, all: ChangeRequest[]) => findConflicts(cr, all).length > 0

@@ -5,8 +5,8 @@
  * needs to hold the change requests themselves.
  */
 import { useSyncExternalStore } from 'react'
-import { changeRequestSeed, allApproved } from './policyChanges'
-import type { ChangeRequest, CRStatus, Review } from './policyChanges'
+import { changeRequestSeed, allApproved, estimateImpact, DEFAULT_REVIEWERS } from './policyChanges'
+import type { ChangeRequest, CRStatus, Review, ChangeLine, Risk } from './policyChanges'
 
 const KEY = 'plcy.policychanges.v1'
 
@@ -51,6 +51,35 @@ function patch(id: string, fn: (cr: ChangeRequest) => ChangeRequest) {
   emit()
 }
 const log = (cr: ChangeRequest, who: string, text: string): ChangeRequest => ({ ...cr, history: [...cr.history, { at: today(), who, text }] })
+
+export interface NewCRInput {
+  packId: string
+  packName: string
+  title: string
+  summary: string
+  risk: Risk
+  fromVersion: string
+  toVersion: string
+  changes: ChangeLine[]
+}
+
+let crSeq = 200 // stays clear of the seeded CR-1xx ids
+export function addChangeRequest(input: NewCRInput): string {
+  const id = `CR-${++crSeq}`
+  const cr: ChangeRequest = {
+    id,
+    ...input,
+    author: 'You',
+    createdAt: today(),
+    status: 'Draft',
+    impact: estimateImpact(input.packId, input.changes, input.risk),
+    reviews: DEFAULT_REVIEWERS.map((r) => ({ ...r })),
+    history: [{ at: today(), who: 'You', text: 'Opened change request (draft)' }],
+  }
+  state = { ...state, crs: [cr, ...state.crs] }
+  emit()
+  return id
+}
 
 export function submitForReview(id: string) {
   patch(id, (cr) => log({ ...cr, status: 'In review' }, 'You', 'Submitted for review'))
