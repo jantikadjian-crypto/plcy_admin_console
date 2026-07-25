@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ShieldAlert, Hourglass, Send, DollarSign, Siren, BellRing, PlayCircle, Check, TrendingUp, Clock, ArrowUpRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ShieldAlert, Hourglass, Send, DollarSign, Siren, BellRing, PlayCircle, Check, TrendingUp, Clock, ArrowUpRight, CalendarClock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Badge } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -8,13 +9,13 @@ import {
   deriveChurnAlerts, churnSeverityTone, churnStatusTone, isChurnClosed,
   CHURN_STATUSES, CS_REPS, CHURN_NOTIFY_CHANNELS, healthTone, churnTone,
   CHURN_NOW, CHURN_SLA_HOURS, churnAgeHours, churnSlaBreached, fmtAge,
-  retentionMetrics, saveLossTrend,
+  retentionMetrics, saveLossTrend, renewalSignal, stageTone, isRenewalOpen, isRenewalAtRisk,
 } from '@/data/success'
-import type { ChurnAlert, ChurnCaseStatus } from '@/data/success'
+import type { ChurnAlert, ChurnCaseStatus, Renewal, RenewalStage, RenewalSignal, CSTask } from '@/data/success'
 import { escalationManager } from '@/data/notifications'
 import {
   useSuccess, churnCaseFor, assignChurnOwner, setChurnStatus,
-  notifyChurnTeam, addChurnNote, addTask, addActivity, escalateChurn,
+  notifyChurnTeam, addChurnNote, addTask, addActivity, escalateChurn, setRenewalStage,
 } from '@/data/successStore'
 import type { ChurnCase } from '@/data/successStore'
 
@@ -22,7 +23,7 @@ const AS_OF = '2026-07-24'
 const dueInDays = (n: number) => new Date(Date.parse(AS_OF) + n * 86400000).toISOString().slice(0, 10)
 
 export function ChurnWatch() {
-  const { churn, tasks } = useSuccess()
+  const { churn, tasks, renewals } = useSuccess()
   const { can, logAction } = useSession()
   const alerts = deriveChurnAlerts(AS_OF)
 
@@ -60,6 +61,7 @@ export function ChurnWatch() {
         <div className="space-y-3">
           {alerts.map((a) => (
             <ChurnCard key={a.customer} alert={a} kase={caseOf(a.customer)} can={can} logAction={logAction}
+              renewal={renewals.find((r) => r.customer === a.customer)} tasks={tasks}
               hasFollowUp={tasks.some((t) => t.customer === a.customer && t.play === 'save' && t.status === 'open')} />
           ))}
           {alerts.length === 0 && <p className="py-6 text-center text-sm text-ink-400">No accounts are tripping the churn watch. 🎉</p>}
@@ -117,14 +119,76 @@ function RetentionTile({ label, value, tone, hint, icon: Icon }: { label: string
 }
 
 /* ------------------------------------------------------------------ */
+/* The renewal a churn case is protecting                              */
+/* ------------------------------------------------------------------ */
+/**
+ * A churn case only matters because there's revenue behind it. This ties the
+ * case to its renewal: the stage on record, the probability with this case
+ * folded in, and — when the pipeline reads rosier than the evidence — a way to
+ * correct it without leaving the churn desk.
+ */
+function ProtectedRenewal({ customer, renewal, signal, canManage, onAlign }: {
+  customer: string
+  renewal: Renewal
+  signal: RenewalSignal
+  canManage: boolean
+  onAlign: () => void
+}) {
+  const settled = !isRenewalOpen(renewal.stage)
+  return (
+    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-ink-500">
+        <CalendarClock className="h-3.5 w-3.5" />Protecting renewal
+      </span>
+      <Badge tone={stageTone[renewal.stage]} dot>{renewal.stage}</Badge>
+      <span className="text-xs tabular-nums text-ink-600">${(renewal.arr / 1000).toFixed(0)}k · {renewal.renewalDate}</span>
+      {!settled && (
+        <span className="flex items-center gap-1.5 text-xs text-ink-600">
+          <span className="h-1.5 w-12 overflow-hidden rounded-full bg-slate-100">
+            <span className={clsx('block h-full', signal.delta < 0 ? 'bg-amber-500' : 'bg-brand-500')} style={{ width: `${signal.adjusted}%` }} />
+          </span>
+          <span className="tabular-nums">{signal.adjusted}% to close</span>
+          {signal.delta !== 0 && (
+            <span className={clsx('text-[11px] font-medium tabular-nums', signal.delta < 0 ? 'text-rose-600' : 'text-emerald-600')} title={`Recorded ${renewal.probability}% · adjusted for health, this case, and open work`}>
+              {signal.delta > 0 ? '+' : ''}{signal.delta}
+            </span>
+          )}
+        </span>
+      )}
+      <span className="text-[11px] text-ink-400">owner {renewal.owner}</span>
+
+      <span className="ml-auto flex items-center gap-2">
+        {signal.mismatch && (
+          <GatedButton
+            cap="customer.manage"
+            showLock={false}
+            disabled={!canManage}
+            onClick={onAlign}
+            title={`The pipeline says ${renewal.stage}; health and this case say ${signal.suggested}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+          >
+            Pipeline says {renewal.stage} — move to {signal.suggested}
+          </GatedButton>
+        )}
+        <Link to={`/success?tab=renewals&customer=${encodeURIComponent(customer)}`} className="text-[11px] text-ink-500 hover:text-brand-700 hover:underline">
+          View in pipeline
+        </Link>
+      </span>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Alert card                                                          */
 /* ------------------------------------------------------------------ */
-function ChurnCard({ alert: a, kase, can, logAction, hasFollowUp }: {
+function ChurnCard({ alert: a, kase, can, logAction, hasFollowUp, renewal, tasks }: {
   alert: ChurnAlert
   kase: ChurnCase
   can: (c: 'customer.manage') => boolean
   logAction: (i: { action: string; target: string; category?: string }) => void
   hasFollowUp: boolean
+  renewal?: Renewal
+  tasks: CSTask[]
 }) {
   const [note, setNote] = useState('')
   const manage = can('customer.manage')
@@ -135,6 +199,8 @@ function ChurnCard({ alert: a, kase, can, logAction, hasFollowUp }: {
   const ageH = churnAgeHours(a, CHURN_NOW)
   const breached = churnSlaBreached(a, responded) && !closed
   const manager = escalationManager()
+  // The renewal this case exists to protect, scored with the case folded in.
+  const signal = renewal ? renewalSignal(renewal, tasks, kase.status, AS_OF) : undefined
 
   const assign = (rep: string) => {
     if (!rep || rep === owner) return
@@ -160,7 +226,21 @@ function ChurnCard({ alert: a, kase, can, logAction, hasFollowUp }: {
     addActivity(a.customer, 'milestone', summary, 'system')
     logAction({ action: manual ? 'churn.escalate.manual' : 'churn.escalate.sla', target: `${a.customer} → ${manager}`, category: 'customer' })
   }
-  const status = (s: ChurnCaseStatus) => { setChurnStatus(a.customer, s); logAction({ action: 'churn.status', target: `${a.customer} → ${s}`, category: 'customer' }) }
+  /** Move the renewal's recorded stage and leave a trail on the account. */
+  const alignStage = (stage: RenewalStage, why: string) => {
+    if (!renewal || renewal.stage === stage) return
+    setRenewalStage(a.customer, stage)
+    addActivity(a.customer, 'renewal', `Renewal stage moved to ${stage} — ${why}`, 'system')
+    logAction({ action: 'churn.renewal.align', target: `${a.customer} → ${stage}`, category: 'customer' })
+  }
+  const status = (s: ChurnCaseStatus) => {
+    setChurnStatus(a.customer, s)
+    logAction({ action: 'churn.status', target: `${a.customer} → ${s}`, category: 'customer' })
+    // Closing a case is a verdict on the renewal — carry it through to the
+    // pipeline so retention maths and the forecast can't drift apart.
+    if (s === 'Lost') alignStage('Churning', 'churn case marked Lost')
+    else if (s === 'Saved' && renewal && isRenewalAtRisk(renewal.stage)) alignStage('On track', 'churn case marked Saved')
+  }
   const saveNote = () => { const t = note.trim(); if (!t) return; addChurnNote(a.customer, t); logAction({ action: 'churn.note', target: a.customer, category: 'customer' }); setNote('') }
 
   return (
@@ -208,6 +288,17 @@ function ChurnCard({ alert: a, kase, can, logAction, hasFollowUp }: {
           <span key={i} className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[11px] text-ink-600 ring-1 ring-inset ring-slate-200">{r}</span>
         ))}
       </div>
+
+      {/* The renewal this case is protecting */}
+      {renewal && signal && (
+        <ProtectedRenewal
+          customer={a.customer}
+          renewal={renewal}
+          signal={signal}
+          canManage={manage}
+          onAlign={() => alignStage(signal.suggested, 'aligned with health & churn signals')}
+        />
+      )}
 
       {/* Owner + actions */}
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">

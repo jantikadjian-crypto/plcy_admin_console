@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CalendarClock, AlertTriangle, TrendingUp, ShieldAlert, ListTodo, PlayCircle, ChevronDown, ChevronRight, Check } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Table, Tr, Td, Badge } from '@/components/ui'
@@ -19,7 +19,9 @@ export function Renewals() {
   const { renewals, tasks, churn, plays } = useSuccess()
   const { logAction, can } = useSession()
   const manage = can('customer.manage')
-  const [open, setOpen] = useState<string | null>(null)
+  // Churn Watch links here pointed at one account — land with its evidence open.
+  const [params] = useSearchParams()
+  const [open, setOpen] = useState<string | null>(params.get('customer'))
 
   // Every renewal, scored against health, its churn case, and the task queue.
   const rows = [...renewals]
