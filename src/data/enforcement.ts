@@ -221,6 +221,105 @@ export function enforcementMetrics(log: EnforcementDecision[], triage: Record<st
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Tuning recommendations — false positives as evidence                */
+/* ------------------------------------------------------------------ */
+/**
+ * A false positive is a data point; a pattern of them is a case for changing
+ * the policy. This turns reviewer verdicts into a concrete, reviewable proposal
+ * against the control that over-fired — expressed as change-diff lines so it
+ * can be handed straight to Policy Change Management rather than living as an
+ * observation nobody actions.
+ *
+ * Two shapes, chosen by how badly the control is misfiring:
+ *  - Overwhelming (≥75% of reviews false) → stop enforcing it. Drop to monitor
+ *    mode so it keeps logging while it's retuned, rather than blocking traffic
+ *    it shouldn't.
+ *  - Persistent but partial → keep enforcing, narrow the obligation to exclude
+ *    the accounts the false positives came from.
+ */
+export type TuningKind = 'demote-to-monitor' | 'narrow-obligation'
+
+export interface Tuning {
+  controlId: string
+  controlName: string
+  /** Primitive pack that owns the control — the change request's target. */
+  packId: string
+  packName: string
+  kind: TuningKind
+  reviewed: number
+  falsePositives: number
+  fpRate: number
+  /** Decision ids that justify the proposal. */
+  evidence: string[]
+  affectedCustomers: string[]
+  rationale: string
+  /** The proposed edit, in the change-diff shape Policy Change Management uses. */
+  proposal: { op: 'modify'; controlId: string; controlName: string; field: string; before: string; after: string }
+}
+
+/** Below this many reviewed false positives a control isn't a pattern yet. */
+export const TUNING_MIN_FALSE_POSITIVES = 2
+
+export function tuningRecommendations(log: EnforcementDecision[], triage: Record<string, Triage>): Tuning[] {
+  const byControl = new Map<string, { fps: EnforcementDecision[]; reviewed: number }>()
+  for (const d of log) {
+    const t = triage[d.id]
+    if (!t) continue
+    const e = byControl.get(d.controlId) ?? { fps: [], reviewed: 0 }
+    e.reviewed++
+    if (t.verdict === 'false-positive') e.fps.push(d)
+    byControl.set(d.controlId, e)
+  }
+
+  const out: Tuning[] = []
+  for (const [controlId, { fps, reviewed }] of byControl) {
+    if (fps.length < TUNING_MIN_FALSE_POSITIVES) continue
+    const control = controlById(controlId)
+    if (!control) continue
+    const pack = packById(control.packId)
+    const fpRate = (fps.length / reviewed) * 100
+    const customers = [...new Set(fps.map((d) => d.customer))].sort()
+    const kind: TuningKind = fpRate >= 75 ? 'demote-to-monitor' : 'narrow-obligation'
+
+    const proposal = kind === 'demote-to-monitor'
+      ? {
+          op: 'modify' as const,
+          controlId,
+          controlName: control.name,
+          field: 'mode',
+          before: control.mode,
+          after: 'monitor',
+        }
+      : {
+          op: 'modify' as const,
+          controlId,
+          controlName: control.name,
+          field: 'obligation',
+          before: control.obligation,
+          after: `${control.obligation} — except ${customers.join(', ')}`,
+        }
+
+    out.push({
+      controlId,
+      controlName: control.name,
+      packId: control.packId,
+      packName: pack?.name ?? control.packId,
+      kind,
+      reviewed,
+      falsePositives: fps.length,
+      fpRate,
+      evidence: fps.map((d) => d.id),
+      affectedCustomers: customers,
+      rationale: kind === 'demote-to-monitor'
+        ? `${fps.length} of ${reviewed} reviewed decisions on ${controlId} were false positives (${fpRate.toFixed(0)}%). The control is blocking traffic it shouldn't — drop it to monitor mode so it keeps logging while it's retuned.`
+        : `${fps.length} of ${reviewed} reviewed decisions on ${controlId} were false positives, all on ${customers.join(', ')}. Keep enforcing, but narrow the obligation so those accounts stop tripping it.`,
+      proposal,
+    })
+  }
+  return out.sort((a, b) => b.falsePositives - a.falsePositives || b.fpRate - a.fpRate)
+}
+
 /** Controls firing most often — where enforcement pressure actually sits. */
 export function topControls(log: EnforcementDecision[], limit = 5) {
   const counts = new Map<string, { id: string; hits: number; blocked: number }>()

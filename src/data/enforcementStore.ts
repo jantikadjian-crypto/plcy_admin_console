@@ -32,11 +32,13 @@ interface EnforcementState {
   modes: Record<string, EnforcementMode>
   /** Narrow carve-outs raised off a false positive. */
   exceptions: ExceptionRule[]
+  /** Change requests already raised from a tuning recommendation, by control id. */
+  proposals: Record<string, string>
   /** Global enforcement kill switch. */
   enabled: boolean
 }
 
-const seed = (): EnforcementState => ({ triage: {}, modes: {}, exceptions: [], enabled: true })
+const seed = (): EnforcementState => ({ triage: {}, modes: {}, exceptions: [], proposals: {}, enabled: true })
 
 function read(): EnforcementState {
   try {
@@ -47,6 +49,7 @@ function read(): EnforcementState {
         triage: stored.triage ?? {},
         modes: stored.modes ?? {},
         exceptions: stored.exceptions ?? [],
+        proposals: stored.proposals ?? {},
         enabled: stored.enabled ?? true,
       }
     }
@@ -95,6 +98,13 @@ export function addException(controlId: string, customer: string, reason: string
   state = { ...state, exceptions: [{ id, controlId, customer, reason, by, at: now() }, ...state.exceptions] }
   emit()
   return id
+}
+
+/* -------- Tuning proposals -------- */
+/** Remember which change request a recommendation became, so it can't be double-filed. */
+export function recordProposal(controlId: string, crId: string) {
+  state = { ...state, proposals: { ...state.proposals, [controlId]: crId } }
+  emit()
 }
 
 /* -------- Global switch -------- */

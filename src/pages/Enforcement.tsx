@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ShieldCheck, ShieldBan, Flag, Gauge, Timer, ScanSearch, Check, X, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ShieldCheck, ShieldBan, Flag, Gauge, Timer, ScanSearch, Check, X, ArrowRight, Wrench, GitPullRequest } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
   ResponsiveContainer,
@@ -19,14 +20,16 @@ import { packs as policyPacks, controlsForPack, familyOf } from '@/data/policy'
 import type { PolicyPack } from '@/data/policy'
 import {
   outcomeTone, enforcementMetrics, topControls, controlById, packById, familyOfControl,
-  verdictTone, verdictLabel,
+  verdictTone, verdictLabel, tuningRecommendations, TUNING_MIN_FALSE_POSITIVES,
 } from '@/data/enforcement'
-import type { EnforcementDecision, DecisionOutcome, Verdict } from '@/data/enforcement'
+import type { EnforcementDecision, DecisionOutcome, Verdict, Tuning } from '@/data/enforcement'
 import {
   useEnforcement, setVerdict, clearVerdict, setPackMode, addException, setEnforcementEnabled,
-  ENFORCEMENT_MODES,
+  recordProposal, ENFORCEMENT_MODES,
 } from '@/data/enforcementStore'
 import type { EnforcementMode } from '@/data/enforcementStore'
+import { addChangeRequest } from '@/data/policyChangesStore'
+import { versionBaseline } from '@/data/policyChanges'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -113,8 +116,15 @@ function ModePills({ active, onPick, disabled }: { active: EnforcementMode; onPi
 
 const OUTCOMES: (DecisionOutcome | 'All')[] = ['All', 'Blocked', 'Flagged', 'Allowed']
 
+/** Current version of a pack per the change-management history, for the CR bump. */
+function versionsFor(packId: string): { from: string; to: string } {
+  const from = versionBaseline[packId]?.[0]?.version ?? '1.0'
+  const [major, minor] = from.split('.')
+  return { from, to: `${major}.${Number(minor ?? 0) + 1}` }
+}
+
 export default function Enforcement() {
-  const { log, triage, modes, exceptions, enabled } = useEnforcement()
+  const { log, triage, modes, exceptions, proposals, enabled } = useEnforcement()
   const { can, logAction } = useSession()
   const manage = can('policy.manage')
 
@@ -148,6 +158,31 @@ export default function Enforcement() {
   const pickMode = (pack: PolicyPack, mode: EnforcementMode) => {
     setPackMode(pack.id, mode)
     logAction({ action: 'enforcement.mode', target: `${pack.name} → ${mode}`, category: 'policy' })
+  }
+
+  const tunings = tuningRecommendations(log, triage)
+
+  /**
+   * Hand a recommendation to Policy Change Management as a real change request,
+   * carrying the evidence that justified it. From here it follows the normal
+   * path — review, approvals, dry-run, schedule, apply.
+   */
+  const fileChangeRequest = (t: Tuning) => {
+    const { from, to } = versionsFor(t.packId)
+    const crId = addChangeRequest({
+      packId: t.packId,
+      packName: t.packName,
+      title: t.kind === 'demote-to-monitor'
+        ? `Drop ${t.controlId} to monitor mode while it's retuned`
+        : `Narrow ${t.controlId} to stop false positives on ${t.affectedCustomers.join(', ')}`,
+      summary: `${t.rationale} Raised from the enforcement decision log; evidence: ${t.evidence.join(', ')}.`,
+      risk: t.kind === 'demote-to-monitor' ? 'High' : 'Medium',
+      fromVersion: from,
+      toVersion: to,
+      changes: [t.proposal],
+    })
+    recordProposal(t.controlId, crId)
+    logAction({ action: 'enforcement.tuning.propose', target: `${t.controlId} → ${crId}`, category: 'policy' })
   }
 
   return (
@@ -302,6 +337,78 @@ export default function Enforcement() {
           })}
         </Table>
         {rows.length === 0 && <p className="py-8 text-center text-sm text-ink-400">No decisions match these filters.</p>}
+      </Card>
+
+      {/* Tuning recommendations — false positives turned into proposals */}
+      <Card className="mt-6">
+        <CardTitle
+          title="Tuning recommendations"
+          subtitle={`Controls the review trail says are over-firing. Each proposal can be handed to Policy Change Management, carrying the decisions that justify it. Raised once a control has ${TUNING_MIN_FALSE_POSITIVES} reviewed false positives.`}
+        />
+        {tunings.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center">
+            <Wrench className="mx-auto h-5 w-5 text-ink-300" />
+            <p className="mt-2 text-sm text-ink-500">No control has enough false positives to justify a change yet.</p>
+            <p className="mt-1 text-xs text-ink-400">Review decisions in the log above — once a control accumulates {TUNING_MIN_FALSE_POSITIVES}, a proposal appears here.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {tunings.map((t) => {
+              const crId = proposals[t.controlId]
+              return (
+                <div key={t.controlId} className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs font-semibold text-ink-800">{t.controlId}</span>
+                    <span className="text-sm font-medium text-ink-900">{t.controlName}</span>
+                    <Badge tone="orange">{t.falsePositives} of {t.reviewed} false ({t.fpRate.toFixed(0)}%)</Badge>
+                    <span className="text-[11px] text-ink-500">{t.packName}</span>
+                  </div>
+
+                  <p className="mt-2 text-sm text-ink-700">{t.rationale}</p>
+
+                  {/* The proposed edit, as a diff */}
+                  <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white text-xs">
+                    <div className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-500">
+                      Proposed change · {t.proposal.field}
+                    </div>
+                    <div className="flex items-start gap-2 px-3 py-1.5">
+                      <span className="mt-0.5 w-4 shrink-0 text-center font-mono text-rose-600">−</span>
+                      <span className="text-ink-600 line-through decoration-rose-300">{t.proposal.before}</span>
+                    </div>
+                    <div className="flex items-start gap-2 border-t border-slate-100 px-3 py-1.5">
+                      <span className="mt-0.5 w-4 shrink-0 text-center font-mono text-emerald-600">+</span>
+                      <span className="font-medium text-ink-800">{t.proposal.after}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span className="text-[11px] text-ink-500">
+                      Evidence: {t.evidence.map((e) => <span key={e} className="font-mono">{e} </span>)}
+                    </span>
+                    <div className="ml-auto">
+                      {crId ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-ink-600">
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          Raised as <Link to="/policy?tab=changes" className="font-mono font-semibold text-brand-700 hover:underline">{crId}</Link>
+                        </span>
+                      ) : (
+                        <GatedButton
+                          cap="policy.manage"
+                          showLock={false}
+                          disabled={!manage}
+                          onClick={() => fileChangeRequest(t)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+                        >
+                          <GitPullRequest className="h-3.5 w-3.5" />Open change request
+                        </GatedButton>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </Card>
 
       {/* Where enforcement pressure sits */}
