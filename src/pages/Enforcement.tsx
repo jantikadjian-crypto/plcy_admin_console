@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShieldCheck, ShieldBan, Flag, Gauge, Timer, ScanSearch, Check, X, ArrowRight, Wrench, GitPullRequest } from 'lucide-react'
+import { ShieldCheck, ShieldBan, Flag, Gauge, Timer, ScanSearch, Check, X, ArrowRight, Wrench, GitPullRequest, ChevronDown, ChevronUp } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
   ResponsiveContainer,
@@ -116,6 +116,10 @@ function ModePills({ active, onPick, disabled }: { active: EnforcementMode; onPi
 
 const OUTCOMES: (DecisionOutcome | 'All')[] = ['All', 'Blocked', 'Flagged', 'Allowed']
 
+/* The log is a scroll-back list, not a worklist — the recent end is what gets
+ * read. Cap it there and keep the rest one click away. */
+const DECISION_CAP = 25
+
 /** Current version of a pack per the change-management history, for the CR bump. */
 function versionsFor(packId: string): { from: string; to: string } {
   const from = versionBaseline[packId]?.[0]?.version ?? '1.0'
@@ -132,7 +136,11 @@ export default function Enforcement() {
   const [customer, setCustomer] = useState('All')
   const [family, setFamily] = useState('All')
   const [onlyUntriaged, setOnlyUntriaged] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [sel, setSel] = useState<EnforcementDecision | null>(null)
+
+  // A filter change redefines "most recent" — collapse back to the cap.
+  useEffect(() => setShowAll(false), [outcome, customer, family, onlyUntriaged])
 
   const evaluatedToday = trafficTrend[trafficTrend.length - 1]
   const total = evaluatedToday.allowed + evaluatedToday.flagged + evaluatedToday.blocked
@@ -148,6 +156,9 @@ export default function Enforcement() {
     .filter((d) => (customer === 'All' ? true : d.customer === customer))
     .filter((d) => (family === 'All' ? true : familyOfControl(d.controlId) === family))
     .filter((d) => (onlyUntriaged ? !triage[d.id] : true))
+
+  const visible = showAll ? rows : rows.slice(0, DECISION_CAP)
+  const hidden = rows.length - visible.length
 
   const toggleGlobal = () => {
     const next = !enabled
@@ -303,11 +314,15 @@ export default function Enforcement() {
             <input type="checkbox" checked={onlyUntriaged} onChange={(e) => setOnlyUntriaged(e.target.checked)} className="rounded border-slate-300" />
             Needs review
           </label>
-          <span className="ml-auto text-xs text-ink-400">{rows.length} of {log.length}</span>
+          <span className="ml-auto text-xs text-ink-400">
+            {hidden > 0
+              ? `Showing ${visible.length} of ${rows.length} matching · ${log.length} total`
+              : `${rows.length} of ${log.length}`}
+          </span>
         </div>
 
         <Table columns={['Time', 'Outcome', 'Control', 'Customer', 'Subject', 'Latency', 'Review']}>
-          {rows.map((d) => {
+          {visible.map((d) => {
             const t = triage[d.id]
             const control = controlById(d.controlId)
             return (
@@ -337,6 +352,19 @@ export default function Enforcement() {
           })}
         </Table>
         {rows.length === 0 && <p className="py-8 text-center text-sm text-ink-400">No decisions match these filters.</p>}
+
+        {rows.length > DECISION_CAP && (
+          <div className="mt-3 flex justify-center">
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+            >
+              {showAll
+                ? <><ChevronUp className="h-3.5 w-3.5" />Show most recent {DECISION_CAP}</>
+                : <><ChevronDown className="h-3.5 w-3.5" />Show all {rows.length} decisions<span className="text-ink-400">({hidden} older)</span></>}
+            </button>
+          </div>
+        )}
       </Card>
 
       {/* Tuning recommendations — false positives turned into proposals */}
