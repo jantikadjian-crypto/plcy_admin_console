@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellRing, MessageSquare, Siren, Mail, Webhook, Plus, UserCheck, Radio, ShieldAlert, Send, Check, ArrowUpRight, Pencil, Trash2, ArrowUp, ArrowDown, CalendarClock } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import {
@@ -96,6 +96,7 @@ export default function Notifications() {
   }, [escalationList])
 
   const signals = collectLiveSignals(promoted)
+  const signalsCap = useListCap(signals, [signals.length])
   const summary = routingSummary(signals, rules, channelList)
   const primaryOnCall = onCallList.find((o) => o.role === 'Primary' && o.active)?.name ?? '—'
 
@@ -217,7 +218,7 @@ export default function Notifications() {
               </tr>
             </thead>
             <tbody>
-              {signals.map((s) => {
+              {signalsCap.visible.map((s) => {
                 const o = evaluateRouting(s, rules, channelList, primaryOnCall)
                 const sent = sentIds[s.id]
                 return (
@@ -271,6 +272,7 @@ export default function Notifications() {
             </tbody>
           </table>
         </div>
+        <ShowAllToggle total={signals.length} showAll={signalsCap.showAll} hidden={signalsCap.hidden} onToggle={signalsCap.toggle} noun="signals" />
       </Card>
 
       {/* Channels */}
@@ -294,7 +296,7 @@ export default function Notifications() {
               </button>
             ) : undefined}
           />
-          <Table columns={['Event', 'Category', 'Min severity', 'Channels', 'Enabled', '']}>
+          <Table columns={['Event', 'Category', 'Min severity', 'Channels', 'Enabled', '']} noun="rules">
             {rules.map((r) => (
               <Tr key={r.id}>
                 <Td className="font-semibold text-ink-900">{r.event}</Td>
@@ -443,7 +445,7 @@ export default function Notifications() {
             </table>
           </div>
         ) : (
-          <Table columns={['Week', 'Primary', 'Secondary']}>
+          <Table columns={['Week', 'Primary', 'Secondary']} noun="weeks">
             {rotationList.map((r, i) => (
               <Tr key={i}>
                 <Td className="font-medium text-ink-900">{r.week}</Td>
@@ -458,7 +460,7 @@ export default function Notifications() {
       {/* Recent alerts */}
       <Card className="mt-6">
         <CardTitle title="Recent Alerts" subtitle="Notification delivery log" />
-        <Table columns={['Time', 'Event', 'Category', 'Severity', 'Channels', 'Delivery']}>
+        <Table columns={['Time', 'Event', 'Category', 'Severity', 'Channels', 'Delivery']} noun="alerts" recent>
           {recentAlerts.map((a) => (
             <Tr key={a.id}>
               <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{a.time}</Td>

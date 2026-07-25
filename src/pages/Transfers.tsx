@@ -89,7 +89,7 @@ export default function Transfers() {
 
       <Card className="mt-6">
         <CardTitle title="Transfer Register" subtitle={`${scoped.length} data flow${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`} · evaluated against residency policy`} />
-        <Table columns={['ID', 'Customer', 'Route', 'Data category', 'Mechanism', 'Residency policy', 'Status', 'Reviewed', '']}>
+        <Table columns={['ID', 'Customer', 'Route', 'Data category', 'Mechanism', 'Residency policy', 'Status', 'Reviewed', '']} noun="transfers">
           {scoped.map((t) => {
             const v = transferVerdict(t)
             const conflict = isConflict(t)

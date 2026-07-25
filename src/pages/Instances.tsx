@@ -138,7 +138,7 @@ export default function Instances() {
       {/* Table */}
       <Card className="mt-6">
         <CardTitle title="All Instances" subtitle={`${scoped.length} deployment${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
-        <Table columns={['Name', 'Customer', 'Environment', 'Region', 'Version', 'Status', 'Uptime', 'RPS', 'Policy Packs', '']}>
+        <Table columns={['Name', 'Customer', 'Environment', 'Region', 'Version', 'Status', 'Uptime', 'RPS', 'Policy Packs', '']} noun="instances">
           {scoped.map((i) => (
             <Tr key={i.id}>
               <Td>

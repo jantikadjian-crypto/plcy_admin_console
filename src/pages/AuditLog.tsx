@@ -208,7 +208,7 @@ export default function AuditLog() {
         {filtered.length === 0 ? (
           <EmptyState icon={Search} title="No matching events" description="Adjust your search or category filter." />
         ) : (
-          <Table columns={['Time', 'Actor', 'Action', 'Target', 'Category', 'Result', '']}>
+          <Table columns={['Time', 'Actor', 'Action', 'Target', 'Category', 'Result', '']} noun="events" recent>
             {filtered.map((e) => {
               const sys = isSystemActor(e.actor)
               return (

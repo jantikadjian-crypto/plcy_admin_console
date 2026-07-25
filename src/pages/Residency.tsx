@@ -283,7 +283,7 @@ export default function Residency() {
       {/* Enforcement log */}
       <Card className="mt-6">
         <CardTitle title="Enforcement Log" subtitle="Recent residency decisions across the fleet" />
-        <Table columns={['Time', 'Customer', 'Operation', 'Source', 'Target', 'Detail', 'Decision']}>
+        <Table columns={['Time', 'Customer', 'Operation', 'Source', 'Target', 'Detail', 'Decision']} noun="decisions" recent>
           {recentResidency.map((e) => (
             <Tr key={e.id}>
               <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{e.time}</Td>

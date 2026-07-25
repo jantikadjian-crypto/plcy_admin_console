@@ -96,7 +96,7 @@ export default function Compliance() {
 
       <Card className="mt-6">
         <CardTitle title="Control Evidence" subtitle="Latest automated control evaluations" />
-        <Table columns={['Control ID', 'Framework', 'Description', 'Status', 'Owner', 'Last checked']}>
+        <Table columns={['Control ID', 'Framework', 'Description', 'Status', 'Owner', 'Last checked']} noun="controls">
           {controls.map((c) => (
             <Tr key={c.id + c.framework}>
               <Td className="font-mono text-xs text-ink-700">{c.id}</Td>

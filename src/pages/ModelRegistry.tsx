@@ -157,7 +157,7 @@ export default function ModelRegistry() {
       {/* Table */}
       <Card className="mt-6">
         <CardTitle title="Registered Versions" subtitle={`${registry.length} model versions in the catalog`} />
-        <Table columns={['Model', 'Version', 'Stage', 'Owner', 'Approved by', 'Registered', 'Artifact hash']}>
+        <Table columns={['Model', 'Version', 'Stage', 'Owner', 'Approved by', 'Registered', 'Artifact hash']} noun="versions">
           {registry.map((r) => (
             <Tr key={r.id}>
               <Td>

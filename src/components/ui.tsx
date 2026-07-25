@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
-import { useEffect } from 'react'
+import { Children, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -164,15 +164,120 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* List cap — long lists show the leading slice, rest one click away    */
+/* ------------------------------------------------------------------ */
+
+/** Rows shown before a list collapses behind "Show all". */
+export const LIST_CAP = 25
+
+/**
+ * Caps a list at `LIST_CAP` and hands back the slice plus the toggle state.
+ *
+ * `resetOn` is the filter state that decides *which* rows lead the list —
+ * change any of it and the cap re-applies, so an expansion never carries over
+ * into a set the operator didn't ask to see.
+ */
+export function useListCap<T>(items: T[], resetOn: unknown[] = [], cap = LIST_CAP) {
+  const [showAll, setShowAll] = useState(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setShowAll(false), resetOn)
+
+  const visible = showAll ? items : items.slice(0, cap)
+  return {
+    visible,
+    showAll,
+    capped: items.length > cap,
+    hidden: items.length - visible.length,
+    toggle: () => setShowAll((v) => !v),
+  }
+}
+
+/**
+ * The "Show all / Show first N" control that pairs with {@link useListCap}.
+ * Renders nothing when the list is short enough to not need capping.
+ */
+export function ShowAllToggle({
+  total,
+  showAll,
+  hidden,
+  onToggle,
+  noun = 'rows',
+  recent = false,
+  cap = LIST_CAP,
+}: {
+  total: number
+  showAll: boolean
+  hidden: number
+  onToggle: () => void
+  /** Plural noun for the expand label — "decisions", "customers", "events". */
+  noun?: string
+  /** Newest-first lists collapse to the *most recent* N, not the first N. */
+  recent?: boolean
+  cap?: number
+}) {
+  if (total <= cap) return null
+  return (
+    <div className="mt-3 flex justify-center">
+      <button
+        onClick={onToggle}
+        className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+      >
+        {showAll ? (
+          <>
+            <ChevronUp className="h-3.5 w-3.5" />
+            Show {recent ? 'most recent' : 'first'} {cap}
+          </>
+        ) : (
+          <>
+            <ChevronDown className="h-3.5 w-3.5" />
+            Show all {total} {noun}
+            <span className="text-ink-400">({hidden} more)</span>
+          </>
+        )}
+      </button>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Table                                                               */
 /* ------------------------------------------------------------------ */
+/**
+ * Every table caps itself at {@link LIST_CAP} rows and puts the rest behind a
+ * "Show all" toggle — the rule holds for tables that are short today but grow
+ * with real data, without each page having to remember it.
+ *
+ * Pass `cap={false}` when the page drives the cap itself (because it also
+ * reports counts elsewhere), or a number to override the limit.
+ */
 export function Table({
   columns,
   children,
+  cap = LIST_CAP,
+  noun = 'rows',
+  recent = false,
 }: {
   columns: string[]
   children: ReactNode
+  cap?: number | false
+  /** Plural noun for the expand label — "customers", "alerts", "images". */
+  noun?: string
+  /** Newest-first tables collapse to the *most recent* N, not the first N. */
+  recent?: boolean
 }) {
+  const [showAll, setShowAll] = useState(false)
+
+  // Children.toArray flattens row arrays and drops the false/null of a
+  // conditionally rendered row, so this counts real rows.
+  const rows = Children.toArray(children)
+  const total = rows.length
+  const limit = cap === false ? Infinity : cap
+
+  // A filter change swaps the row set out from under an expansion.
+  useEffect(() => setShowAll(false), [total])
+
+  const visible = showAll ? rows : rows.slice(0, limit)
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full">
@@ -185,8 +290,19 @@ export function Table({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
+        <tbody className="divide-y divide-slate-100">{visible}</tbody>
       </table>
+      {cap !== false && (
+        <ShowAllToggle
+          total={total}
+          showAll={showAll}
+          hidden={total - visible.length}
+          onToggle={() => setShowAll((v) => !v)}
+          noun={noun}
+          recent={recent}
+          cap={cap}
+        />
+      )}
     </div>
   )
 }

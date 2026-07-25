@@ -277,7 +277,7 @@ export default function Billing() {
           title="Stripe Subscriptions"
           subtitle={`Collection motion per customer · ${subscriptionTotals.autoCharge} auto-charge (SaaS) · ${subscriptionTotals.sendInvoice} send-invoice (Enterprise)`}
         />
-        <Table columns={['Customer', 'Plan', 'Status', 'Collection', 'Price', 'MRR', 'Current period']}>
+        <Table columns={['Customer', 'Plan', 'Status', 'Collection', 'Price', 'MRR', 'Current period']} noun="subscriptions">
           {scopedSubs.map((s) => (
             <Tr key={s.customer}>
               <Td className="font-medium text-ink-900">{s.customer}</Td>
@@ -342,7 +342,8 @@ export default function Billing() {
       {/* Invoices */}
       <Card className="mt-6">
         <CardTitle title="Invoices" subtitle="Recent billing activity · click a row for details" />
-        <Table columns={['Invoice', 'Customer', 'Period', 'Amount', 'Status', 'Due', '']}>
+        {/* Invoices have their own pager below — don't stack a second cap on top. */}
+        <Table columns={['Invoice', 'Customer', 'Period', 'Amount', 'Status', 'Due', '']} cap={false}>
           {pageRows.map((inv) => {
             const actionable = inv.status === 'Open' || inv.status === 'Past due'
             return (

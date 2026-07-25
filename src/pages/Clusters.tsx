@@ -81,7 +81,7 @@ export default function Clusters() {
       {/* Cluster table */}
       <Card className="mt-6">
         <CardTitle title="Clusters" subtitle={`${scoped.length} single-tenant Kubernetes cluster${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`} · click to open`} />
-        <Table columns={['Customer', 'Region', 'K8s', 'Nodes', 'CPU', 'Memory', 'Pods', 'Status', '']}>
+        <Table columns={['Customer', 'Region', 'K8s', 'Nodes', 'CPU', 'Memory', 'Pods', 'Status', '']} noun="clusters">
           {scoped.map((d) => {
             const hh = health(d)
             const podsBad = d.podsHealthy < d.podsTotal
@@ -135,7 +135,7 @@ export default function Clusters() {
             </Badge>
           }
         />
-        <Table columns={['Customer', 'Workspace', 'Provider', 'Resources', 'Drift', 'Last apply']}>
+        <Table columns={['Customer', 'Workspace', 'Provider', 'Resources', 'Drift', 'Last apply']} noun="workspaces">
           {scoped.map((d) => {
             const tf = terraformFor(d)
             return (

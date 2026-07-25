@@ -166,7 +166,7 @@ export default function Risk() {
 
       <Card className="mt-6">
         <CardTitle title="Risk Register" subtitle="Prioritized log of identified risks and mitigations" />
-        <Table columns={['Risk', 'Category', 'Likelihood', 'Impact', 'Score', 'Owner', 'Status', 'Mitigation', '']}>
+        <Table columns={['Risk', 'Category', 'Likelihood', 'Impact', 'Score', 'Owner', 'Status', 'Mitigation', '']} noun="risks">
           {riskRows.map((r) => (
             <Tr key={r.risk}>
               <Td className="font-medium text-ink-900">{r.risk}</Td>

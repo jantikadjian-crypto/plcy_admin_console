@@ -217,7 +217,7 @@ export default function Incidents() {
               title="Active Incidents"
               subtitle={`${visible.length} incident${visible.length === 1 ? '' : 's'}${sevFilter === 'All' ? '' : ` · ${sevFilter}`}`}
             />
-            <Table columns={['Incident ID', 'Title', 'Severity', 'Status', 'App / Model', 'Risk Score', 'Assigned To', 'Reported', '']}>
+            <Table columns={['Incident ID', 'Title', 'Severity', 'Status', 'App / Model', 'Risk Score', 'Assigned To', 'Reported', '']} noun="incidents">
               {visible.map((i) => (
                 <Tr key={i.id}>
                   <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{i.id}</Td>
@@ -576,7 +576,7 @@ function PolicyViolations() {
   return (
     <Card>
       <CardTitle title="Policy Violations" subtitle="Enforcement events across all customers in the last 24 hours" />
-      <Table columns={['Time', 'Policy Pack', 'Rule', 'Model', 'Customer', 'Action', 'Severity', '']}>
+      <Table columns={['Time', 'Policy Pack', 'Rule', 'Model', 'Customer', 'Action', 'Severity', '']} noun="events" recent>
         {violations.map((v, idx) => (
           <Tr key={idx}>
             <Td className="whitespace-nowrap text-xs text-ink-500">{v.time}</Td>
@@ -661,7 +661,7 @@ function RiskScores() {
         subtitle="Composite risk across policy, drift, and incident signals"
         action={<Badge tone="slate"><Gauge className="h-3 w-3" /> 0–100 scale</Badge>}
       />
-      <Table columns={['Model', 'Customer', 'Risk Score', 'Band', '7-day Δ', '']}>
+      <Table columns={['Model', 'Customer', 'Risk Score', 'Band', '7-day Δ', '']} noun="models">
         {riskRows.map((r) => (
           <Tr key={r.model}>
             <Td className="font-semibold text-ink-900">{r.model}</Td>
@@ -816,7 +816,7 @@ function RegulatoryNotifications() {
         subtitle="Reporting obligations triggered by incidents"
         action={<Badge tone="slate"><Landmark className="h-3 w-3" /> Compliance</Badge>}
       />
-      <Table columns={['Regulator', 'Incident', 'Requirement', 'Deadline', 'Status', '']}>
+      <Table columns={['Regulator', 'Incident', 'Requirement', 'Deadline', 'Status', '']} noun="notices">
         {regNotices.map((n, idx) => (
           <Tr key={idx}>
             <Td className="font-semibold text-ink-900">{n.regulator}</Td>

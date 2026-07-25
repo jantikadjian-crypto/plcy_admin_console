@@ -28,7 +28,7 @@ import {
   ArrowUpCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, StatCard, Badge, Table, Tr, Td, Progress, EmptyState, Modal } from '@/components/ui'
+import { Card, CardTitle, StatCard, Badge, Table, Tr, Td, Progress, EmptyState, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { deployments, regionByCode, releases } from '@/data/fleet'
@@ -467,6 +467,7 @@ function WorkloadsTab({
   onOpen: (name: string) => void
 }) {
   const signed = workloads.filter((w) => w.signed).length
+  const workloadsCap = useListCap(workloads, [workloads.length])
   const cves = workloads.reduce((s, w) => s + w.cves, 0)
   const behind = workloads.filter((w) => imageDriftFor(w, promoted).status === 'Behind').length
   return (
@@ -492,7 +493,7 @@ function WorkloadsTab({
             </tr>
           </thead>
           <tbody>
-            {workloads.map((w: Workload) => {
+            {workloadsCap.visible.map((w: Workload) => {
               const drift = imageDriftFor(w, promoted)
               const canSync = canManage && (drift.status === 'Behind' || drift.status === 'Ahead')
               return (
@@ -540,6 +541,7 @@ function WorkloadsTab({
           </tbody>
         </table>
       </div>
+      <ShowAllToggle total={workloads.length} showAll={workloadsCap.showAll} hidden={workloadsCap.hidden} onToggle={workloadsCap.toggle} noun="workloads" />
       {!canManage && <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-400"><Terminal className="h-3 w-3" /> Your role can view workloads but not restart, scale, sync, or roll them back.</p>}
     </Card>
   )
@@ -690,7 +692,7 @@ function InfraTab({ d, helm, onOpenHelm }: { d: Deployment; helm: HelmRelease[];
           <h4 className="text-sm font-semibold text-ink-900">Helm releases</h4>
           <span className="text-xs text-ink-400">· click to edit values / diff / roll back</span>
         </div>
-        <Table columns={['Release', 'Chart', 'Chart ver.', 'App ver.', 'Rev', 'Namespace', 'Status']}>
+        <Table columns={['Release', 'Chart', 'Chart ver.', 'App ver.', 'Rev', 'Namespace', 'Status']} noun="releases">
           {helm.map((r) => (
             <Tr key={r.name} onClick={() => onOpenHelm(r.name)}>
               <Td className="font-medium text-ink-900">{r.name}</Td>

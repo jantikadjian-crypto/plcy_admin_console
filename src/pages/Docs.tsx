@@ -20,7 +20,7 @@ import {
   Pencil,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, PageHeader, Badge } from '@/components/ui'
+import { Card, PageHeader, Badge, useListCap, ShowAllToggle } from '@/components/ui'
 import type { Tone } from '@/components/ui'
 import { Diagram } from '@/components/diagrams'
 import { GatedButton } from '@/components/GatedButton'
@@ -445,6 +445,7 @@ function GlossaryView() {
       return true
     })
   }, [sorted, group, query])
+  const cap = useListCap(filtered, [group, query])
 
   const handleSave = (term: StoredTerm, isNew: boolean) => {
     upsertTerm(term)
@@ -496,11 +497,14 @@ function GlossaryView() {
           <p className="py-8 text-center text-sm text-ink-400">No terms match “{q}”.</p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((t) => (
-            <TermCard key={t.id} t={t} highlight={t.id === deepLinked} onSee={(name) => setQ(name)} onEdit={() => setEditing(t)} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {cap.visible.map((t) => (
+              <TermCard key={t.id} t={t} highlight={t.id === deepLinked} onSee={(name) => setQ(name)} onEdit={() => setEditing(t)} />
+            ))}
+          </div>
+          <ShowAllToggle total={filtered.length} showAll={cap.showAll} hidden={cap.hidden} onToggle={cap.toggle} noun="terms" />
+        </>
       )}
 
       <TermEditor

@@ -97,7 +97,7 @@ export default function DSAR() {
           title="Data-subject requests"
           subtitle={`${scoped.length} request${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`}
         />
-        <Table columns={['ID', 'Type', 'Subject', 'Customer', 'Region', 'Law', 'Due', 'Status', 'Assignee', '']}>
+        <Table columns={['ID', 'Type', 'Subject', 'Customer', 'Region', 'Law', 'Due', 'Status', 'Assignee', '']} noun="requests">
           {scoped.map((d) => (
             <Tr key={d.id}>
               <Td className="font-mono text-xs text-ink-700">{d.id}</Td>

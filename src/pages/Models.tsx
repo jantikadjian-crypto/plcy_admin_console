@@ -146,7 +146,7 @@ export default function Models() {
               ))}
             </select>
           </div>
-          <Table columns={['Model', 'Provider', 'Type', 'Customer', 'Risk', 'Status', 'Requests', '']}>
+          <Table columns={['Model', 'Provider', 'Type', 'Customer', 'Risk', 'Status', 'Requests', '']} noun="models">
             {shown.map((m) => (
               <Tr key={m.id}>
                 <Td>

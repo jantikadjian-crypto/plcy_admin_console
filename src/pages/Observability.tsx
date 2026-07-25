@@ -121,7 +121,7 @@ export default function Observability() {
 
       <Card className="mt-6">
         <CardTitle title="Top Models & Endpoints" subtitle="Ranked by traffic through the governance gateway" />
-        <Table columns={['Model / endpoint', 'Requests', 'Avg latency', 'Error rate', 'Status']}>
+        <Table columns={['Model / endpoint', 'Requests', 'Avg latency', 'Error rate', 'Status']} noun="endpoints">
           {endpoints.map((e) => (
             <Tr key={e.name}>
               <Td>

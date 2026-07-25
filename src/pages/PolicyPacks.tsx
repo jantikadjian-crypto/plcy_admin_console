@@ -5,7 +5,7 @@ import {
   ArrowUpRight, FileCode2, Layers, Plus, Pencil, Trash2, Check,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, StatCard, Badge, PageHeader, Modal } from '@/components/ui'
+import { Card, CardTitle, StatCard, Badge, PageHeader, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import type { Tone } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
@@ -187,6 +187,7 @@ function PacksSection({ packs, controls, onOpen }: { packs: PolicyPack[]; contro
 }
 
 function PackGroup({ title, subtitle, list, packs, controls, onOpen }: { title: string; subtitle: string; list: PolicyPack[]; packs: PolicyPack[]; controls: Control[]; onOpen: (p: PolicyPack) => void }) {
+  const cap = useListCap(list, [list.length])
   return (
     <div className="mb-6">
       <div className="mb-3">
@@ -194,8 +195,9 @@ function PackGroup({ title, subtitle, list, packs, controls, onOpen }: { title: 
         <p className="text-xs text-ink-500">{subtitle}</p>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {list.map((p) => <PackCard key={p.id} pack={p} packs={packs} controls={controls} onOpen={onOpen} />)}
+        {cap.visible.map((p) => <PackCard key={p.id} pack={p} packs={packs} controls={controls} onOpen={onOpen} />)}
       </div>
+      <ShowAllToggle total={list.length} showAll={cap.showAll} hidden={cap.hidden} onToggle={cap.toggle} noun="packs" />
     </div>
   )
 }
@@ -242,6 +244,7 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
     (family === 'All' || ct.prefix === family) &&
     (!query || [ct.id, ct.name, ct.detector, ct.decision, ct.obligation].some((f) => f.toLowerCase().includes(query))),
   )
+  const cap = useListCap(filtered, [family, query])
 
   return (
     <>
@@ -286,7 +289,7 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
               </tr>
             </thead>
             <tbody>
-              {filtered.map((ct) => (
+              {cap.visible.map((ct) => (
                 <tr key={ct.id} className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50" onClick={() => onOpen(ct)}>
                   <td className="py-2.5 pr-3"><span className="font-mono text-xs font-semibold text-ink-900">{ct.id}</span><span className="ml-1.5 text-[11px] text-ink-400">({familyOf(ct.prefix)})</span><p className="text-xs text-ink-600">{ct.name}</p></td>
                   <td className="py-2.5 pr-3"><span className="text-xs text-ink-500">{familyOf(ct.prefix)}</span></td>
@@ -298,6 +301,7 @@ function ControlsSection({ controls, onOpen }: { controls: Control[]; onOpen: (c
             </tbody>
           </table>
         </div>
+        <ShowAllToggle total={filtered.length} showAll={cap.showAll} hidden={cap.hidden} onToggle={cap.toggle} noun="controls" />
       </Card>
     </>
   )

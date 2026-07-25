@@ -504,7 +504,7 @@ export default function CustomerDetail() {
               {custInstances.length === 0 ? (
                 <EmptyState icon={Server} title="No instances" description="This customer has no deployed environments." />
               ) : (
-                <Table columns={['Instance', 'Environment', 'Region', 'Version', 'Uptime', 'RPS', 'Status']}>
+                <Table columns={['Instance', 'Environment', 'Region', 'Version', 'Uptime', 'RPS', 'Status']} noun="instances">
                   {custInstances.map((i) => (
                     <Tr key={i.id}>
                       <Td className="font-mono text-xs text-ink-900">{i.name}</Td>
@@ -595,7 +595,7 @@ export default function CustomerDetail() {
             {custModels.length === 0 ? (
               <EmptyState icon={Bot} title="No models" description="This customer has no models under governance." />
             ) : (
-              <Table columns={['Model', 'Provider', 'Type', 'Requests', 'Risk', 'Status']}>
+              <Table columns={['Model', 'Provider', 'Type', 'Requests', 'Risk', 'Status']} noun="models">
                 {custModels.map((m) => (
                   <Tr key={m.id}>
                     <Td className="font-semibold text-ink-900">{m.name}</Td>
@@ -644,7 +644,7 @@ export default function CustomerDetail() {
               {windows.length === 0 ? (
                 <EmptyState icon={Gauge} title="None scheduled" description="No upcoming maintenance." />
               ) : (
-                <Table columns={['Window', 'When', 'Type', 'Impact', 'Notified', 'Status']}>
+                <Table columns={['Window', 'When', 'Type', 'Impact', 'Notified', 'Status']} noun="windows">
                   {windows.map((w) => (
                     <Tr key={w.id}>
                       <Td>
@@ -861,7 +861,7 @@ export default function CustomerDetail() {
               {custInvoices.length === 0 ? (
                 <EmptyState icon={Receipt} title="No invoices" description="No billing activity for this customer." />
               ) : (
-                <Table columns={['Invoice', 'Period', 'Amount', 'Status', 'Due']}>
+                <Table columns={['Invoice', 'Period', 'Amount', 'Status', 'Due']} noun="invoices">
                   {custInvoices.map((inv) => (
                     <Tr key={inv.id}>
                       <Td className="font-mono text-xs text-ink-700">{inv.id}</Td>
@@ -926,7 +926,7 @@ export default function CustomerDetail() {
               {custTransfers.length === 0 ? (
                 <EmptyState icon={ArrowLeftRight} title="No transfers" description="No cross-border data transfers on record." />
               ) : (
-                <Table columns={['ID', 'From', 'To', 'Data', 'Mechanism', 'Status']}>
+                <Table columns={['ID', 'From', 'To', 'Data', 'Mechanism', 'Status']} noun="transfers">
                   {custTransfers.map((t) => (
                     <Tr key={t.id}>
                       <Td className="font-mono text-xs text-ink-700">{t.id}</Td>
@@ -946,7 +946,7 @@ export default function CustomerDetail() {
               {custDsar.length === 0 ? (
                 <EmptyState icon={Inbox} title="No DSARs" description="No data-subject requests on record." />
               ) : (
-                <Table columns={['ID', 'Type', 'Law', 'Received', 'Due', 'Status']}>
+                <Table columns={['ID', 'Type', 'Law', 'Received', 'Due', 'Status']} noun="requests">
                   {custDsar.map((d) => (
                     <Tr key={d.id}>
                       <Td className="font-mono text-xs text-ink-700">{d.id}</Td>
@@ -971,7 +971,7 @@ export default function CustomerDetail() {
               {custIncidents.length === 0 ? (
                 <EmptyState icon={CheckCircle2} title="No incidents" description="No incidents recorded for this customer." />
               ) : (
-                <Table columns={['ID', 'Title', 'Severity', 'Category', 'Opened', 'Status']}>
+                <Table columns={['ID', 'Title', 'Severity', 'Category', 'Opened', 'Status']} noun="incidents">
                   {custIncidents.map((i) => (
                     <Tr key={i.id}>
                       <Td className="font-mono text-xs text-ink-700">{i.id}</Td>

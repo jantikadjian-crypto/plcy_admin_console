@@ -87,7 +87,7 @@ export function RedTeam() {
 
       <Card className="mb-6">
         <CardTitle title="Campaigns" subtitle="Click a campaign for its findings and attempt-level transcripts" />
-        <Table columns={['Campaign', 'Scope', 'Taxonomy', 'Attempts', 'Bypasses', 'Status', 'Schedule', 'Owner']}>
+        <Table columns={['Campaign', 'Scope', 'Taxonomy', 'Attempts', 'Bypasses', 'Status', 'Schedule', 'Owner']} noun="campaigns">
           {campaigns.map((c) => (
             <Tr key={c.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(c.id)}>
               <Td>

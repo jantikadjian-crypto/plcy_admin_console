@@ -157,7 +157,7 @@ export default function Releases() {
       {/* Fleet rollout table */}
       <Card className="mt-6">
         <CardTitle title="Fleet Rollout" subtitle={`${scoped.length} single-tenant deployment${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
-        <Table columns={['Customer', 'Region', 'Mode', 'Current', 'Target', 'Status', 'Actions', '']}>
+        <Table columns={['Customer', 'Region', 'Mode', 'Current', 'Target', 'Status', 'Actions', '']} noun="customers">
           {scoped.map((d) => (
             <Tr key={d.id}>
               <Td className="font-semibold text-ink-900">{d.customer}</Td>

@@ -32,7 +32,7 @@ export function ModelScorecards() {
 
       <Card>
         <CardTitle title="Safety profiles" subtitle="Sorted by overall score · click a model for the full breakdown and routing eligibility" />
-        <Table columns={['Model', 'Jailbreak', 'Refusal', 'PII', 'Toxicity', 'Grounding', 'Overall', 'Status']}>
+        <Table columns={['Model', 'Jailbreak', 'Refusal', 'PII', 'Toxicity', 'Grounding', 'Overall', 'Status']} noun="models">
           {rows.map((m) => (
             <Tr key={m.model} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(m)}>
               <Td>

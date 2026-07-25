@@ -98,7 +98,7 @@ export default function BillingIntegration() {
       {/* Price mapping */}
       <Card className="mt-6">
         <CardTitle title="Product & price mapping" subtitle="Each PLCY plan and usage meter maps to a Stripe Price. SaaS charges automatically; Enterprise sends an invoice." />
-        <Table columns={['Item', 'Type', 'Stripe price', 'Model', 'Amount', 'Collection']}>
+        <Table columns={['Item', 'Type', 'Stripe price', 'Model', 'Amount', 'Collection']} noun="items">
           {mappings.map((m) => (
             <Tr key={m.key}>
               <Td className="font-medium text-ink-900">{m.label}</Td>
@@ -142,7 +142,7 @@ export default function BillingIntegration() {
         </div>
         <div className="mt-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Recent deliveries</p>
-          <Table columns={['Event', 'Status', 'Attempts', 'When']}>
+          <Table columns={['Event', 'Status', 'Attempts', 'When']} noun="events" recent>
             {deliveries.slice(0, 8).map((d) => (
               <Tr key={d.id}>
                 <Td className="font-mono text-xs text-ink-800">{d.event}</Td>

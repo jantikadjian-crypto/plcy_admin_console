@@ -176,7 +176,7 @@ export default function Routing() {
       {/* Recent decisions */}
       <Card className="mt-6">
         <CardTitle title="Recent Routing Decisions" subtitle="Live enforcement log" />
-        <Table columns={['Time', 'Customer', 'Region', 'Requested', 'Decision', 'Routed to']}>
+        <Table columns={['Time', 'Customer', 'Region', 'Requested', 'Decision', 'Routed to']} noun="decisions" recent>
           {recentRoutes.map((e) => (
             <Tr key={e.id}>
               <Td className="whitespace-nowrap font-mono text-xs text-ink-500">{e.time}</Td>

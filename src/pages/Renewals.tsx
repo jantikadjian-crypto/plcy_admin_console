@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CalendarClock, AlertTriangle, TrendingUp, ShieldAlert, ListTodo, PlayCircle, ChevronDown, ChevronRight, Check } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -101,13 +101,16 @@ export function Renewals() {
 
       <Card>
         <CardTitle title="Pipeline" subtitle="Sorted by renewal date · expand a row for the evidence behind its score" />
-        <Table columns={['', 'Customer', 'ARR', 'Renewal', 'Health', 'Open work', 'Probability', 'Stage', 'Owner']}>
+        <Table columns={['', 'Customer', 'ARR', 'Renewal', 'Health', 'Open work', 'Probability', 'Stage', 'Owner']} noun="renewals">
           {rows.map(({ r, s }) => {
             const d = daysTo(r.renewalDate)
             const expanded = open === r.customer
             const flagged = s.mismatch || s.unworked
-            return [
-              <Tr key={r.customer}>
+            // One Fragment per record so the table's row cap counts customers,
+            // not customers-plus-open-evidence-panels.
+            return (
+              <Fragment key={r.customer}>
+              <Tr>
                 <Td className="w-8">
                   <button onClick={() => setOpen(expanded ? null : r.customer)} aria-label={expanded ? 'Hide evidence' : 'Show evidence'} className="text-ink-400 hover:text-ink-700">
                     {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -178,9 +181,9 @@ export function Renewals() {
                   </span>
                 </Td>
                 <Td className="text-xs text-ink-500">{r.owner}</Td>
-              </Tr>,
-              expanded && (
-                <Tr key={`${r.customer}-detail`}>
+              </Tr>
+              {expanded && (
+                <Tr>
                   <Td className="bg-slate-50/70" colSpan={9}>
                     <Evidence
                       signal={s}
@@ -194,8 +197,9 @@ export function Renewals() {
                     />
                   </Td>
                 </Tr>
-              ),
-            ]
+              )}
+              </Fragment>
+            )
           })}
         </Table>
       </Card>

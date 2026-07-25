@@ -85,7 +85,7 @@ export default function AdminSecurity() {
       {/* Admin users table */}
       <Card className="mt-6">
         <CardTitle title="Administrator Accounts" subtitle="PLCY staff with elevated privileges" />
-        <Table columns={['User', 'Role', 'MFA', 'Last active', 'Status']}>
+        <Table columns={['User', 'Role', 'MFA', 'Last active', 'Status']} noun="admins">
           {admins.map((u) => (
             <Tr key={u.email}>
               <Td>
@@ -189,7 +189,7 @@ export default function AdminSecurity() {
       {/* API keys */}
       <Card className="mt-6">
         <CardTitle title="API Keys" subtitle="Platform credentials for programmatic access" />
-        <Table columns={['Name', 'Key', 'Scopes', 'Created', 'Last used', 'Status', '']}>
+        <Table columns={['Name', 'Key', 'Scopes', 'Created', 'Last used', 'Status', '']} noun="keys">
           {apiKeys.map((k) => (
             <Tr key={k.prefix}>
               <Td className="font-semibold text-ink-900">{k.name}</Td>

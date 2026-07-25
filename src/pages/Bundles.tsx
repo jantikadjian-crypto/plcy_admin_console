@@ -146,7 +146,7 @@ export default function Bundles() {
         {rows.length === 0 ? (
           <EmptyState icon={Package} title="No bundles yet" description="Build a signed offline bundle to ship an update to an air-gapped site." />
         ) : (
-          <Table columns={['Customer', 'Version', 'Size', 'Created', 'Signed', 'State', 'Checksum', 'Actions', '']}>
+          <Table columns={['Customer', 'Version', 'Size', 'Created', 'Signed', 'State', 'Checksum', 'Actions', '']} noun="bundles">
             {rows.map((b) => {
               const next = nextState(b.state)
               return (

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { TrendingUp, TrendingDown, Server, AlertTriangle, ArrowUpRight, Receipt, FileBarChart } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, PieChart, Pie } from 'recharts'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Modal, Progress } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Modal, Progress, useListCap, ShowAllToggle } from '@/components/ui'
 import { finopsRows, finopsTotals, costByComponent } from '@/data/finops'
 import type { FinOpsRow, CostBreakdown } from '@/data/finops'
 import { customers } from '@/data/mock'
@@ -30,6 +30,7 @@ export default function FinOps() {
 
   const allRows = useMemo(() => finopsRows(), [])
   const rows = isAll ? allRows : allRows.filter((r) => r.customer === scope)
+  const rowsCap = useListCap(rows, [scope, isAll])
   const totals = finopsTotals(rows)
   const components = useMemo(() => costByComponent(rows), [rows])
 
@@ -112,7 +113,7 @@ export default function FinOps() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rowsCap.visible.map((r) => (
                 <tr key={r.customer} className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50" onClick={() => setSel(r)}>
                   <td className="py-2.5 pr-3">
                     <p className="font-medium text-ink-900">{r.customer}</p>
@@ -131,6 +132,7 @@ export default function FinOps() {
             </tbody>
           </table>
         </div>
+        <ShowAllToggle total={rows.length} showAll={rowsCap.showAll} hidden={rowsCap.hidden} onToggle={rowsCap.toggle} noun="tenants" />
       </Card>
 
       {sel && <TenantDrawer row={sel} onClose={() => setSel(null)} />}

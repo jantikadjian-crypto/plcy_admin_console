@@ -114,7 +114,7 @@ export default function SupplyChain() {
       {/* Images table */}
       <Card className="mt-6">
         <CardTitle title="Images" subtitle="Signed platform images with SBOM and vulnerability posture" />
-        <Table columns={['Image', 'Version', 'Components', 'CVEs', 'Signed', 'SLSA', 'Patch status', 'Last scan', '']}>
+        <Table columns={['Image', 'Version', 'Components', 'CVEs', 'Signed', 'SLSA', 'Patch status', 'Last scan', '']} noun="images">
           {images.map((img) => (
             <Tr key={img.id}>
               <Td className="font-mono text-sm font-semibold text-ink-900">{img.name}</Td>
@@ -144,7 +144,7 @@ export default function SupplyChain() {
       {/* CVE register */}
       <Card className="mt-6">
         <CardTitle title="CVE register" subtitle="Tracked vulnerabilities across platform images" />
-        <Table columns={['CVE ID', 'Severity', 'Component', 'Image', 'Status', 'Published', 'Fixed in']}>
+        <Table columns={['CVE ID', 'Severity', 'Component', 'Image', 'Status', 'Published', 'Fixed in']} noun="CVEs">
           {cves.map((c) => (
             <Tr key={c.id}>
               <Td className="font-mono text-sm font-semibold text-ink-900">{c.id}</Td>

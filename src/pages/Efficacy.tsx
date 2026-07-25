@@ -60,7 +60,7 @@ export function Efficacy() {
 
       <Card>
         <CardTitle title="Efficacy by control family" subtitle="Sorted worst-precision first · click a family for its metrics and a decision sample" />
-        <Table columns={['Family', 'Evaluated', 'Blocked', 'Precision', 'Recall', 'F1', '8-wk trend']}>
+        <Table columns={['Family', 'Evaluated', 'Blocked', 'Precision', 'Recall', 'F1', '8-wk trend']} noun="families">
           {rows.map((c) => {
             const p = precisionOf(c), r = recallOf(c), tone = healthTone(p)
             return (

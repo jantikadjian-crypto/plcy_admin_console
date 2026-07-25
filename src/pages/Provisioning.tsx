@@ -109,7 +109,7 @@ export default function Provisioning() {
       {/* Provisioning queue */}
       <Card className="mt-6">
         <CardTitle title="Provisioning Queue" subtitle={`${rows.length} environments in the onboarding pipeline`} />
-        <Table columns={['Customer', 'Template', 'Region', 'Progress', 'Status', 'Requested', 'Owner', 'Actions', '']}>
+        <Table columns={['Customer', 'Template', 'Region', 'Progress', 'Status', 'Requested', 'Owner', 'Actions', '']} noun="jobs">
           {rows.map((p) => (
             <Tr key={p.id}>
               <Td className="font-semibold text-ink-900">{p.customer}</Td>

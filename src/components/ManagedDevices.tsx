@@ -15,7 +15,7 @@ import {
   Network,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, Badge, Modal } from '@/components/ui'
+import { Card, Badge, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import {
@@ -118,6 +118,7 @@ export default function ManagedDevices({ enforcing, requireVpn }: { enforcing: b
   }, [devices])
 
   const totals = deviceTotals(devices)
+  const devicesCap = useListCap(devices, [devices.length])
 
   const startEnroll = () => setEnroll({ step: 'form', platform: 'macOS', owner: ADMIN_EMAILS[0], code: '', deviceId: '' })
 
@@ -218,7 +219,7 @@ export default function ManagedDevices({ enforcing, requireVpn }: { enforcing: b
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {devices.map((d) => {
+            {devicesCap.visible.map((d) => {
               const Icon = platformIcon[d.platform]
               const ps = postureSummary(d)
               return (
@@ -271,6 +272,7 @@ export default function ManagedDevices({ enforcing, requireVpn }: { enforcing: b
           </tbody>
         </table>
       </div>
+      <ShowAllToggle total={devices.length} showAll={devicesCap.showAll} hidden={devicesCap.hidden} onToggle={devicesCap.toggle} noun="devices" />
 
       {/* Enroll modal */}
       {enroll && (

@@ -59,7 +59,7 @@ export function AttackLibrary() {
             ))}
           </div>
         </div>
-        <Table columns={['Technique', 'Category', 'OWASP', 'MITRE ATLAS', 'Target control', 'Coverage', 'Difficulty']}>
+        <Table columns={['Technique', 'Category', 'OWASP', 'MITRE ATLAS', 'Target control', 'Coverage', 'Difficulty']} noun="techniques">
           {rows.map((a) => (
             <Tr key={a.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(a)}>
               <Td>

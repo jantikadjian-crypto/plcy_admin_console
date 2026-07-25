@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShieldCheck, ShieldBan, Flag, Gauge, Timer, ScanSearch, Check, X, ArrowRight, Wrench, GitPullRequest, ChevronDown, ChevronUp } from 'lucide-react'
+import { ShieldCheck, ShieldBan, Flag, Gauge, Timer, ScanSearch, Check, X, ArrowRight, Wrench, GitPullRequest } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
   ResponsiveContainer,
@@ -12,7 +12,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { Card, CardTitle, StatCard, PageHeader, Table, Tr, Td, Badge, Modal } from '@/components/ui'
+import { Card, CardTitle, StatCard, PageHeader, Table, Tr, Td, Badge, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { fmtNum, fmtCompact } from '@/data/mock'
@@ -116,10 +116,6 @@ function ModePills({ active, onPick, disabled }: { active: EnforcementMode; onPi
 
 const OUTCOMES: (DecisionOutcome | 'All')[] = ['All', 'Blocked', 'Flagged', 'Allowed']
 
-/* The log is a scroll-back list, not a worklist — the recent end is what gets
- * read. Cap it there and keep the rest one click away. */
-const DECISION_CAP = 25
-
 /** Current version of a pack per the change-management history, for the CR bump. */
 function versionsFor(packId: string): { from: string; to: string } {
   const from = versionBaseline[packId]?.[0]?.version ?? '1.0'
@@ -136,11 +132,7 @@ export default function Enforcement() {
   const [customer, setCustomer] = useState('All')
   const [family, setFamily] = useState('All')
   const [onlyUntriaged, setOnlyUntriaged] = useState(false)
-  const [showAll, setShowAll] = useState(false)
   const [sel, setSel] = useState<EnforcementDecision | null>(null)
-
-  // A filter change redefines "most recent" — collapse back to the cap.
-  useEffect(() => setShowAll(false), [outcome, customer, family, onlyUntriaged])
 
   const evaluatedToday = trafficTrend[trafficTrend.length - 1]
   const total = evaluatedToday.allowed + evaluatedToday.flagged + evaluatedToday.blocked
@@ -157,8 +149,8 @@ export default function Enforcement() {
     .filter((d) => (family === 'All' ? true : familyOfControl(d.controlId) === family))
     .filter((d) => (onlyUntriaged ? !triage[d.id] : true))
 
-  const visible = showAll ? rows : rows.slice(0, DECISION_CAP)
-  const hidden = rows.length - visible.length
+  // A filter change redefines "most recent" — collapse back to the cap.
+  const decisionCap = useListCap(rows, [outcome, customer, family, onlyUntriaged])
 
   const toggleGlobal = () => {
     const next = !enabled
@@ -315,14 +307,15 @@ export default function Enforcement() {
             Needs review
           </label>
           <span className="ml-auto text-xs text-ink-400">
-            {hidden > 0
-              ? `Showing ${visible.length} of ${rows.length} matching · ${log.length} total`
+            {decisionCap.hidden > 0
+              ? `Showing ${decisionCap.visible.length} of ${rows.length} matching · ${log.length} total`
               : `${rows.length} of ${log.length}`}
           </span>
         </div>
 
-        <Table columns={['Time', 'Outcome', 'Control', 'Customer', 'Subject', 'Latency', 'Review']}>
-          {visible.map((d) => {
+        {/* The filter bar reports the counts, so this page drives its own cap. */}
+        <Table columns={['Time', 'Outcome', 'Control', 'Customer', 'Subject', 'Latency', 'Review']} cap={false}>
+          {decisionCap.visible.map((d) => {
             const t = triage[d.id]
             const control = controlById(d.controlId)
             return (
@@ -352,19 +345,14 @@ export default function Enforcement() {
           })}
         </Table>
         {rows.length === 0 && <p className="py-8 text-center text-sm text-ink-400">No decisions match these filters.</p>}
-
-        {rows.length > DECISION_CAP && (
-          <div className="mt-3 flex justify-center">
-            <button
-              onClick={() => setShowAll((v) => !v)}
-              className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
-            >
-              {showAll
-                ? <><ChevronUp className="h-3.5 w-3.5" />Show most recent {DECISION_CAP}</>
-                : <><ChevronDown className="h-3.5 w-3.5" />Show all {rows.length} decisions<span className="text-ink-400">({hidden} older)</span></>}
-            </button>
-          </div>
-        )}
+        <ShowAllToggle
+          total={rows.length}
+          showAll={decisionCap.showAll}
+          hidden={decisionCap.hidden}
+          onToggle={decisionCap.toggle}
+          noun="decisions"
+          recent
+        />
       </Card>
 
       {/* Tuning recommendations — false positives turned into proposals */}
@@ -469,7 +457,7 @@ export default function Enforcement() {
           title="Active Enforcement Rules"
           subtitle="Each row is a live composite pack (framework or industry bundle). Changing a mode takes effect at the enforcement point and is written to the audit log."
         />
-        <Table columns={['Policy pack', 'Controls', 'Scope', 'Mode', 'Exceptions']}>
+        <Table columns={['Policy pack', 'Controls', 'Scope', 'Mode', 'Exceptions']} noun="packs">
           {enforcementRows.map(({ pack, controls, fallback, scope }) => {
             const mode = modes[pack.id] ?? fallback
             const packExceptions = exceptions.filter((e) => controlsForPack(pack).some((c) => c.id === e.controlId)).length

@@ -19,7 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Progress, Modal } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Progress, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
@@ -194,6 +194,8 @@ export default function BulkOps() {
     () => (isAll ? deployments : deployments.filter((d) => d.customer === scope)),
     [isAll, scope],
   )
+
+  const scopedCap = useListCap(scoped, [scope, isAll])
 
   const [actionId, setActionId] = useState<string>('upgrade')
   const action = ACTIONS.find((a) => a.id === actionId)!
@@ -516,7 +518,7 @@ export default function BulkOps() {
                 </tr>
               </thead>
               <tbody>
-                {scoped.map((d) => {
+                {scopedCap.visible.map((d) => {
                   const reason = action.ineligibleReason(d)
                   const isEligible = !reason
                   const checked = selected.has(d.id)
@@ -569,6 +571,7 @@ export default function BulkOps() {
               </tbody>
             </table>
           </div>
+          <ShowAllToggle total={scoped.length} showAll={scopedCap.showAll} hidden={scopedCap.hidden} onToggle={scopedCap.toggle} noun="targets" />
         </Card>
 
         {/* Action builder */}

@@ -231,6 +231,7 @@ export default function Sla() {
         <CardTitle title="SLA Attainment" subtitle="Uptime vs. contractual target, month-to-date · click a customer to drill down" />
         <Table
           columns={['Customer', 'Tier', 'Target', 'Attainment', 'Response / Restore', 'Breaches', 'Credits', 'Status']}
+          noun="customers"
         >
           {slaRows.map((t: SlaTarget) => (
             <Tr key={t.customer} onClick={() => setDetailCustomer(t)}>
@@ -267,6 +268,7 @@ export default function Sla() {
         <CardTitle title="Maintenance Windows" subtitle="Planned changes across the fleet · click a window for details" />
         <Table
           columns={['Window', 'Customer', 'When', 'Type', 'Impact', 'Notice', 'Notified', 'Status']}
+          noun="windows"
         >
           {windowRows.map((w) => (
             <Tr key={w.id} onClick={() => setDetailWindow(w)}>

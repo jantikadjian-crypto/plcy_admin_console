@@ -81,7 +81,7 @@ export default function Team() {
         {filtered.length === 0 ? (
           <EmptyState icon={Search} title="No matches" description="Try a different search or filter." />
         ) : (
-          <Table columns={['Name', 'Department', 'Access level', 'On-call', 'MFA', 'Status', 'Last active', '']}>
+          <Table columns={['Name', 'Department', 'Access level', 'On-call', 'MFA', 'Status', 'Last active', '']} noun="people">
             {filtered.map((e) => {
               const dm = departmentMeta(e.department)
               return (

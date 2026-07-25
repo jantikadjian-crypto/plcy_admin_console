@@ -43,7 +43,7 @@ export function Support() {
             ))}
           </div>
         </div>
-        <Table columns={['ID', 'Customer', 'Subject', 'Priority', 'Status', 'SLA', 'Assignee', 'Updated']}>
+        <Table columns={['ID', 'Customer', 'Subject', 'Priority', 'Status', 'SLA', 'Assignee', 'Updated']} noun="tickets">
           {rows.map((t) => (
             <Tr key={t.id} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSelId(t.id)}>
               <Td className="font-mono text-xs font-semibold text-ink-900">{t.id}</Td>

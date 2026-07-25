@@ -12,7 +12,7 @@ import {
   Cpu,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Progress } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Progress, useListCap, ShowAllToggle } from '@/components/ui'
 import { SecurityPostureBanner } from '@/components/SecurityPostureBanner'
 import { deployments, regionByCode } from '@/data/fleet'
 import { useRegistryPromoted } from '@/data/registryStore'
@@ -45,6 +45,7 @@ export default function FleetPosture() {
     if (filter === 'security') return r.psaWeak > 0
     return true
   })
+  const shownCap = useListCap(shown, [filter])
 
   return (
     <>
@@ -117,7 +118,7 @@ export default function FleetPosture() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((r) => (
+              {shownCap.visible.map((r) => (
                 <PostureRow key={r.d.id} r={r} open={openId === r.d.id} onToggle={() => setOpenId((id) => (id === r.d.id ? null : r.d.id))} />
               ))}
               {shown.length === 0 && (
@@ -128,6 +129,7 @@ export default function FleetPosture() {
             </tbody>
           </table>
         </div>
+        <ShowAllToggle total={shown.length} showAll={shownCap.showAll} hidden={shownCap.hidden} onToggle={shownCap.toggle} noun="tenants" />
       </Card>
     </>
   )

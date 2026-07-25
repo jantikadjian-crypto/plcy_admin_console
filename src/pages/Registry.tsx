@@ -15,7 +15,7 @@ import {
   ArrowUpRight,
   FileBarChart,
 } from 'lucide-react'
-import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal } from '@/components/ui'
+import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Modal, useListCap, ShowAllToggle } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { registryImages, currentTagOf, sbomFor, totalCves } from '@/data/registry'
@@ -98,7 +98,7 @@ export default function Registry() {
 
       <Card className="mt-6">
         <CardTitle title="Images" subtitle="Each row is one PLCY software component. See its approved (promoted) version, how many customer clusters run that version vs. how many are behind or ahead, and any known security issues. Click a row to inspect tags, view the SBOM, or promote/roll back a version." />
-        <Table columns={['Repository', 'Promoted tag', 'Fleet rollout', 'Signing', 'Vulnerabilities', 'Status', '']}>
+        <Table columns={['Repository', 'Promoted tag', 'Fleet rollout', 'Signing', 'Vulnerabilities', 'Status', '']} noun="repositories">
           {images.map((img) => {
             const cur = currentTagOf(img)
             const ad = imageAdoption(img.id, deployments, promoted)
@@ -172,6 +172,7 @@ function ImageDrawer({ img, promoted, scanning, onClose, onPromote, onRescan, on
 }) {
   const [tab, setTab] = useState<DrawerTab>('tags')
   const sbom = sbomFor(img)
+  const sbomCap = useListCap(sbom, [img.id])
   const imgCves = allCves.filter((c) => c.image === img.name)
   const clusters: ImageClusterRow[] = imageClusters(img.id, deployments, promoted)
 
@@ -302,7 +303,7 @@ function ImageDrawer({ img, promoted, scanning, onClose, onPromote, onRescan, on
               </tr>
             </thead>
             <tbody>
-              {sbom.map((c) => (
+              {sbomCap.visible.map((c) => (
                 <tr key={c.name} className="border-b border-slate-100 last:border-0">
                   <td className="px-3 py-2 font-mono text-xs text-ink-800">{c.name}</td>
                   <td className="px-3 py-2 font-mono text-xs text-ink-600">{c.version}</td>
@@ -315,6 +316,7 @@ function ImageDrawer({ img, promoted, scanning, onClose, onPromote, onRescan, on
           <div className="flex items-center gap-1.5 border-t border-slate-100 px-3 py-2 text-xs text-ink-400">
             <FileCode2 className="h-3.5 w-3.5" /> Full SBOM (CycloneDX) attested at build · SLSA L{img.slsa}
           </div>
+          <ShowAllToggle total={sbom.length} showAll={sbomCap.showAll} hidden={sbomCap.hidden} onToggle={sbomCap.toggle} noun="components" />
         </div>
       )}
 
@@ -322,7 +324,7 @@ function ImageDrawer({ img, promoted, scanning, onClose, onPromote, onRescan, on
         imgCves.length === 0 ? (
           <p className="rounded-xl border border-slate-200 px-4 py-6 text-center text-sm text-ink-400">No known CVEs for this image.</p>
         ) : (
-          <Table columns={['CVE', 'Severity', 'Component', 'Fixed in', 'Status']}>
+          <Table columns={['CVE', 'Severity', 'Component', 'Fixed in', 'Status']} noun="CVEs">
             {imgCves.map((c) => (
               <Tr key={c.id}>
                 <Td className="font-mono text-xs text-ink-700">{c.id}</Td>

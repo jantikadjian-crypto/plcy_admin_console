@@ -56,7 +56,7 @@ export function PolicyChanges() {
             <Plus className="h-3.5 w-3.5" />New change request
           </GatedButton>
         </div>
-        <Table columns={['ID', 'Pack', 'Change', 'Version', 'Risk', 'Status', 'Author', 'Updated']}>
+        <Table columns={['ID', 'Pack', 'Change', 'Version', 'Risk', 'Status', 'Author', 'Updated']} noun="change requests">
           {rows.map((c) => {
             const conflict = isCROpen(c.status) && hasConflict(c, crs)
             return (

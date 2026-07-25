@@ -177,7 +177,7 @@ export default function Customers() {
         {filtered.length === 0 ? (
           <EmptyState icon={Search} title="No customers match" description="Try a different search term or plan filter." />
         ) : (
-          <Table columns={['Customer', 'Plan', 'Status', 'Seats', 'Instances', 'MRR', 'Compliance', 'CSM', '']}>
+          <Table columns={['Customer', 'Plan', 'Status', 'Seats', 'Instances', 'MRR', 'Compliance', 'CSM', '']} noun="customers">
             {filtered.map((c) => (
               <Tr key={c.id}>
                 <Td>

@@ -44,7 +44,7 @@ export default function Backups() {
       {/* Table */}
       <Card className="mt-6">
         <CardTitle title="Backup Posture" subtitle={`${scoped.length} protected environment${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
-        <Table columns={['Customer', 'Region', 'Residency', 'Last backup', 'Frequency', 'RPO', 'RTO', 'Retention', 'Restore points', 'Status', 'Encrypted', '']}>
+        <Table columns={['Customer', 'Region', 'Residency', 'Last backup', 'Frequency', 'RPO', 'RTO', 'Retention', 'Restore points', 'Status', 'Encrypted', '']} noun="customers">
           {scoped.map((b) => {
             const v = backupVerdict(b)
             return (

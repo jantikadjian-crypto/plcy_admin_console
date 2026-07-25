@@ -233,7 +233,7 @@ export default function FleetOverview() {
       {/* Single-pane matrix */}
       <Card className="mt-6">
         <CardTitle title="Fleet Matrix" subtitle="One row per client — version, health, backup, license, sovereignty" />
-        <Table columns={['Customer', 'Region', 'Version', 'Cluster', 'Backup', 'License', 'Sovereignty']}>
+        <Table columns={['Customer', 'Region', 'Version', 'Cluster', 'Backup', 'License', 'Sovereignty']} noun="customers">
           {deployments.map((d) => {
             const bak = backupOf(d.customer)
             const cluster = d.status === 'Offline' ? { t: 'red' as const, l: 'Offline' } : d.podsHealthy < d.podsTotal ? { t: 'orange' as const, l: 'Degraded' } : { t: 'green' as const, l: 'Healthy' }

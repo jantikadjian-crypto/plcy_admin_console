@@ -70,7 +70,7 @@ export default function BillingHealth() {
         {dunningQueue.length === 0 ? (
           <EmptyState icon={CheckCircle2} title="No failed charges" description="Every subscription is paid up." />
         ) : (
-          <Table columns={['Customer', 'Invoice', 'Amount', 'Attempts', 'Last error', 'Next retry', 'Stage', '']}>
+          <Table columns={['Customer', 'Invoice', 'Amount', 'Attempts', 'Last error', 'Next retry', 'Stage', '']} noun="charges">
             {dunningQueue.map((d) => (
               <Tr key={d.id}>
                 <Td className="font-medium text-ink-900">{d.customer}</Td>

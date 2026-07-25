@@ -62,7 +62,7 @@ export function CustomerHealthTab() {
 
       <Card>
         <CardTitle title="Accounts" subtitle="Sorted by health — lowest first. Click a customer for the full Account 360." />
-        <Table columns={['Customer', 'Plan', 'MRR', 'Health', 'Churn', 'Case', 'Adoption', 'Usage', 'Open', 'Renewal', 'CSM']}>
+        <Table columns={['Customer', 'Plan', 'MRR', 'Health', 'Churn', 'Case', 'Adoption', 'Usage', 'Open', 'Renewal', 'CSM']} noun="accounts">
           {rows.map((c) => {
             const alert = alertFor(c.customer)
             const kase = caseOf(c.customer)

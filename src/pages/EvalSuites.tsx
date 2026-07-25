@@ -58,7 +58,7 @@ export function EvalSuites() {
 
       <Card>
         <CardTitle title="Run history" subtitle="Newest first · regressions flagged against the suite's previous baseline" />
-        <Table columns={['Suite', 'Model', 'Policy', 'Date', 'Catch rate', 'Over-block', 'Score', 'Result']}>
+        <Table columns={['Suite', 'Model', 'Policy', 'Date', 'Catch rate', 'Over-block', 'Score', 'Result']} noun="runs" recent>
           {runs.map((r) => (
             <Tr key={r.id}>
               <Td className="text-ink-700">{suiteById(r.suiteId)?.name ?? r.suiteId}</Td>

@@ -58,7 +58,7 @@ export default function PrivilegedAccess() {
 
       <Card className="mt-6">
         <CardTitle title="Access requests" subtitle={`${rows.length} request${rows.length === 1 ? '' : 's'}`} />
-        <Table columns={['ID', 'Engineer', 'Customer', 'Environment', 'Scope', 'Status', 'Expires in', 'Actions', '']}>
+        <Table columns={['ID', 'Engineer', 'Customer', 'Environment', 'Scope', 'Status', 'Expires in', 'Actions', '']} noun="requests">
           {rows.map((a) => (
             <Tr key={a.id}>
               <Td className="font-mono text-xs text-ink-700">{a.id}</Td>

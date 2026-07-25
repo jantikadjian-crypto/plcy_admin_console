@@ -151,7 +151,7 @@ export default function Licensing() {
       {/* License table */}
       <Card className="mt-6">
         <CardTitle title="Licenses" subtitle={`${scoped.length} client license${scoped.length === 1 ? '' : 's'}${isAll ? '' : ` · ${scope}`}`} />
-        <Table columns={['Customer', 'Plan', 'Seats', 'Utilization', 'Expiry', 'Status', 'Actions', '']}>
+        <Table columns={['Customer', 'Plan', 'Seats', 'Utilization', 'Expiry', 'Status', 'Actions', '']} noun="licenses">
           {scoped.map((d) => {
             const l = d.license
             const pct = utilization(l)

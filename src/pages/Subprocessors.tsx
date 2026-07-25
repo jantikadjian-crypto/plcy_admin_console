@@ -43,7 +43,7 @@ export default function Subprocessors() {
 
       <Card className="mt-6">
         <CardTitle title="Sub-processor Registry" subtitle={`${subprocessors.length} processors with access to customer environments`} />
-        <Table columns={['Name', 'Purpose', 'Location', 'Data access', 'DPA', 'Status', 'Restricted-in', '']}>
+        <Table columns={['Name', 'Purpose', 'Location', 'Data access', 'DPA', 'Status', 'Restricted-in', '']} noun="sub-processors">
           {subprocessors.map((s) => (
             <Tr key={s.id}>
               <Td className="font-semibold text-ink-900">{s.name}</Td>
