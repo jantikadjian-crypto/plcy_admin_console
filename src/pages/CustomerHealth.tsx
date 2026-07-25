@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { HeartPulse, AlertTriangle, Gauge, DollarSign, Crown, UserMinus, Check, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { HeartPulse, AlertTriangle, Gauge, DollarSign, Crown, UserMinus, Check, Plus, ShieldAlert, Siren, CalendarClock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Table, Tr, Td, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -8,10 +9,15 @@ import {
   customerHealth, churnTone, healthTone, usageArrow,
   HEALTH_WEIGHTS, healthScores, healthComposite, dimTone,
   contactsByCustomer, FEATURES, featureAdoption,
+  deriveChurnAlerts, churnStatusTone, churnSlaBreached, isChurnClosed,
+  renewalSignal, stageTone, isRenewalOpen,
 } from '@/data/success'
-import type { CustomerHealth as CH, ActivityType } from '@/data/success'
+import type { CustomerHealth as CH, ActivityType, ChurnAlert } from '@/data/success'
 import { activityTone } from '@/data/success'
-import { useSuccess, addActivity, toggleTask } from '@/data/successStore'
+import { useSuccess, addActivity, toggleTask, churnCaseFor } from '@/data/successStore'
+import type { ChurnCase } from '@/data/successStore'
+
+const AS_OF = '2026-07-24'
 
 function Spark({ data, tone }: { data: number[]; tone: string }) {
   const w = 72, h = 22
@@ -22,52 +28,79 @@ function Spark({ data, tone }: { data: number[]; tone: string }) {
 }
 
 export function CustomerHealthTab() {
-  const { tickets } = useSuccess()
+  const { tickets, churn } = useSuccess()
   const [sel, setSel] = useState<CH | null>(null)
   const openFor = (c: string) => tickets.filter((t) => t.customer === c && t.status !== 'Resolved').length
 
+  // Health says who's slipping; the churn desk says whether anyone's on it.
+  const alerts = deriveChurnAlerts(AS_OF)
+  const alertFor = (c: string) => alerts.find((a) => a.customer === c)
+  const caseOf = (c: string) => churnCaseFor(c, churn)
+
   const rows = [...customerHealth].sort((a, b) => a.health - b.health) // worst first
   const atRisk = customerHealth.filter((c) => c.churn !== 'Low').length
+  const untouched = alerts.filter((a) => caseOf(a.customer).status === 'New').length
   const avg = Math.round(customerHealth.reduce((a, c) => a + c.health, 0) / customerHealth.length)
   const mrr = customerHealth.reduce((a, c) => a + c.mrr, 0)
 
   return (
     <div>
-      <PageHeader title="Customer Health" description="Portfolio health across every customer — who's thriving, who's slipping, and who's at risk of churn." />
+      <PageHeader title="Customer Health" description="Portfolio health across every customer — who's thriving, who's slipping, and who's at risk of churn. Each at-risk account also shows the live churn case against it, so the view answers not just who's in trouble but whether anyone is working it." />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Customers" value={customerHealth.length} icon={HeartPulse} tone="blue" footer="Active accounts" />
         <StatCard label="At churn risk" value={atRisk} icon={AlertTriangle} tone={atRisk ? 'orange' : 'green'} footer="Medium or high risk" />
-        <StatCard label="Avg health" value={avg} icon={Gauge} tone={avg >= 80 ? 'green' : 'orange'} footer="Portfolio composite" />
-        <StatCard label="MRR" value={`$${(mrr / 1000).toFixed(0)}k`} icon={DollarSign} tone="purple" footer="Monthly recurring" />
+        <StatCard
+          label="Risk not yet worked"
+          value={untouched}
+          icon={ShieldAlert}
+          tone={untouched ? 'red' : 'green'}
+          footer={untouched ? `${alerts.length - untouched} of ${alerts.length} cases in progress` : `All ${alerts.length} cases picked up`}
+        />
+        <StatCard label="Avg health" value={avg} icon={Gauge} tone={avg >= 80 ? 'green' : 'orange'} footer={`Portfolio composite · $${(mrr / 1000).toFixed(0)}k MRR`} />
       </div>
 
       <Card>
         <CardTitle title="Accounts" subtitle="Sorted by health — lowest first. Click a customer for the full Account 360." />
-        <Table columns={['Customer', 'Plan', 'MRR', 'Health', 'Churn', 'Adoption', 'Usage', 'Open', 'Renewal', 'CSM']}>
-          {rows.map((c) => (
-            <Tr key={c.customer} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(c)}>
-              <Td className="font-medium text-ink-900">{c.customer}</Td>
-              <Td className="text-xs text-ink-600">{c.plan}</Td>
-              <Td className="tabular-nums text-ink-600">${(c.mrr / 1000).toFixed(0)}k</Td>
-              <Td>
-                <span className="flex items-center gap-2">
-                  <Badge tone={healthTone(c.health)}>{c.health}</Badge>
-                  <Spark data={c.trend} tone={healthTone(c.health)} />
-                </span>
-              </Td>
-              <Td><Badge tone={churnTone[c.churn]} dot>{c.churn}</Badge></Td>
-              <Td className="tabular-nums text-ink-600">{c.adoption}%</Td>
-              <Td className={c.usageTrend === 'up' ? 'text-emerald-600' : c.usageTrend === 'down' ? 'text-rose-600' : 'text-ink-400'}>{usageArrow(c.usageTrend)}</Td>
-              <Td className="tabular-nums text-ink-700">{openFor(c.customer)}</Td>
-              <Td className="whitespace-nowrap text-xs text-ink-500">{c.renewalDate}</Td>
-              <Td className="text-xs text-ink-500">{c.csm}</Td>
-            </Tr>
-          ))}
+        <Table columns={['Customer', 'Plan', 'MRR', 'Health', 'Churn', 'Case', 'Adoption', 'Usage', 'Open', 'Renewal', 'CSM']}>
+          {rows.map((c) => {
+            const alert = alertFor(c.customer)
+            const kase = caseOf(c.customer)
+            const breached = alert ? churnSlaBreached(alert, kase.status !== 'New') && !isChurnClosed(kase.status) : false
+            return (
+              <Tr key={c.customer} className="cursor-pointer transition-colors hover:bg-slate-50" onClick={() => setSel(c)}>
+                <Td className="font-medium text-ink-900">{c.customer}</Td>
+                <Td className="text-xs text-ink-600">{c.plan}</Td>
+                <Td className="tabular-nums text-ink-600">${(c.mrr / 1000).toFixed(0)}k</Td>
+                <Td>
+                  <span className="flex items-center gap-2">
+                    <Badge tone={healthTone(c.health)}>{c.health}</Badge>
+                    <Spark data={c.trend} tone={healthTone(c.health)} />
+                  </span>
+                </Td>
+                <Td><Badge tone={churnTone[c.churn]} dot>{c.churn}</Badge></Td>
+                <Td>
+                  {alert ? (
+                    <span className="flex items-center gap-1.5">
+                      <Badge tone={churnStatusTone[kase.status]}>{kase.status}</Badge>
+                      {breached && <Siren className="h-3.5 w-3.5 text-rose-600" aria-label="First-response SLA breached" />}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-ink-300">—</span>
+                  )}
+                </Td>
+                <Td className="tabular-nums text-ink-600">{c.adoption}%</Td>
+                <Td className={c.usageTrend === 'up' ? 'text-emerald-600' : c.usageTrend === 'down' ? 'text-rose-600' : 'text-ink-400'}>{usageArrow(c.usageTrend)}</Td>
+                <Td className="tabular-nums text-ink-700">{openFor(c.customer)}</Td>
+                <Td className="whitespace-nowrap text-xs text-ink-500">{c.renewalDate}</Td>
+                <Td className="text-xs text-ink-500">{c.csm}</Td>
+              </Tr>
+            )
+          })}
         </Table>
       </Card>
 
-      {sel && <Account360 c={sel} onClose={() => setSel(null)} />}
+      {sel && <Account360 c={sel} alert={alertFor(sel.customer)} kase={caseOf(sel.customer)} onClose={() => setSel(null)} />}
     </div>
   )
 }
@@ -75,8 +108,8 @@ export function CustomerHealthTab() {
 /* ------------------------------------------------------------------ */
 /* Account 360 — the full drill-down                                   */
 /* ------------------------------------------------------------------ */
-function Account360({ c, onClose }: { c: CH; onClose: () => void }) {
-  const { tickets, activities, tasks, plays } = useSuccess()
+function Account360({ c, alert, kase, onClose }: { c: CH; alert?: ChurnAlert; kase: ChurnCase; onClose: () => void }) {
+  const { tickets, activities, tasks, plays, renewals } = useSuccess()
   const { can, logAction } = useSession()
   const [note, setNote] = useState('')
   const [noteType, setNoteType] = useState<ActivityType>('note')
@@ -87,6 +120,8 @@ function Account360({ c, onClose }: { c: CH; onClose: () => void }) {
   const openTickets = tickets.filter((t) => t.customer === c.customer && t.status !== 'Resolved')
   const acts = activities.filter((a) => a.customer === c.customer)
   const openTasks = tasks.filter((t) => t.customer === c.customer && t.status === 'open')
+  const renewal = renewals.find((r) => r.customer === c.customer)
+  const signal = renewal ? renewalSignal(renewal, tasks, kase.status, AS_OF) : undefined
 
   const logNote = () => {
     const text = note.trim()
@@ -106,6 +141,50 @@ function Account360({ c, onClose }: { c: CH; onClose: () => void }) {
       footer={<button className="btn-secondary" onClick={onClose}>Close</button>}
     >
       <div className="space-y-6">
+        {/* Live working state — what's being done about this account right now */}
+        {(alert || signal) && (
+          <section className="grid gap-3 sm:grid-cols-2">
+            {alert && (
+              <div className={clsx('rounded-xl border px-3 py-2.5', isChurnClosed(kase.status) ? 'border-slate-200 bg-slate-50/60' : 'border-rose-200 bg-rose-50/40')}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                    <ShieldAlert className="h-3.5 w-3.5" />Churn case
+                  </span>
+                  <Badge tone={churnStatusTone[kase.status]}>{kase.status}</Badge>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-600">
+                  Owned by <span className="font-medium text-ink-800">{kase.owner ?? c.csm}</span>
+                  {kase.owner ? '' : ' (CSM)'} · {alert.severity.toLowerCase()} severity
+                </p>
+                {kase.escalatedTo && <p className="text-[11px] text-rose-700">Escalated to {kase.escalatedTo}{kase.escalatedAt ? ` · ${kase.escalatedAt}` : ''}</p>}
+                {kase.notifiedChannels.length > 0 && <p className="text-[11px] text-ink-500">Notified {kase.notifiedChannels.join(', ')}</p>}
+                <Link to="/success?tab=churn" className="mt-1 inline-block text-[11px] text-ink-500 hover:text-brand-700 hover:underline">Open the churn desk</Link>
+              </div>
+            )}
+            {renewal && signal && (
+              <div className="rounded-xl border border-slate-200 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                    <CalendarClock className="h-3.5 w-3.5" />Renewal
+                  </span>
+                  <Badge tone={stageTone[renewal.stage]} dot>{renewal.stage}</Badge>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-600">
+                  ${(renewal.arr / 1000).toFixed(0)}k · {renewal.renewalDate} · owner {renewal.owner}
+                </p>
+                {isRenewalOpen(renewal.stage) && (
+                  <p className="text-xs text-ink-600">
+                    <span className="font-medium text-ink-800">{signal.adjusted}%</span> to close
+                    {signal.delta !== 0 && <span className={clsx('ml-1', signal.delta < 0 ? 'text-rose-600' : 'text-emerald-600')}>({signal.delta > 0 ? '+' : ''}{signal.delta} vs. recorded)</span>}
+                  </p>
+                )}
+                {signal.mismatch && <p className="text-[11px] font-medium text-amber-700">Signals suggest {signal.suggested}</p>}
+                <Link to={`/success?tab=renewals&customer=${encodeURIComponent(c.customer)}`} className="mt-1 inline-block text-[11px] text-ink-500 hover:text-brand-700 hover:underline">View in pipeline</Link>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Explainable health */}
         <section>
           <div className="mb-2 flex items-center justify-between">
