@@ -372,3 +372,139 @@ export function retentionMetrics(cases: Record<string, { status: ChurnCaseStatus
   const gross = ((baseArr - contractionArr - lostArr) / baseArr) * 100
   return { base: baseArr, lostArr, savedArr, nrr, gross }
 }
+
+/* ------------------------------------------------------------------ */
+/* Renewal signals — closing the CS loop back onto the pipeline        */
+/* ------------------------------------------------------------------ */
+/**
+ * A renewal's recorded stage is a *judgement*; health, churn cases, and the task
+ * queue are the *evidence*. This derivation puts the two side by side so the
+ * pipeline can't quietly drift from what the rest of Customer Success knows:
+ *
+ *   • `suggested` — the stage the evidence implies, independent of what's recorded.
+ *   • `mismatch`  — the recorded stage is more optimistic than the evidence.
+ *   • `covered`   — someone has open work on the account (a task = a commitment).
+ *   • `adjusted`  — the probability re-scored for health and execution, with the
+ *                   reasons kept alongside so the number is never a black box.
+ */
+
+/** How rosy each stage reads, so an optimistic call can be compared to the evidence. */
+const STAGE_OPTIMISM: Record<RenewalStage, number> = { Renewed: 4, 'On track': 3, 'In negotiation': 2, 'At risk': 1, Churning: 0 }
+
+/** Stages that mean the renewal still needs active work to land. */
+export const isRenewalOpen = (s: RenewalStage) => s !== 'Renewed'
+/** Stages where losing the account is a live possibility. */
+export const isRenewalAtRisk = (s: RenewalStage) => s === 'At risk' || s === 'Churning'
+
+export interface ProbabilityAdjustment { label: string; delta: number }
+
+export interface RenewalSignal {
+  customer: string
+  health?: number
+  churn?: ChurnRisk
+  openTasks: number
+  overdueTasks: number
+  caseStatus?: ChurnCaseStatus
+  /** Stage implied by health, churn case, and execution — regardless of what's recorded. */
+  suggested: RenewalStage
+  /** The recorded stage is rosier than the evidence supports. */
+  mismatch: boolean
+  /** Someone has open work on this account. */
+  covered: boolean
+  /** At-risk with nobody working it — the gap the loop is meant to close. */
+  unworked: boolean
+  /** Recorded probability re-scored for health and execution (5–99). */
+  adjusted: number
+  /** `adjusted` − recorded, for an at-a-glance delta. */
+  delta: number
+  /** Every adjustment that moved the number, so it stays explainable. */
+  adjustments: ProbabilityAdjustment[]
+  /** Why the evidence suggests what it does. */
+  reasons: string[]
+}
+
+const clampProbability = (n: number) => Math.max(5, Math.min(99, Math.round(n)))
+
+/**
+ * Score one renewal against everything Customer Success knows about the account.
+ * `tasks` is the full task list (filtered here) and `caseStatus` the Churn Watch
+ * case, if a rep has opened one.
+ */
+export function renewalSignal(
+  r: Renewal,
+  tasks: CSTask[],
+  caseStatus?: ChurnCaseStatus,
+  asOf = '2026-07-24',
+): RenewalSignal {
+  const now = Date.parse(asOf)
+  const h = healthByCustomer(r.customer)
+  const days = Math.round((Date.parse(r.renewalDate) - now) / 86400000)
+
+  const mine = tasks.filter((t) => t.customer === r.customer && t.status === 'open')
+  const overdueTasks = mine.filter((t) => Date.parse(t.due) < now).length
+  const covered = mine.length > 0
+
+  /* ---- what the evidence says the stage should be ---- */
+  const reasons: string[] = []
+  let suggested: RenewalStage = 'On track'
+  if (caseStatus === 'Lost') {
+    suggested = 'Churning'
+    reasons.push('Churn case marked Lost')
+  } else if (h) {
+    const imminent = days <= 30 && days >= 0
+    if (h.churn === 'High' || h.health < 60) {
+      suggested = imminent ? 'Churning' : 'At risk'
+      reasons.push(h.churn === 'High' ? 'Churn risk flagged High' : `Health critical (${h.health})`)
+      if (imminent) reasons.push(`Renewal in ${days}d`)
+    } else if (h.churn === 'Medium' || h.health < 70 || h.usageTrend === 'down') {
+      suggested = 'At risk'
+      if (h.churn === 'Medium') reasons.push('Churn risk flagged Medium')
+      if (h.health < 70) reasons.push(`Health below target (${h.health})`)
+      if (h.usageTrend === 'down') reasons.push('Usage trending down')
+    }
+    // A contained or saved case is evidence the slide has been arrested.
+    if (suggested !== 'On track' && (caseStatus === 'Contained' || caseStatus === 'Saved')) {
+      suggested = caseStatus === 'Saved' ? 'On track' : 'In negotiation'
+      reasons.push(`Churn case ${caseStatus.toLowerCase()}`)
+    }
+  }
+
+  // A renewed deal is settled — no second-guessing it.
+  const mismatch = isRenewalOpen(r.stage) && STAGE_OPTIMISM[r.stage] > STAGE_OPTIMISM[suggested]
+  const unworked = isRenewalOpen(r.stage) && (isRenewalAtRisk(r.stage) || isRenewalAtRisk(suggested)) && !covered
+
+  /* ---- re-score the probability, keeping every reason ---- */
+  const adjustments: ProbabilityAdjustment[] = []
+  if (isRenewalOpen(r.stage)) {
+    if (h && h.health < 60) adjustments.push({ label: `Health critical (${h.health})`, delta: -15 })
+    else if (h && h.health < 70) adjustments.push({ label: `Health below target (${h.health})`, delta: -8 })
+    if (overdueTasks > 0) adjustments.push({ label: `${overdueTasks} overdue task${overdueTasks > 1 ? 's' : ''}`, delta: -Math.min(10, overdueTasks * 5) })
+    if (unworked) adjustments.push({ label: 'At risk with no open save work', delta: -10 })
+    if (caseStatus === 'Contained') adjustments.push({ label: 'Churn case contained', delta: 5 })
+    if (caseStatus === 'Saved') adjustments.push({ label: 'Churn case saved', delta: 10 })
+    if (caseStatus === 'Lost') adjustments.push({ label: 'Churn case lost', delta: -40 })
+    if (covered && overdueTasks === 0 && !unworked) adjustments.push({ label: 'Save work on track', delta: 4 })
+  }
+  const adjusted = clampProbability(adjustments.reduce((n, a) => n + a.delta, r.probability))
+
+  return {
+    customer: r.customer,
+    health: h?.health,
+    churn: h?.churn,
+    openTasks: mine.length,
+    overdueTasks,
+    caseStatus,
+    suggested,
+    mismatch,
+    covered,
+    unworked,
+    adjusted,
+    delta: adjusted - r.probability,
+    adjustments,
+    reasons,
+  }
+}
+
+/** Which play to reach for when a renewal needs work, given the evidence. */
+export const suggestedPlayFor = (s: RenewalSignal): string =>
+  s.suggested === 'Churning' || (s.health ?? 100) < 65 ? 'save' : s.suggested === 'At risk' ? 'adopt' : 'expand'

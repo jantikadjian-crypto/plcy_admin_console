@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ListTodo, AlarmClock, CheckCircle2, PlayCircle, Check, Plus, Pencil, Trash2, ArrowRight, Activity, Trophy, X, CalendarClock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Badge, Modal } from '@/components/ui'
@@ -22,9 +23,12 @@ export function CSTasks() {
   const { tasks, plays } = useSuccess()
   const { can, logAction } = useSession()
   const manage = can('customer.manage')
+  // Other surfaces (e.g. a renewal row) deep-link here scoped to one account.
+  const [params] = useSearchParams()
+  const linked = params.get('customer')
   const [status, setStatus] = useState('Open')
   const [owner, setOwner] = useState('All')
-  const [customer, setCustomer] = useState('All')
+  const [customer, setCustomer] = useState(linked && CUSTOMERS.includes(linked) ? linked : 'All')
   const [play, setPlay] = useState<Play | null>(null)
   const [editTask, setEditTask] = useState<EditTarget>(null)
   const [editPlay, setEditPlay] = useState<Play | 'new' | null>(null)

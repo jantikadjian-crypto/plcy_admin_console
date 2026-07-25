@@ -210,8 +210,8 @@ export function Tr({
   )
 }
 
-export function Td({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={clsx('table-td', className)}>{children}</td>
+export function Td({ children, className, colSpan }: { children: ReactNode; className?: string; colSpan?: number }) {
+  return <td className={clsx('table-td', className)} colSpan={colSpan}>{children}</td>
 }
 
 /* ------------------------------------------------------------------ */
