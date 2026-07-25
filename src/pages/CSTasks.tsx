@@ -29,6 +29,7 @@ export function CSTasks() {
   const [editTask, setEditTask] = useState<EditTarget>(null)
   const [editPlay, setEditPlay] = useState<Play | 'new' | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
+  const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'owner'>('none')
 
   const open = tasks.filter((t) => t.status === 'open')
   const overdue = open.filter((t) => daysTo(t.due) < 0).length
@@ -54,6 +55,59 @@ export function CSTasks() {
     selectedIds.forEach(fn)
     logAction({ action, target: `${selectedIds.length} tasks · ${target}`, category: 'customer' })
     clearSel()
+  }
+  const selectGroup = (ids: string[]) => setSel((s) => {
+    const n = new Set(s)
+    const all = ids.every((id) => n.has(id))
+    ids.forEach((id) => (all ? n.delete(id) : n.add(id)))
+    return n
+  })
+
+  /* ---- grouping ---- */
+  const groups: [string, typeof rows][] = groupBy === 'none'
+    ? [['', rows]]
+    : Object.entries(
+        rows.reduce((acc, t) => {
+          const k = groupBy === 'customer' ? t.customer : t.owner ?? 'Unassigned'
+          ;(acc[k] ??= []).push(t)
+          return acc
+        }, {} as Record<string, typeof rows>),
+      ).sort((a, b) => (a[0] === 'Unassigned' ? 1 : b[0] === 'Unassigned' ? -1 : a[0].localeCompare(b[0])))
+
+  const renderRow = (t: CSTask) => {
+    const p = playName(t.play)
+    const d = daysTo(t.due)
+    const isDone = t.status === 'done'
+    const checked = sel.has(t.id)
+    return (
+      <div key={t.id} className={clsx('group flex items-start gap-3 py-3', checked && 'bg-brand-50/40')}>
+        {manage && (
+          <button onClick={() => toggleSel(t.id)} className={clsx('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors', checked ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 hover:bg-slate-50')} aria-label="Select task">
+            {checked && <Check className="h-3 w-3" />}
+          </button>
+        )}
+        <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => complete(t.id)} aria-label="Toggle complete"
+          className={clsx('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors', isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 hover:bg-slate-50')}>
+          {isDone && <Check className="h-3.5 w-3.5" />}
+        </GatedButton>
+        <button onClick={() => manage && setEditTask(t)} className="min-w-0 flex-1 text-left">
+          <p className={clsx('text-sm', isDone ? 'text-ink-400 line-through' : 'text-ink-800')}>{t.title}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
+            {groupBy !== 'customer' && <span className="font-medium text-ink-600">{t.customer}</span>}
+            {p && <span onClick={(e) => { e.stopPropagation(); setPlay(p) }} className="inline-flex cursor-pointer items-center gap-0.5 rounded-full bg-violet-50 px-2 py-0.5 font-medium text-violet-700 ring-1 ring-inset ring-violet-600/20 hover:bg-violet-100"><PlayCircle className="h-3 w-3" />{p.title}</span>}
+            <span className={clsx(!isDone && d < 0 ? 'font-semibold text-rose-600' : !isDone && d <= 3 ? 'text-amber-600' : 'text-ink-400')}>{d < 0 ? `${-d}d overdue` : `due in ${d}d`}</span>
+            <span className="font-mono text-ink-300">{t.id}</span>
+          </div>
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge tone={priorityTone[t.priority]}>{t.priority}</Badge>
+          {groupBy !== 'owner' && (t.owner
+            ? <span className="text-xs text-ink-500">{t.owner}</span>
+            : <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => claim(t.id)} className="rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-slate-300 text-ink-600 hover:bg-slate-50">Claim</GatedButton>)}
+          {manage && <button onClick={() => setEditTask(t)} className="text-ink-300 opacity-0 transition-opacity hover:text-ink-600 group-hover:opacity-100" aria-label="Edit task"><Pencil className="h-3.5 w-3.5" /></button>}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -105,6 +159,13 @@ export function CSTasks() {
             <option value="All">All customers</option>
             {CUSTOMERS.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+          <span className="text-xs text-ink-400">Group</span>
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as typeof groupBy)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-ink-700">
+            <option value="none">None</option>
+            <option value="customer">Customer</option>
+            <option value="owner">Owner</option>
+          </select>
           <span className="ml-auto text-xs text-ink-400">{rows.length} shown</span>
         </div>
 
@@ -132,44 +193,36 @@ export function CSTasks() {
           </div>
         )}
 
-        <div className="divide-y divide-slate-100">
-          {rows.map((t) => {
-            const p = playName(t.play)
-            const d = daysTo(t.due)
-            const isDone = t.status === 'done'
-            const checked = sel.has(t.id)
-            return (
-              <div key={t.id} className={clsx('group flex items-start gap-3 py-3', checked && 'bg-brand-50/40')}>
-                {manage && (
-                  <button onClick={() => toggleSel(t.id)} className={clsx('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors', checked ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 hover:bg-slate-50')} aria-label="Select task">
-                    {checked && <Check className="h-3 w-3" />}
-                  </button>
-                )}
-                <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => complete(t.id)} aria-label="Toggle complete"
-                  className={clsx('mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors', isDone ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 hover:bg-slate-50')}>
-                  {isDone && <Check className="h-3.5 w-3.5" />}
-                </GatedButton>
-                <button onClick={() => manage && setEditTask(t)} className="min-w-0 flex-1 text-left">
-                  <p className={clsx('text-sm', isDone ? 'text-ink-400 line-through' : 'text-ink-800')}>{t.title}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink-500">
-                    <span className="font-medium text-ink-600">{t.customer}</span>
-                    {p && <span onClick={(e) => { e.stopPropagation(); setPlay(p) }} className="inline-flex cursor-pointer items-center gap-0.5 rounded-full bg-violet-50 px-2 py-0.5 font-medium text-violet-700 ring-1 ring-inset ring-violet-600/20 hover:bg-violet-100"><PlayCircle className="h-3 w-3" />{p.title}</span>}
-                    <span className={clsx(!isDone && d < 0 ? 'font-semibold text-rose-600' : !isDone && d <= 3 ? 'text-amber-600' : 'text-ink-400')}>{d < 0 ? `${-d}d overdue` : `due in ${d}d`}</span>
-                    <span className="font-mono text-ink-300">{t.id}</span>
+        {groupBy === 'none' ? (
+          <div className="divide-y divide-slate-100">
+            {rows.map(renderRow)}
+            {rows.length === 0 && <p className="py-6 text-center text-sm text-ink-400">No tasks match these filters.</p>}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {groups.map(([g, items]) => {
+              const ids = items.map((t) => t.id)
+              const allSel = manage && ids.every((id) => sel.has(id))
+              const overdueN = items.filter((t) => t.status === 'open' && daysTo(t.due) < 0).length
+              return (
+                <div key={g} className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-3 py-2">
+                    {manage && (
+                      <button onClick={() => selectGroup(ids)} className={clsx('flex h-4 w-4 items-center justify-center rounded border transition-colors', allSel ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-300 hover:bg-white')} aria-label={`Select all in ${g}`}>
+                        {allSel && <Check className="h-3 w-3" />}
+                      </button>
+                    )}
+                    <span className="text-sm font-semibold text-ink-800">{g}</span>
+                    <Badge tone="slate">{items.length}</Badge>
+                    {overdueN > 0 && <Badge tone="red">{overdueN} overdue</Badge>}
                   </div>
-                </button>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge tone={priorityTone[t.priority]}>{t.priority}</Badge>
-                  {t.owner
-                    ? <span className="text-xs text-ink-500">{t.owner}</span>
-                    : <GatedButton cap="customer.manage" showLock={false} disabled={!manage} onClick={() => claim(t.id)} className="rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-slate-300 text-ink-600 hover:bg-slate-50">Claim</GatedButton>}
-                  {manage && <button onClick={() => setEditTask(t)} className="text-ink-300 opacity-0 transition-opacity hover:text-ink-600 group-hover:opacity-100" aria-label="Edit task"><Pencil className="h-3.5 w-3.5" /></button>}
+                  <div className="divide-y divide-slate-100 px-3">{items.map(renderRow)}</div>
                 </div>
-              </div>
-            )
-          })}
-          {rows.length === 0 && <p className="py-6 text-center text-sm text-ink-400">No tasks match these filters.</p>}
-        </div>
+              )
+            })}
+            {rows.length === 0 && <p className="py-6 text-center text-sm text-ink-400">No tasks match these filters.</p>}
+          </div>
+        )}
       </Card>
 
       <Card>
