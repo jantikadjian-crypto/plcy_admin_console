@@ -1,10 +1,16 @@
 import { useState } from 'react'
-import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus, BookOpen, Server } from 'lucide-react'
+import { Swords, AlertOctagon, ShieldOff, Grid3x3, Plus, ExternalLink, RefreshCw, UserPlus, BookOpen, Server, ShieldPlus, GitPullRequest, Check } from 'lucide-react'
 import { clsx } from 'clsx'
 import { PageHeader, StatCard, Card, CardTitle, Table, Tr, Td, Badge, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
-import { useEvals, upsertCampaign, setFindingStatus, updateFinding, retestFinding, newId } from '@/data/evalsStore'
+import { Link } from 'react-router-dom'
+import { useEvals, upsertCampaign, setFindingStatus, updateFinding, retestFinding, recordHardeningProposal, newId } from '@/data/evalsStore'
+import { hardeningRecommendations, hardeningTitle, primaryGuard, HARDENING_MIN_LOW_SEVERITY } from '@/data/hardening'
+import type { Hardening } from '@/data/hardening'
+import { useEnforcement } from '@/data/enforcementStore'
+import { addChangeRequest } from '@/data/policyChangesStore'
+import { nextVersion } from '@/data/policyChanges'
 import {
   OWASP_LLM, owaspName, familyOf, bypassRate, connectedDeployments, attemptsFor, bypassResistanceTrend,
   MITRE_ATLAS, atlasName, atlasTactic, atlasForOwasp, campaignTemplates, templateById, SCHEDULES,
@@ -117,6 +123,8 @@ export function RedTeam() {
         </Table>
       </Card>
 
+      <HardeningRecommendations />
+
       <Card>
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
@@ -225,9 +233,147 @@ function AttemptsTable({ campaignId }: { campaignId: string }) {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/* Hardening recommendations — bypasses as a case for tightening        */
+/* ------------------------------------------------------------------ */
+/**
+ * The counterpart to Enforcement's tuning recommendations. There, reviewed
+ * false positives argue a control is too aggressive; here, a bypass that got
+ * past a control argues the opposite. Both hand Policy Change Management the
+ * same `ChangeLine` shape, so a tightening enters the same review → approval →
+ * dry-run → apply path as a loosening.
+ */
+function HardeningRecommendations() {
+  const { campaigns, hardening } = useEvals()
+  const { log } = useEnforcement()
+  const { can, logAction } = useSession()
+  const manage = can('policy.manage')
+
+  const recs = hardeningRecommendations(campaigns, log)
+
+  /** Raise the proposal as a real change request, carrying its evidence. */
+  const fileChangeRequest = (h: Hardening) => {
+    const { from, to } = nextVersion(h.packId)
+    const crId = addChangeRequest({
+      packId: h.packId,
+      packName: h.packName,
+      title: hardeningTitle(h),
+      summary: `${h.rationale} Raised from red-team ${h.campaigns.join(', ')}; evidence: ${h.evidence.join(', ')}. `
+        + (h.blast.evaluated
+          ? `Blast radius: touches ${h.blast.evaluated} of the last ${h.blast.window} enforcement decisions (${h.blast.customers.join(', ')}), ${h.blast.wouldBlock} of which would newly block.`
+          : 'Blast radius: this control has not fired in the current decision-log window.'),
+      risk: h.risk,
+      fromVersion: from,
+      toVersion: to,
+      changes: h.changes,
+    })
+    recordHardeningProposal(h.controlId, crId)
+    logAction({ action: 'evals.hardening.propose', target: `${h.controlId} → ${crId}`, category: 'governance' })
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardTitle
+        title="Hardening recommendations"
+        subtitle={`Controls a bypass got past. Each proposal can be handed to Policy Change Management, carrying the findings that justify it. Raised on one Critical/High bypass, or ${HARDENING_MIN_LOW_SEVERITY} of any severity.`}
+      />
+      {recs.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center">
+          <ShieldPlus className="mx-auto h-5 w-5 text-ink-300" />
+          <p className="mt-2 text-sm text-ink-500">No unresolved bypass is pointing at a control right now.</p>
+          <p className="mt-1 text-xs text-ink-400">Open a campaign above and leave a finding unmitigated — or fail its retest — and the control it defeated shows up here.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {recs.map((h) => {
+            const crId = hardening[h.controlId]
+            return (
+              <div key={h.controlId} className="rounded-xl border border-rose-200 bg-rose-50/40 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs font-semibold text-ink-800">{h.controlId}</span>
+                  <span className="text-sm font-medium text-ink-900">{h.controlName}</span>
+                  <Badge tone={sevTone[h.severity]}>{h.severity} bypass</Badge>
+                  <span className="text-[11px] text-ink-500">{h.family}{h.packName !== h.family && ` · ${h.packName}`}</span>
+                </div>
+
+                <p className="mt-2 text-sm text-ink-700">{h.rationale}</p>
+
+                {/* The proposed edit, as a diff */}
+                <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white text-xs">
+                  {h.changes.map((c, i) => (
+                    <div key={c.field} className={i > 0 ? 'border-t border-slate-200' : ''}>
+                      <div className="border-b border-slate-100 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-500">
+                        Proposed change · {c.field}
+                      </div>
+                      <div className="flex items-start gap-2 px-3 py-1.5">
+                        <span className="mt-0.5 w-4 shrink-0 text-center font-mono text-rose-600">−</span>
+                        <span className="text-ink-600 line-through decoration-rose-300">{c.before}</span>
+                      </div>
+                      <div className="flex items-start gap-2 border-t border-slate-100 px-3 py-1.5">
+                        <span className="mt-0.5 w-4 shrink-0 text-center font-mono text-emerald-600">+</span>
+                        <span className="font-medium text-ink-800">{c.after}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Blast radius — tightening can break traffic in a way loosening can't */}
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-ink-700">
+                  <span className="font-semibold text-ink-800">Blast radius</span>{' '}
+                  {h.blast.evaluated === 0 ? (
+                    <>— {h.controlId} hasn’t fired in the last {h.blast.window} enforcement decisions, so there’s no recent traffic to judge this against.</>
+                  ) : h.blast.wouldChange > 0 ? (
+                    <>— replayed against the last {h.blast.window} enforcement decisions, this changes the outcome of{' '}
+                      <span className="font-semibold">{h.blast.wouldChange}</span> on {h.blast.customers.join(', ')}
+                      {h.blast.wouldBlock > 0 && <>, <span className="font-semibold text-rose-700">{h.blast.wouldBlock} of them newly blocked</span></>}.</>
+                  ) : (
+                    <>— no decision outcome changes: the control keeps the same verdict, but re-evaluates{' '}
+                      <span className="font-semibold">{h.blast.evaluated}</span> recent decision{h.blast.evaluated === 1 ? '' : 's'} on {h.blast.customers.join(', ')} with a detector that reads content
+                      {h.blast.currentlyAllowed > 0 && <>, {h.blast.currentlyAllowed} of which currently pass</>}.</>
+                  )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="text-[11px] text-ink-500">
+                    Evidence: {h.evidence.map((e) => <span key={e} className="font-mono">{e} </span>)}
+                    · {h.campaigns.join(', ')}
+                  </span>
+                  <div className="ml-auto">
+                    {crId ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-ink-600">
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        Raised as <Link to="/policy?tab=changes" className="font-mono font-semibold text-brand-700 hover:underline">{crId}</Link>
+                      </span>
+                    ) : (
+                      <GatedButton
+                        cap="policy.manage"
+                        showLock={false}
+                        disabled={!manage}
+                        onClick={() => fileChangeRequest(h)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-brand-700"
+                      >
+                        <GitPullRequest className="h-3.5 w-3.5" />Open change request
+                      </GatedButton>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function FindingCard({ campaignId, f, logAction }: { campaignId: string; f: Finding; logAction: LogFn }) {
   const { can } = useSession()
+  const { hardening } = useEvals()
   const [note, setNote] = useState(f.remediationNote ?? '')
+  // If this finding's control already has a hardening CR open, say so here —
+  // the reader shouldn't have to go back to the tab to find out.
+  const guard = f.linkedControlPrefix ? primaryGuard(f.linkedControlPrefix) : undefined
+  const hardeningCr = guard ? hardening[guard.id] : undefined
   const cycle = () => {
     const next: Finding['status'] = f.status === 'open' ? 'mitigated' : f.status === 'mitigated' ? 'accepted' : 'open'
     setFindingStatus(campaignId, f.id, next)
@@ -266,6 +412,9 @@ function FindingCard({ campaignId, f, logAction }: { campaignId: string; f: Find
         <span>· {f.assignee ? <>Assignee <span className="font-medium text-ink-700">{f.assignee}</span></> : 'Unassigned'}</span>
         {f.linkedControlPrefix && <span>· Should be caught by <span className="font-mono text-ink-700">{f.linkedControlPrefix}</span> ({familyOf(f.linkedControlPrefix)})</span>}
         {f.linkedIncidentId && <span>· <span className="font-medium text-brand-600">Incident {f.linkedIncidentId}</span></span>}
+        {hardeningCr && (
+          <span>· Hardening <Link to="/policy?tab=changes" className="font-mono font-semibold text-brand-700 hover:underline">{hardeningCr}</Link> raised on {guard?.id}</span>
+        )}
       </p>
 
       {f.repro && (

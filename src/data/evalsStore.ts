@@ -15,10 +15,12 @@ interface EvalsState {
   campaigns: RedTeamCampaign[]
   runs: EvalRun[]
   reviews: ReviewItem[]
+  /** Control id → the change request its hardening recommendation was raised as. */
+  hardening: Record<string, string>
 }
 
 function seed(): EvalsState {
-  return { campaigns: redTeamSeed, runs: runSeed, reviews: reviewSeed }
+  return { campaigns: redTeamSeed, runs: runSeed, reviews: reviewSeed, hardening: {} }
 }
 
 function mergeSeeds(stored: EvalsState): EvalsState {
@@ -30,6 +32,7 @@ function mergeSeeds(stored: EvalsState): EvalsState {
     campaigns: [...redTeamSeed.filter((c) => !campIds.has(c.id)), ...stored.campaigns],
     runs: [...runSeed.filter((r) => !runIds.has(r.id)), ...stored.runs],
     reviews: [...reviewSeed.filter((r) => !revIds.has(r.id)), ...steReviews],
+    hardening: stored.hardening ?? {},
   }
 }
 
@@ -105,6 +108,15 @@ export function labelReview(id: string, label: ReviewLabel, reviewer = 'You') {
     ...state,
     reviews: state.reviews.map((r) => (r.id === id ? { ...r, label, reviewer: label === 'unreviewed' ? undefined : reviewer } : r)),
   }
+  emit()
+}
+
+/**
+ * Remember that a hardening recommendation became a change request, so the
+ * Red-Team tab shows the link instead of offering to file it a second time.
+ */
+export function recordHardeningProposal(controlId: string, crId: string) {
+  state = { ...state, hardening: { ...state.hardening, [controlId]: crId } }
   emit()
 }
 

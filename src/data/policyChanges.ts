@@ -96,6 +96,18 @@ export const versionBaseline: Record<string, VersionEntry[]> = {
   F13: [{ version: '1.0', date: '2026-01-12', author: 'System', summary: 'Initial HIPAA PHI Protection Pack' }],
 }
 
+/**
+ * Where a pack's version sits today, and the minor bump a new change request
+ * would take it to. Shared by every surface that raises a CR so they can't
+ * drift apart on numbering.
+ */
+export function nextVersion(packId: string): { from: string; to: string } {
+  const from = versionBaseline[packId]?.[0]?.version ?? '1.0'
+  const [major, minor] = from.split('.')
+  return { from, to: `${major}.${Number(minor ?? 0) + 1}` }
+}
+
+
 /* ------------------------------------------------------------------ */
 /* Seeded change requests                                              */
 /* ------------------------------------------------------------------ */

@@ -128,7 +128,7 @@ const liveComposites = packs.filter((p) => p.type === 'composite' && p.status ==
  * flags, everything else (Route, Transform, Throttle, Emit) resolves the
  * request and is recorded as allowed. Monitor-mode controls never block.
  */
-function outcomeFor(control: Control): DecisionOutcome {
+export function outcomeFor(control: Control): DecisionOutcome {
   if (control.mode === 'monitor') return control.decision === 'Deny' ? 'Flagged' : 'Allowed'
   if (control.decision === 'Deny') return 'Blocked'
   if (control.decision === 'Review' || control.decision === 'Log') return 'Flagged'

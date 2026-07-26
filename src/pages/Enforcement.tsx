@@ -29,7 +29,7 @@ import {
 } from '@/data/enforcementStore'
 import type { EnforcementMode } from '@/data/enforcementStore'
 import { addChangeRequest } from '@/data/policyChangesStore'
-import { versionBaseline } from '@/data/policyChanges'
+import { nextVersion } from '@/data/policyChanges'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -116,13 +116,6 @@ function ModePills({ active, onPick, disabled }: { active: EnforcementMode; onPi
 
 const OUTCOMES: (DecisionOutcome | 'All')[] = ['All', 'Blocked', 'Flagged', 'Allowed']
 
-/** Current version of a pack per the change-management history, for the CR bump. */
-function versionsFor(packId: string): { from: string; to: string } {
-  const from = versionBaseline[packId]?.[0]?.version ?? '1.0'
-  const [major, minor] = from.split('.')
-  return { from, to: `${major}.${Number(minor ?? 0) + 1}` }
-}
-
 export default function Enforcement() {
   const { log, triage, modes, exceptions, proposals, enabled } = useEnforcement()
   const { can, logAction } = useSession()
@@ -171,7 +164,7 @@ export default function Enforcement() {
    * path — review, approvals, dry-run, schedule, apply.
    */
   const fileChangeRequest = (t: Tuning) => {
-    const { from, to } = versionsFor(t.packId)
+    const { from, to } = nextVersion(t.packId)
     const crId = addChangeRequest({
       packId: t.packId,
       packName: t.packName,
