@@ -20,6 +20,8 @@ import {
   Avatar,
 } from '@/components/ui'
 import { admins, effectiveRoleById } from '@/data/roles'
+import { useEmployees } from '@/context/Employees'
+import { useActivity, useNow, lastActiveOf, relativeTime, isActiveNow, exactTime } from '@/data/activity'
 import { SecurityPostureBanner } from '@/components/SecurityPostureBanner'
 import { scoreSecurity, loadSecurityPolicy } from '@/data/security'
 
@@ -56,6 +58,9 @@ const SSO_ROWS = [
 
 export default function AdminSecurity() {
   const posture = scoreSecurity(loadSecurityPolicy())
+  const { list: employees } = useEmployees()
+  const activity = useActivity()
+  const now = useNow()
   const [sso, setSso] = useState<Record<string, boolean>>({ enforce: true, scim: true, fallback: false })
   return (
     <>
@@ -110,7 +115,22 @@ export default function AdminSecurity() {
                   <Badge tone="red" dot>Disabled</Badge>
                 )}
               </Td>
-              <Td className="text-ink-700">{u.lastActive}</Td>
+              {/* Resolved from the employee record + live activity — this table
+                  no longer keeps its own copy of the value. */}
+              <Td className="text-ink-700">
+                {(() => {
+                  const at = lastActiveOf(u.email, activity, employees.find((e) => e.email === u.email)?.lastActiveAt)
+                  const live = isActiveNow(at, now)
+                  return (
+                    <span className="inline-flex items-center gap-1.5" title={exactTime(at)}>
+                      {live && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />}
+                      <span className={live ? 'font-medium text-emerald-700' : at ? undefined : 'text-ink-300'}>
+                        {relativeTime(at, now)}
+                      </span>
+                    </span>
+                  )
+                })()}
+              </Td>
               <Td>
                 <StatusBadge status={u.status} />
               </Td>

@@ -105,23 +105,28 @@ export const effectiveRoleById = roleById
 /* ------------------------------------------------------------------ */
 /* Administrators (assigned to the roles above)                        */
 /* ------------------------------------------------------------------ */
+/**
+ * An administrator's role assignment. Deliberately does *not* carry last-active
+ * — that lives on the employee record as a timestamp (`Employee.lastActiveAt`)
+ * and in the activity store, so there's one source for it instead of a second
+ * copy here that could disagree.
+ */
 export interface AdminUser {
   name: string
   email: string
   roleId: EAccessRole
   mfa: boolean
-  lastActive: string
   status: string
 }
 
 export const admins: AdminUser[] = [
-  { name: 'Jack Antikadjian', email: 'jack@plcy.app', roleId: EAccessRole.Superuser, mfa: true, lastActive: '2 min ago', status: 'Active' },
-  { name: 'Dana Cole', email: 'dana.cole@plcy.app', roleId: EAccessRole.CSAdmin, mfa: true, lastActive: '18 min ago', status: 'Active' },
-  { name: 'Priya Nair', email: 'priya.nair@plcy.app', roleId: EAccessRole.CSUser, mfa: true, lastActive: '3 hours ago', status: 'Active' },
-  { name: 'Nora Fields', email: 'nora.fields@plcy.app', roleId: EAccessRole.Billing, mfa: true, lastActive: '40 min ago', status: 'Active' },
-  { name: 'Marcus Ihde', email: 'marcus.ihde@plcy.app', roleId: EAccessRole.Engineer, mfa: true, lastActive: '1 hour ago', status: 'Active' },
-  { name: 'Sofia Alvarez', email: 'sofia.alvarez@plcy.app', roleId: EAccessRole.Analyst, mfa: false, lastActive: '2 days ago', status: 'Active' },
-  { name: 'Tom Becker', email: 'tom.becker@plcy.app', roleId: EAccessRole.DevAdvocate, mfa: false, lastActive: '11 days ago', status: 'Suspended' },
+  { name: 'Jack Antikadjian', email: 'jack@plcy.app', roleId: EAccessRole.Superuser, mfa: true, status: 'Active' },
+  { name: 'Dana Cole', email: 'dana.cole@plcy.app', roleId: EAccessRole.CSAdmin, mfa: true, status: 'Active' },
+  { name: 'Priya Nair', email: 'priya.nair@plcy.app', roleId: EAccessRole.CSUser, mfa: true, status: 'Active' },
+  { name: 'Nora Fields', email: 'nora.fields@plcy.app', roleId: EAccessRole.Billing, mfa: true, status: 'Active' },
+  { name: 'Marcus Ihde', email: 'marcus.ihde@plcy.app', roleId: EAccessRole.Engineer, mfa: true, status: 'Active' },
+  { name: 'Sofia Alvarez', email: 'sofia.alvarez@plcy.app', roleId: EAccessRole.Analyst, mfa: false, status: 'Active' },
+  { name: 'Tom Becker', email: 'tom.becker@plcy.app', roleId: EAccessRole.DevAdvocate, mfa: false, status: 'Suspended' },
 ]
 
 /** The signed-in administrator (drives the sidebar profile). */

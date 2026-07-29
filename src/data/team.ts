@@ -43,7 +43,12 @@ export interface Employee {
   timezone: string
   startDate: string
   manager: string
-  lastActive: string
+  /**
+   * ISO timestamp of the last observed sign-in / action; `null` if the account
+   * has never been used. Stored as a real instant rather than a display string
+   * so it ages on its own — render it through `relativeTime` in ./activity.
+   */
+  lastActiveAt: string | null
   onCall: OnCall
   /** How this person is reached for alerts & paging. Defaults derived if unset. */
   channels?: ChannelConfig[]
@@ -80,50 +85,58 @@ export const departmentMeta = (d: Department) => DEPARTMENTS.find((x) => x.key =
 
 const noOnCall: OnCall = { enabled: false, tier: 'None', schedule: '—', pagerDutyService: '—', phone: '—' }
 
+/**
+ * Seed activity as an offset from load time rather than a fixed date, so a
+ * freshly-seeded directory always reads plausibly instead of drifting further
+ * out of date the longer the mock data sits in the repo. Real activity from the
+ * session (see ./activity) takes precedence over these.
+ */
+const minutesAgo = (m: number): string => new Date(Date.now() - m * 60_000).toISOString()
+
 export const employeesSeed: Employee[] = [
   {
     id: 'emp_jack', name: 'Jack Antikadjian', email: 'jack@plcy.app', title: 'Founder & CEO', department: 'Executive', roleId: EAccessRole.Superuser,
-    status: 'Active', mfa: true, phone: '+1 415 555 0100', location: 'San Francisco, CA', timezone: 'PT', startDate: '2022-01-04', manager: '—', lastActive: '2 min ago',
+    status: 'Active', mfa: true, phone: '+1 415 555 0100', location: 'San Francisco, CA', timezone: 'PT', startDate: '2022-01-04', manager: '—', lastActiveAt: minutesAgo(2),
     onCall: { enabled: true, tier: 'Manager', schedule: 'Escalation owner', pagerDutyService: 'PLCY · Executive', phone: '+1 415 555 0100' },
   },
   {
     id: 'emp_dana', name: 'Dana Cole', email: 'dana.cole@plcy.app', title: 'Head of Customer Success', department: 'Customer Success', roleId: EAccessRole.CSAdmin,
-    status: 'Active', mfa: true, phone: '+1 512 555 0142', location: 'Austin, TX', timezone: 'CT', startDate: '2022-06-13', manager: 'Jack Antikadjian', lastActive: '18 min ago',
+    status: 'Active', mfa: true, phone: '+1 512 555 0142', location: 'Austin, TX', timezone: 'CT', startDate: '2022-06-13', manager: 'Jack Antikadjian', lastActiveAt: minutesAgo(18),
     onCall: { enabled: true, tier: 'Primary', schedule: 'Jul 7 – Jul 14', pagerDutyService: 'PLCY On-Call · P1', phone: '+1 512 555 0142' },
   },
   {
     id: 'emp_marcus', name: 'Marcus Ihde', email: 'marcus.ihde@plcy.app', title: 'Staff Platform Engineer', department: 'Engineering', roleId: EAccessRole.Engineer,
-    status: 'Active', mfa: true, phone: '+1 206 555 0188', location: 'Seattle, WA', timezone: 'PT', startDate: '2022-03-21', manager: 'Jack Antikadjian', lastActive: '1 hour ago',
+    status: 'Active', mfa: true, phone: '+1 206 555 0188', location: 'Seattle, WA', timezone: 'PT', startDate: '2022-03-21', manager: 'Jack Antikadjian', lastActiveAt: minutesAgo(64),
     onCall: { enabled: true, tier: 'Secondary', schedule: 'Jul 7 – Jul 14', pagerDutyService: 'PLCY On-Call · P1', phone: '+1 206 555 0188' },
   },
   {
     id: 'emp_priya', name: 'Priya Nair', email: 'priya.nair@plcy.app', title: 'Compliance & CS Lead', department: 'Security & Compliance', roleId: EAccessRole.CSUser,
-    status: 'Active', mfa: true, phone: '+1 917 555 0164', location: 'New York, NY', timezone: 'ET', startDate: '2023-02-01', manager: 'Jack Antikadjian', lastActive: '3 hours ago',
+    status: 'Active', mfa: true, phone: '+1 917 555 0164', location: 'New York, NY', timezone: 'ET', startDate: '2023-02-01', manager: 'Jack Antikadjian', lastActiveAt: minutesAgo(191),
     onCall: { enabled: true, tier: 'Manager', schedule: 'Escalation owner', pagerDutyService: 'PLCY Compliance', phone: '+1 917 555 0164' },
   },
   {
     id: 'emp_nora', name: 'Nora Fields', email: 'nora.fields@plcy.app', title: 'Controller', department: 'Finance', roleId: EAccessRole.Billing,
-    status: 'Active', mfa: true, phone: '+1 646 555 0121', location: 'New York, NY', timezone: 'ET', startDate: '2023-05-15', manager: 'Jack Antikadjian', lastActive: '40 min ago',
+    status: 'Active', mfa: true, phone: '+1 646 555 0121', location: 'New York, NY', timezone: 'ET', startDate: '2023-05-15', manager: 'Jack Antikadjian', lastActiveAt: minutesAgo(40),
     onCall: noOnCall,
   },
   {
     id: 'emp_sofia', name: 'Sofia Alvarez', email: 'sofia.alvarez@plcy.app', title: 'Data & Model Analyst', department: 'Data & Analytics', roleId: EAccessRole.Analyst,
-    status: 'Active', mfa: false, phone: '+1 305 555 0199', location: 'Miami, FL', timezone: 'ET', startDate: '2023-09-05', manager: 'Marcus Ihde', lastActive: '2 days ago',
+    status: 'Active', mfa: false, phone: '+1 305 555 0199', location: 'Miami, FL', timezone: 'ET', startDate: '2023-09-05', manager: 'Marcus Ihde', lastActiveAt: minutesAgo(60 * 51),
     onCall: noOnCall,
   },
   {
     id: 'emp_liang', name: 'Liang Wei', email: 'liang.wei@plcy.app', title: 'Senior Backend Engineer', department: 'Engineering', roleId: EAccessRole.Engineer,
-    status: 'Active', mfa: true, phone: '+65 8555 0177', location: 'Singapore', timezone: 'SGT', startDate: '2023-11-20', manager: 'Marcus Ihde', lastActive: '25 min ago',
+    status: 'Active', mfa: true, phone: '+65 8555 0177', location: 'Singapore', timezone: 'SGT', startDate: '2023-11-20', manager: 'Marcus Ihde', lastActiveAt: minutesAgo(25),
     onCall: { enabled: true, tier: 'Backup', schedule: 'APAC follow-the-sun', pagerDutyService: 'PLCY On-Call · APAC', phone: '+65 8555 0177' },
   },
   {
     id: 'emp_tom', name: 'Tom Becker', email: 'tom.becker@plcy.app', title: 'Developer Advocate', department: 'Developer Relations', roleId: EAccessRole.DevAdvocate,
-    status: 'Suspended', mfa: false, phone: '+1 503 555 0133', location: 'Portland, OR', timezone: 'PT', startDate: '2024-01-08', manager: 'Dana Cole', lastActive: '11 days ago',
+    status: 'Suspended', mfa: false, phone: '+1 503 555 0133', location: 'Portland, OR', timezone: 'PT', startDate: '2024-01-08', manager: 'Dana Cole', lastActiveAt: minutesAgo(60 * 24 * 11),
     onCall: noOnCall,
   },
   {
     id: 'emp_ana', name: 'Ana Duarte', email: 'ana.duarte@plcy.app', title: 'CS Agent', department: 'Customer Success', roleId: EAccessRole.CSUser,
-    status: 'Invited', mfa: false, phone: '—', location: 'Lisbon, PT', timezone: 'WET', startDate: '2026-07-08', manager: 'Dana Cole', lastActive: 'Never',
+    status: 'Invited', mfa: false, phone: '—', location: 'Lisbon, PT', timezone: 'WET', startDate: '2026-07-08', manager: 'Dana Cole', lastActiveAt: null,
     onCall: noOnCall,
   },
 ]

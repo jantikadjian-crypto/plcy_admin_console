@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, UserPlus, Fingerprint, Radio, Search, ChevronRight } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Avatar, Modal, EmptyState } from '@/components/ui'
+import { useActivity, useNow, lastActiveOf, relativeTime, isActiveNow, exactTime, ACTIVE_NOW_MINUTES } from '@/data/activity'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useEmployees } from '@/context/Employees'
@@ -17,6 +18,9 @@ const roleTone = (id: EAccessRole) => roleDefs.find((r) => r.id === id)?.tone ??
 export default function Team() {
   const navigate = useNavigate()
   const { list, add } = useEmployees()
+  const activity = useActivity()
+  // Re-render on a tick so "3 min ago" becomes "4 min ago" without a refresh.
+  const now = useNow()
   const [q, setQ] = useState('')
   const [dept, setDept] = useState<'All' | Department>('All')
   const [status, setStatus] = useState<'All' | EmployeeStatus>('All')
@@ -35,6 +39,7 @@ export default function Team() {
   )
 
   const onCallNow = list.filter((e) => e.onCall.enabled && e.status === 'Active').length
+  const activeNow = list.filter((e) => isActiveNow(lastActiveOf(e.email, activity, e.lastActiveAt), now)).length
   const mfaPct = list.length ? Math.round((list.filter((e) => e.mfa).length / list.length) * 100) : 0
   const invited = list.filter((e) => e.status === 'Invited').length
 
@@ -52,7 +57,7 @@ export default function Team() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Headcount" value={list.length} icon={Users} tone="blue" footer={`${DEPARTMENTS.length} departments`} />
+        <StatCard label="Headcount" value={list.length} icon={Users} tone="blue" footer={`${activeNow} active in the last ${ACTIVE_NOW_MINUTES} min`} />
         <StatCard label="On-call now" value={onCallNow} icon={Radio} tone="orange" footer="Active PagerDuty" />
         <StatCard label="MFA enrolled" value={`${mfaPct}%`} icon={Fingerprint} tone="green" footer={`${list.filter((e) => !e.mfa).length} pending`} />
         <StatCard label="Pending invites" value={invited} icon={UserPlus} tone="purple" footer="Awaiting onboarding" />
@@ -102,7 +107,20 @@ export default function Team() {
                   </Td>
                   <Td>{e.mfa ? <Badge tone="green" dot>On</Badge> : <Badge tone="red" dot>Off</Badge>}</Td>
                   <Td><Badge tone={statusTone[e.status]} dot>{e.status}</Badge></Td>
-                  <Td className="whitespace-nowrap text-xs text-ink-500">{e.lastActive}</Td>
+                  <Td className="whitespace-nowrap text-xs text-ink-500">
+                    {(() => {
+                      const at = lastActiveOf(e.email, activity, e.lastActiveAt)
+                      const live = isActiveNow(at, now)
+                      return (
+                        <span className="inline-flex items-center gap-1.5" title={exactTime(at)}>
+                          {live && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />}
+                          <span className={live ? 'font-medium text-emerald-700' : at ? undefined : 'text-ink-300'}>
+                            {relativeTime(at, now)}
+                          </span>
+                        </span>
+                      )
+                    })()}
+                  </Td>
                   <Td><ChevronRight className="h-4 w-4 text-ink-300" /></Td>
                 </Tr>
               )
@@ -155,7 +173,7 @@ function AddEmployeeModal({ open, onClose, onCreate }: { open: boolean; onClose:
       timezone: '—',
       startDate: '2026-07-08',
       manager: 'Jack Antikadjian',
-      lastActive: 'Never',
+      lastActiveAt: null,
       onCall: { enabled: false, tier: 'None', schedule: '—', pagerDutyService: '—', phone: '—' },
     }
     logAction({ action: 'employee.invite', target: `${emp.name} · ${roleName(roleId)}`, category: 'team' })

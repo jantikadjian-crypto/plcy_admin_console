@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useRef, useCallback } from 'react'
+import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { currentUser } from '@/data/roles'
 import { auditLog } from '@/data/mock'
 import { roleCan } from '@/data/permissions'
+import { touchActivity } from '@/data/activity'
 import type { Capability } from '@/data/permissions'
 
 export interface AuditItem {
@@ -59,6 +60,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const can = useCallback((cap: Capability) => roleCan(actingRole, cap), [actingRole])
 
+  // Opening the console counts too, not just acting inside it.
+  useEffect(() => touchActivity(currentUser.email), [])
+
   const logAction = useCallback((input: LogInput) => {
     counter.current += 1
     const item: AuditItem = {
@@ -72,6 +76,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ip: '10.4.1.2',
     }
     setAudit((prev) => [item, ...prev])
+    // Every audited action is evidence the signed-in admin is here — this is
+    // what keeps Team → Last active honest rather than frozen at a seed value.
+    touchActivity(currentUser.email)
   }, [])
 
   return <Ctx.Provider value={{ actingRole, setActingRole, can, audit, logAction }}>{children}</Ctx.Provider>

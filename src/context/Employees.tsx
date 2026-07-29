@@ -16,7 +16,9 @@ interface EmployeesValue {
 }
 
 const Ctx = createContext<EmployeesValue | null>(null)
-const STORAGE_KEY = 'plcy.employees.v1'
+// v2: `lastActive` display strings became `lastActiveAt` timestamps. A stored
+// v1 list has no instant to recover, so it's dropped rather than migrated.
+const STORAGE_KEY = 'plcy.employees.v2'
 
 function load(): Employee[] {
   try {
