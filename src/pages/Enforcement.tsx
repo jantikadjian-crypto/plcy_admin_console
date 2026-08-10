@@ -30,6 +30,7 @@ import {
 import type { EnforcementMode } from '@/data/enforcementStore'
 import { addChangeRequest } from '@/data/policyChangesStore'
 import { nextVersion } from '@/data/policyChanges'
+import { ENFORCEMENT_BUDGET_MS } from '@/data/latency'
 
 const tooltipStyle = {
   borderRadius: 12,
@@ -232,7 +233,13 @@ export default function Enforcement() {
           tone={!m.reviewed ? 'slate' : m.falsePositiveRate > 20 ? 'red' : m.falsePositiveRate > 10 ? 'orange' : 'green'}
           footer={m.reviewed ? `${m.reviewed} of ${m.total} decisions reviewed` : 'No decisions reviewed yet'}
         />
-        <StatCard label="p95 decision latency" value={`${m.p95Latency}ms`} icon={Timer} tone={m.p95Latency > 50 ? 'orange' : 'green'} footer="Enforcement point overhead" />
+        <StatCard
+          label="p95 decision latency"
+          value={`${m.p95Latency}ms`}
+          icon={Timer}
+          tone={m.p95Latency > ENFORCEMENT_BUDGET_MS ? 'orange' : 'green'}
+          footer={`Enforcement point overhead · ${ENFORCEMENT_BUDGET_MS}ms budget`}
+        />
       </div>
 
       {/* Chart */}

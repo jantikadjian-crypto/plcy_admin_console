@@ -12,6 +12,7 @@
  * `matched` lists entity *types* the detector hit, not their values.
  */
 import { controls, packs, familyOf } from './policy'
+import { percentile, skewedLatency } from './latency'
 import type { Control, PolicyPack } from './policy'
 
 export type DecisionOutcome = 'Allowed' | 'Flagged' | 'Blocked'
@@ -174,7 +175,10 @@ function buildLog(count = 48): EnforcementDecision[] {
       matched: pick(matches, i, 6),
       subject: pick(subjects, i, 7),
       actor: pick(ACTORS, i, 8),
-      latencyMs: 4 + Math.floor(rand(i, 9) * 38),
+      // Right-skewed, like real enforcement-point overhead: most decisions are
+      // quick and a thin tail runs long. A uniform spread (which this was) made
+      // p50 and p95 nearly identical and the page's 50ms threshold unreachable.
+      latencyMs: skewedLatency(rand(i, 9), 14),
     })
   }
   return out.sort((a, b) => b.at.localeCompare(a.at))
@@ -208,7 +212,7 @@ export function enforcementMetrics(log: EnforcementDecision[], triage: Record<st
   const allowed = log.length - blocked - flagged
   const verdicts = log.map((d) => triage[d.id]).filter(Boolean) as Triage[]
   const fp = verdicts.filter((t) => t.verdict === 'false-positive').length
-  const sorted = [...log].map((d) => d.latencyMs).sort((a, b) => a - b)
+  const sorted = log.map((d) => d.latencyMs)
   return {
     total: log.length,
     blocked,
@@ -217,7 +221,7 @@ export function enforcementMetrics(log: EnforcementDecision[], triage: Record<st
     allowRate: log.length ? (allowed / log.length) * 100 : 100,
     falsePositiveRate: verdicts.length ? (fp / verdicts.length) * 100 : 0,
     reviewed: verdicts.length,
-    p95Latency: sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] : 0,
+    p95Latency: percentile(sorted, 0.95),
   }
 }
 

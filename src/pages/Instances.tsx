@@ -28,6 +28,7 @@ import { packs as policyPacks } from '@/data/policy'
 import type { Instance } from '@/data/mock'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useCustomers } from '@/context/Customers'
+import { percentile, latencySamples } from '@/data/latency'
 import { CustomerPicker } from '@/components/CustomerPicker'
 import { useSession } from '@/context/Session'
 import { GatedButton } from '@/components/GatedButton'
@@ -285,7 +286,9 @@ function InstField({ label, children, className }: { label: string; children: Re
 /* ------------------------------------------------------------------ */
 function InstanceModal({ instance: i, onClose }: { instance: Instance; onClose: () => void }) {
   // Derived, deterministic metrics for display.
-  const p95 = i.rps > 0 ? Math.round(40 + i.rps / 30) : 0
+  // Was `40 + rps/30`, a formula unrelated to every other latency number in the
+  // app. Now a real percentile over per-instance samples, same as everywhere else.
+  const p95 = i.rps > 0 ? percentile(latencySamples(i.id, 240, 30 + Math.round(i.rps / 60)), 0.95) : 0
   const errorRate = i.status === 'Healthy' ? '0.02%' : i.status === 'Degraded' ? '1.4%' : '—'
   const appliedPacks = policyPacks.filter((p) => p.status === 'live').slice(0, i.policyPacks)
 

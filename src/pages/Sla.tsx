@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CircleDollarSign,
   FileBarChart,
+  Timer,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
@@ -15,7 +16,8 @@ import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useMaintenanceWindows } from '@/context/MaintenanceWindows'
 import { useCreateIntent } from '@/hooks/useCreateIntent'
-import { slaTargets, slaTotals } from '@/data/sla'
+import { slaTargets, slaTotals, latencyFor } from '@/data/sla'
+import type { LatencyStatus } from '@/data/latency'
 import type {
   SlaTarget,
   SlaTier,
@@ -39,6 +41,12 @@ const slaStatusTone: Record<SlaStatus, 'green' | 'orange' | 'red'> = {
   'At risk': 'orange',
   Breached: 'red',
 }
+const latencyTone: Record<LatencyStatus, 'green' | 'orange' | 'red'> = {
+  Meeting: 'green',
+  'At risk': 'orange',
+  Breached: 'red',
+}
+
 const progressTone: Record<SlaStatus, 'green' | 'orange' | 'red'> = {
   Meeting: 'green',
   'At risk': 'orange',
@@ -179,7 +187,7 @@ export default function Sla() {
     <>
       <PageHeader
         title="SLA & Maintenance"
-        description="Uptime commitments by customer and planned changes across the fleet"
+        description="Uptime and latency commitments by customer, and planned changes across the fleet"
         actions={
           <>
             <button className="btn-secondary" onClick={() => navigate('/reports/sla')}>
@@ -195,7 +203,7 @@ export default function Sla() {
       />
 
       {/* Stat row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Avg attainment"
           value={`${slaTotals.avgAttainment}%`}
@@ -224,13 +232,26 @@ export default function Sla() {
           tone="red"
           footer="This billing cycle"
         />
+        <StatCard
+          label="Latency objective"
+          value={`${slaTotals.latencyMeeting}/${slaTotals.total}`}
+          icon={Timer}
+          tone={slaTotals.latencyBreached ? 'red' : slaTotals.latencyAtRisk ? 'orange' : 'green'}
+          footer={
+            slaTotals.latencyBreached
+              ? `${slaTotals.latencyBreached} breaching p95 by up to ${slaTotals.worstOverBy} ms`
+              : slaTotals.latencyAtRisk
+                ? `${slaTotals.latencyAtRisk} within 10% of the ceiling`
+                : 'All accounts inside their p95 ceiling'
+          }
+        />
       </div>
 
       {/* SLA attainment */}
       <Card className="mt-6">
-        <CardTitle title="SLA Attainment" subtitle="Uptime vs. contractual target, month-to-date · click a customer to drill down" />
+        <CardTitle title="SLA Attainment" subtitle="Uptime and gateway p95 vs. contractual targets, month-to-date · click a customer to drill down" />
         <Table
-          columns={['Customer', 'Tier', 'Target', 'Attainment', 'Response / Restore', 'Breaches', 'Credits', 'Status']}
+          columns={['Customer', 'Tier', 'Target', 'Attainment', 'p95 latency', 'Response / Restore', 'Breaches', 'Credits', 'Status']}
           noun="customers"
         >
           {slaRows.map((t: SlaTarget) => (
@@ -247,6 +268,19 @@ export default function Sla() {
                   </div>
                   <Progress value={attainmentBar(t.uptimeTarget, t.uptimeMtd)} tone={progressTone[t.status]} />
                 </div>
+              </Td>
+              <Td className="whitespace-nowrap">
+                {(() => {
+                  const l = latencyFor(t)
+                  return (
+                    <span className="flex items-baseline gap-1.5" title={`p50 ${l.p50} ms · p95 ${l.p95} ms · p99 ${l.p99} ms over ${l.count.toLocaleString()} requests`}>
+                      <span className={`font-mono text-xs font-semibold ${l.status === 'Breached' ? 'text-rose-600' : l.status === 'At risk' ? 'text-amber-700' : 'text-ink-900'}`}>
+                        {l.p95} ms
+                      </span>
+                      <span className="font-mono text-[11px] text-ink-400">/ {l.targetMs}</span>
+                    </span>
+                  )
+                })()}
               </Td>
               <Td className="whitespace-nowrap text-ink-700">{t.responseTarget} / {t.restoreTarget}</Td>
               <Td className="text-ink-700">{t.breachesMtd}</Td>
@@ -437,6 +471,39 @@ export default function Sla() {
               </div>
               <Progress value={attainmentBar(detailCustomer.uptimeTarget, detailCustomer.uptimeMtd)} tone={progressTone[detailCustomer.status]} />
             </div>
+
+            {/* Latency objective — the other half of the contract */}
+            {(() => {
+              const l = latencyFor(detailCustomer)
+              return (
+                <div>
+                  <div className="mb-1.5 flex items-baseline justify-between">
+                    <span className="text-sm font-medium text-ink-700">Gateway latency, month-to-date</span>
+                    <Badge tone={latencyTone[l.status]} dot>{l.status}</Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {([['p50', l.p50], ['p95', l.p95], ['p99', l.p99]] as const).map(([k, v]) => (
+                      <div key={k} className={`rounded-xl border p-3 ${k === 'p95' ? 'border-slate-300 bg-slate-50/70' : 'border-slate-200'}`}>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">
+                          {k}{k === 'p95' && <span className="ml-1 normal-case text-ink-400">· contractual</span>}
+                        </p>
+                        <p className={`mt-0.5 text-sm font-semibold ${k === 'p95' && l.status === 'Breached' ? 'text-rose-600' : k === 'p95' && l.status === 'At risk' ? 'text-amber-700' : 'text-ink-900'}`}>
+                          {v} ms
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-ink-500">
+                    {l.status === 'Breached'
+                      ? <>p95 is <span className="font-semibold text-rose-600">{l.overBy} ms over</span> the {l.targetMs} ms ceiling their {detailCustomer.tier} tier buys. This is chargeable the same way an uptime miss is.</>
+                      : l.status === 'At risk'
+                        ? <>p95 is inside 10% of the {l.targetMs} ms ceiling — worth acting on before the customer raises it.</>
+                        : <>p95 is comfortably inside the {l.targetMs} ms ceiling for {detailCustomer.tier}.</>}
+                    {' '}Measured over {l.count.toLocaleString()} requests this month.
+                  </p>
+                </div>
+              )
+            })()}
 
             {/* Commitments */}
             <div className="grid grid-cols-3 gap-3">
