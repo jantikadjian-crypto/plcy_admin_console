@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Cloud, Server, ShieldOff, Plus, RotateCcw, Eye, Clock, CircleCheck, CircleAlert, Boxes, Layers, Check, X, ArrowRight, ArrowLeft, ArrowUpRight, ClipboardCheck } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, StatusBadge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
+import { CustomerPicker } from '@/components/CustomerPicker'
 import { provisionSteps, provisionStep, onboardingChecklist, opsTotals } from '@/data/ops'
 import type { Provision, ProvTemplate, OnboardingState, ChecklistItem } from '@/data/ops'
 import { regionByCode, regions } from '@/data/fleet'
@@ -363,7 +364,15 @@ function OnboardWizard({ onClose, onCreate }: {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-ink-700">Customer</label>
-            <input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="e.g. Beacon Financial" autoFocus />
+            {/* Was free text, which let a job be raised for an account that
+                doesn't exist. Same picker as Instances → Provision instance,
+                so both entry points can only target a real customer. */}
+            <CustomerPicker
+              value={customer}
+              onChange={setCustomer}
+              onCreated={(c) => setPlan(c.plan)}
+              autoFocus
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

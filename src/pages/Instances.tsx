@@ -23,10 +23,12 @@ import {
   Td,
   Modal,
 } from '@/components/ui'
-import { instances, customers, fmtNum } from '@/data/mock'
+import { instances, fmtNum } from '@/data/mock'
 import { packs as policyPacks } from '@/data/policy'
 import type { Instance } from '@/data/mock'
 import { useCustomerScope } from '@/context/CustomerScope'
+import { useCustomers } from '@/context/Customers'
+import { CustomerPicker } from '@/components/CustomerPicker'
 import { useSession } from '@/context/Session'
 import { GatedButton } from '@/components/GatedButton'
 
@@ -53,6 +55,7 @@ const statusDot: Record<string, string> = {
 export default function Instances() {
   const { scope, isAll } = useCustomerScope()
   const { logAction } = useSession()
+  const { list: customerList, update: updateCustomer } = useCustomers()
   const [rows, setRows] = useState<Instance[]>(instances)
   const [sel, setSel] = useState<Instance | null>(null)
   const [provisioning, setProvisioning] = useState(false)
@@ -174,10 +177,14 @@ export default function Instances() {
       <ProvisionModal
         open={provisioning}
         onClose={() => setProvisioning(false)}
-        defaultCustomer={isAll ? customers[0].name : scope}
+        defaultCustomer={isAll ? '' : scope}
         onCreate={(inst) => {
-          logAction({ action: 'instance.provision', target: inst.name, category: 'provisioning' })
+          logAction({ action: 'instance.provision', target: `${inst.name} · ${inst.customer}`, category: 'provisioning' })
           setRows((prev) => [inst, ...prev])
+          // Keep the customer record's footprint in step — otherwise a customer
+          // reads "0 instances" on the Customers list however many they run.
+          const owner = customerList.find((c) => c.name === inst.customer)
+          if (owner) updateCustomer(owner.id, { instances: owner.instances + 1 })
           setProvisioning(false)
           setSel(inst)
         }}
@@ -208,6 +215,7 @@ function ProvisionModal({
   const [packs, setPacks] = useState(4)
 
   const submit = () => {
+    if (!customer) return
     const slug = customer.toLowerCase().replace(/[^a-z0-9]+/g, '')
     const env = environment === 'Production' ? 'prod' : environment === 'Staging' ? 'staging' : 'sandbox'
     onCreate({
@@ -237,15 +245,13 @@ function ProvisionModal({
       footer={
         <>
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={submit}>Provision</button>
+          <button className="btn-primary disabled:opacity-50" onClick={submit} disabled={!customer}>Provision</button>
         </>
       }
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <InstField label="Customer" className="sm:col-span-2">
-          <select className="input" value={customer} onChange={(e) => setCustomer(e.target.value)}>
-            {customers.map((c) => <option key={c.id}>{c.name}</option>)}
-          </select>
+          <CustomerPicker value={customer} onChange={setCustomer} />
         </InstField>
         <InstField label="Environment">
           <select className="input" value={environment} onChange={(e) => setEnvironment(e.target.value as Instance['environment'])}>

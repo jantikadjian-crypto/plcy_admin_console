@@ -33,7 +33,7 @@ import { useSession } from '@/context/Session'
 import { useCustomers } from '@/context/Customers'
 import { useCustomerScope } from '@/context/CustomerScope'
 import { useDeploymentConfig } from '@/context/DeploymentConfig'
-import { fmtMoney, instances, incidents } from '@/data/mock'
+import { fmtMoney, instances, incidents, makeCustomer, CUSTOMER_REGIONS, CSMS } from '@/data/mock'
 import type { Customer } from '@/data/mock'
 import { slaByCustomer } from '@/data/sla'
 
@@ -375,8 +375,9 @@ function PeekStat({ icon: Icon, label, value, tone }: { icon: typeof Eye; label:
 /* ------------------------------------------------------------------ */
 /* Add customer form                                                   */
 /* ------------------------------------------------------------------ */
-const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
-const REGIONS = ['US-East', 'US-West', 'EU-Central', 'EU-West', 'APAC']
+// Shared with the inline create in CustomerPicker, so a customer onboarded
+// mid-provisioning offers exactly the same choices as one added here.
+const REGIONS = CUSTOMER_REGIONS
 
 function AddCustomerModal({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (c: Customer) => void }) {
   const [name, setName] = useState('')
@@ -395,23 +396,7 @@ function AddCustomerModal({ open, onClose, onCreate }: { open: boolean; onClose:
 
   const submit = () => {
     if (!name.trim()) return
-    const now = new Date()
-    const since = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    onCreate({
-      id: `cus_${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 20)}`,
-      name: name.trim(),
-      domain: domain.trim() || `${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')}.com`,
-      plan: customerPlan,
-      status,
-      seats,
-      instances: 0,
-      models: 0,
-      mrr: status === 'Trial' ? 0 : mrr,
-      complianceScore: 70,
-      region,
-      csm,
-      since,
-    })
+    onCreate(makeCustomer({ name, domain, plan: customerPlan, status, seats, mrr, region, csm }))
     reset()
   }
 

@@ -39,6 +39,53 @@ export function customerChannels(c: Customer): ChannelConfig[] {
   ]
 }
 
+/** Sales regions and CSMs offered when onboarding a customer. */
+export const CUSTOMER_REGIONS = ['US-East', 'US-West', 'EU-Central', 'EU-West', 'APAC']
+export const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
+
+/**
+ * Build a customer record from the few fields anyone actually types.
+ *
+ * Shared by every surface that can onboard someone — the Customers page form
+ * and the inline "new customer" step inside the provisioning flows — so an
+ * account created mid-provisioning is indistinguishable from one created the
+ * long way round. Id and domain derive from the name, so the same name always
+ * resolves to the same record.
+ */
+export function makeCustomer(input: {
+  name: string
+  domain?: string
+  plan?: Customer['plan']
+  status?: Customer['status']
+  seats?: number
+  mrr?: number
+  region?: string
+  csm?: string
+  instances?: number
+}): Customer {
+  const name = input.name.trim()
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 20)
+  const status = input.status ?? 'Active'
+  const now = new Date()
+  const since = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return {
+    id: `cus_${slug}`,
+    name,
+    domain: input.domain?.trim() || `${name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.com`,
+    plan: input.plan ?? 'Business',
+    status,
+    seats: input.seats ?? 25,
+    instances: input.instances ?? 0,
+    models: 0,
+    // A trial isn't billing yet, whatever number the form happened to carry.
+    mrr: status === 'Trial' ? 0 : input.mrr ?? 5000,
+    complianceScore: 70,
+    region: input.region ?? CUSTOMER_REGIONS[0],
+    csm: input.csm ?? CSMS[0],
+    since,
+  }
+}
+
 export const customers: Customer[] = [
   { id: 'cus_meridian', name: 'Meridian Bank', domain: 'meridian.com', plan: 'Enterprise', status: 'Active', seats: 240, instances: 4, models: 18, mrr: 42000, complianceScore: 96, region: 'US-East', csm: 'Dana Cole', since: '2023-04-11' },
   { id: 'cus_helix', name: 'Helix Health', domain: 'helixhealth.io', plan: 'Enterprise', status: 'Active', seats: 180, instances: 3, models: 12, mrr: 38500, complianceScore: 98, region: 'US-West', csm: 'Marcus Ihde', since: '2023-06-02' },
