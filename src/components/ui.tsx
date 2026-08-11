@@ -243,6 +243,16 @@ export function ShowAllToggle({
 /* Table                                                               */
 /* ------------------------------------------------------------------ */
 /**
+ * A column heading. Pass a plain string, or `{ label, hint }` to attach a
+ * hover/focus description — worth doing wherever the heading is a term of art
+ * ("p95 latency", "Attainment") rather than plain English.
+ */
+export type Column = string | { label: string; hint: string }
+
+const columnLabel = (c: Column) => (typeof c === 'string' ? c : c.label)
+const columnHint = (c: Column) => (typeof c === 'string' ? undefined : c.hint)
+
+/**
  * Every table caps itself at {@link LIST_CAP} rows and puts the rest behind a
  * "Show all" toggle — the rule holds for tables that are short today but grow
  * with real data, without each page having to remember it.
@@ -257,7 +267,7 @@ export function Table({
   noun = 'rows',
   recent = false,
 }: {
-  columns: string[]
+  columns: Column[]
   children: ReactNode
   cap?: number | false
   /** Plural noun for the expand label — "customers", "alerts", "images". */
@@ -283,10 +293,8 @@ export function Table({
       <table className="min-w-full">
         <thead>
           <tr className="border-b border-slate-200">
-            {columns.map((c) => (
-              <th key={c} className="table-th">
-                {c}
-              </th>
+            {columns.map((c, i) => (
+              <ColumnHeader key={`${columnLabel(c)}-${i}`} label={columnLabel(c)} hint={columnHint(c)} />
             ))}
           </tr>
         </thead>
@@ -304,6 +312,38 @@ export function Table({
         />
       )}
     </div>
+  )
+}
+
+/**
+ * A header cell, with an optional description on hover or keyboard focus.
+ *
+ * The bubble opens *downward*, into the table's own space: the wrapper is
+ * `overflow-x-auto`, and a browser cannot scroll one axis while leaving the
+ * other visible, so anything drawn above the header would be clipped.
+ *
+ * The dotted underline is the affordance — a tooltip nobody knows is there
+ * explains nothing.
+ */
+function ColumnHeader({ label, hint }: { label: string; hint?: string }) {
+  if (!hint) return <th className="table-th" scope="col">{label}</th>
+  return (
+    <th className="table-th relative" scope="col">
+      <span
+        tabIndex={0}
+        className="group inline-flex cursor-help border-b border-dotted border-slate-400 focus:outline-none"
+      >
+        {label}
+        {/* Read out by screen readers, which never see the hover bubble. */}
+        <span className="sr-only"> — {hint}</span>
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-0 top-full z-30 mt-1.5 hidden w-64 rounded-lg bg-ink-900 px-3 py-2 text-[11px] font-normal normal-case leading-snug tracking-normal text-white shadow-lg group-hover:block group-focus:block"
+        >
+          {hint}
+        </span>
+      </span>
+    </th>
   )
 }
 

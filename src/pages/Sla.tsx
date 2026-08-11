@@ -11,6 +11,7 @@ import {
   Timer,
 } from 'lucide-react'
 import { Card, CardTitle, PageHeader, StatCard, Badge, Table, Tr, Td, Progress, Modal } from '@/components/ui'
+import type { Column } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { useCustomerScope } from '@/context/CustomerScope'
@@ -41,6 +42,34 @@ const slaStatusTone: Record<SlaStatus, 'green' | 'orange' | 'red'> = {
   'At risk': 'orange',
   Breached: 'red',
 }
+/**
+ * Headings on this page are contractual terms, not plain English — "Attainment",
+ * "p95 latency" and "Notice" all mean something specific and chargeable. Each
+ * carries its definition on hover so nobody has to infer it.
+ */
+const ATTAINMENT_COLUMNS: Column[] = [
+  { label: 'Customer', hint: 'The account this SLA is written for — one row per single-tenant customer.' },
+  { label: 'Tier', hint: 'Contractual service tier. It sets the uptime target, the response and restore commitments, and the p95 latency ceiling.' },
+  { label: 'Target', hint: 'Contractual uptime commitment for the month. 99.99% allows roughly 4 minutes of downtime; 99.9% allows about 43.' },
+  { label: 'Attainment', hint: 'Measured uptime month-to-date. The bar shows how much of the downtime allowance has been used, not the raw percentage.' },
+  { label: 'p95 latency', hint: 'Gateway latency this month at the 95th percentile — 95 of every 100 requests were faster than this. Shown against the ceiling the tier buys. Amber within 10% of it, red over.' },
+  { label: 'Response / Restore', hint: 'How quickly we must acknowledge an incident, and how quickly we must restore service, for this tier.' },
+  { label: 'Breaches', hint: 'SLA breaches recorded so far this month.' },
+  { label: 'Credits', hint: 'Service credits owed this billing cycle as a result of those breaches.' },
+  { label: 'Status', hint: 'Standing against the uptime commitment: Meeting, At risk (inside the last 10% of the allowance), or Breached.' },
+]
+
+const WINDOW_COLUMNS: Column[] = [
+  { label: 'Window', hint: 'The planned change and what it covers.' },
+  { label: 'Customer', hint: 'Which account is affected. "All" is a region-wide window touching every tenant in that region.' },
+  { label: 'When', hint: 'Scheduled start in UTC, and how long the window is expected to run.' },
+  { label: 'Type', hint: 'Patch (security fix), Upgrade (new version), Infra (capacity or hardware), or DR test (failover rehearsal).' },
+  { label: 'Impact', hint: 'What the customer experiences: no downtime, brief downtime, or a read-only period.' },
+  { label: 'Notice', hint: 'Days of advance warning the contract requires before a window of this kind.' },
+  { label: 'Notified', hint: 'Whether the customer has actually been told. An unnotified window inside its notice period is a breach in the making.' },
+  { label: 'Status', hint: 'Scheduled, In progress, Completed, or Cancelled.' },
+]
+
 const latencyTone: Record<LatencyStatus, 'green' | 'orange' | 'red'> = {
   Meeting: 'green',
   'At risk': 'orange',
@@ -251,7 +280,7 @@ export default function Sla() {
       <Card className="mt-6">
         <CardTitle title="SLA Attainment" subtitle="Uptime and gateway p95 vs. contractual targets, month-to-date · click a customer to drill down" />
         <Table
-          columns={['Customer', 'Tier', 'Target', 'Attainment', 'p95 latency', 'Response / Restore', 'Breaches', 'Credits', 'Status']}
+          columns={ATTAINMENT_COLUMNS}
           noun="customers"
         >
           {slaRows.map((t: SlaTarget) => (
@@ -301,7 +330,7 @@ export default function Sla() {
       <Card className="mt-6">
         <CardTitle title="Maintenance Windows" subtitle="Planned changes across the fleet · click a window for details" />
         <Table
-          columns={['Window', 'Customer', 'When', 'Type', 'Impact', 'Notice', 'Notified', 'Status']}
+          columns={WINDOW_COLUMNS}
           noun="windows"
         >
           {windowRows.map((w) => (

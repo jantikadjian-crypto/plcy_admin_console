@@ -13,6 +13,7 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardTitle, StatCard, PageHeader, Table, Tr, Td, Badge, Modal, useListCap, ShowAllToggle } from '@/components/ui'
+import type { Column } from '@/components/ui'
 import { GatedButton } from '@/components/GatedButton'
 import { useSession } from '@/context/Session'
 import { fmtNum, fmtCompact } from '@/data/mock'
@@ -116,6 +117,17 @@ function ModePills({ active, onPick, disabled }: { active: EnforcementMode; onPi
 }
 
 const OUTCOMES: (DecisionOutcome | 'All')[] = ['All', 'Blocked', 'Flagged', 'Allowed']
+
+/** Same treatment as the SLA table — these headings are terms of art. */
+const DECISION_COLUMNS: Column[] = [
+  { label: 'Time', hint: 'When the enforcement point evaluated the request. Newest first.' },
+  { label: 'Outcome', hint: 'What the control did: Blocked (stopped), Flagged (allowed but recorded for review), or Allowed (resolved and passed through).' },
+  { label: 'Control', hint: 'The atomic control that fired, and its name. Click the row to walk the full chain — composite pack the customer deployed, primitive pack, control, detector, decision.' },
+  { label: 'Customer', hint: 'The account and the specific instance the request was evaluated on.' },
+  { label: 'Subject', hint: 'A redacted one-line summary, the leg it was evaluated on, and the entity types the detector matched. Request content is never stored — only the types.' },
+  { label: 'Latency', hint: 'What this decision added to the request. The p95 across all decisions is the enforcement overhead reported above.' },
+  { label: 'Review', hint: 'A reviewer\u2019s verdict on whether the control was right. These drive the false-positive rate and the tuning recommendations below.' },
+]
 
 export default function Enforcement() {
   const { log, triage, modes, exceptions, proposals, enabled } = useEnforcement()
@@ -314,7 +326,7 @@ export default function Enforcement() {
         </div>
 
         {/* The filter bar reports the counts, so this page drives its own cap. */}
-        <Table columns={['Time', 'Outcome', 'Control', 'Customer', 'Subject', 'Latency', 'Review']} cap={false}>
+        <Table columns={DECISION_COLUMNS} cap={false}>
           {decisionCap.visible.map((d) => {
             const t = triage[d.id]
             const control = controlById(d.controlId)
