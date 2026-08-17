@@ -12,6 +12,7 @@ import { DeploymentConfigProvider } from '@/context/DeploymentConfig'
 import { MaintenanceWindowsProvider } from '@/context/MaintenanceWindows'
 import { StripeProvider } from '@/context/Stripe'
 import OnboardingReturnBanner from './OnboardingReturnBanner'
+import { DevNotes } from './DevNotes'
 import { useOrgSettings } from '@/data/orgSettings'
 import { applyBrandColor } from '@/lib/theme'
 
@@ -52,6 +53,8 @@ export default function Layout() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onMenu={() => setSidebarOpen(true)} />
+          {/* Dev-only (or Superuser) handover notes, page-aware. */}
+          <DevNotes />
           <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-7xl">
               <OnboardingReturnBanner />

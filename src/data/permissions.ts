@@ -1,12 +1,18 @@
 /**
- * Bridge between the console's coarse UI action gates and the real production
+ * Bridge between the console's coarse UI action gates and the fine-grained
  * access model (`AccessMap` in access.ts).
  *
  * Each page guards an action with a `Capability` (e.g. `license.manage`). Rather
  * than maintain a second, parallel permission table, every capability maps to a
- * concrete `EAccessFeature`, and the check resolves through the same `AccessMap`
- * production uses. Change a role's access to a feature and the console's gating
- * follows automatically.
+ * concrete `EAccessFeature` and the check resolves through the one access map.
+ * Change a role's access to a feature and the console's gating follows.
+ *
+ * ⚠️ The role/feature model in access.ts, and the mappings below, were INVENTED
+ * for this prototype — they are not copied from production. Treat both as a
+ * proposal to reconcile against the real access model before relying on them.
+ * The indirection is worth keeping regardless; the specific rows are not
+ * authoritative. Several mappings are explicit best guesses, marked inline.
+ * See docs/plcy_admin_console-developer-notes.md § Admin Security.
  */
 import {
   EAccessRole,
@@ -45,12 +51,12 @@ export const CAP_TO_FEATURE: Record<Capability, EAccessFeature> = {
   'dsar.manage': EAccessFeature.UserArchive,
   'transfer.approve': EAccessFeature.InstanceManageInfrastructure,
   'policy.manage': EAccessFeature.InstanceManagePackage,
-  'policy.approve': EAccessFeature.UserManageRoles, // change-approval board — distinct from authoring (SoD)
+  'policy.approve': EAccessFeature.UserManageRoles, // GUESS — change-approval board, distinct from authoring (SoD)
   'model.register': EAccessFeature.PackageList,
-  'incident.manage': EAccessFeature.ClusterMonitor,
+  'incident.manage': EAccessFeature.ClusterMonitor, // GUESS
   'evals.view': EAccessFeature.ClusterMonitor, // read the efficacy/eval surfaces
-  'evals.run': EAccessFeature.InstanceManagePackage, // launch campaigns / run evals (governance mutation)
-  'evals.review': EAccessFeature.InstanceManagePackage, // label QA review decisions
+  'evals.run': EAccessFeature.InstanceManagePackage, // GUESS — launch campaigns / run evals (governance mutation)
+  'evals.review': EAccessFeature.InstanceManagePackage, // GUESS — label QA review decisions
   'settings.modify': EAccessFeature.UserManageRoles,
 }
 

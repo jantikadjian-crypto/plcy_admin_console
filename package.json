@@ -3,12 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "PLCY — AI Governance & Policy Enforcement Platform admin console for the PLCY team.",
+  "description": "PLCY \u2014 AI Governance & Policy Enforcement Platform admin console for the PLCY team.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run docs:dev-notes:check && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "docs:dev-notes": "node scripts/gen-dev-notes.mjs",
+    "docs:dev-notes:check": "node scripts/gen-dev-notes.mjs --check"
   },
   "dependencies": {
     "clsx": "^2.1.1",
