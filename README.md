@@ -1,5 +1,16 @@
 # PLCY — Admin Console
 
+> ### 👋 New to this codebase? Start here.
+> **[Developer handover notes →](docs/plcy_admin_console-developer-notes.md)**
+>
+> Business rules, data fields, edge cases, integrations, permissions and open
+> questions for every module. **Read its section 2, "What is NOT a
+> specification", before anything else** — it marks which parts are real
+> business rules and which are placeholder data, and that distinction is the
+> most important thing to carry out of this prototype.
+>
+> The same notes are in the running app: the **Dev Notes** button, bottom-right.
+
 Internal console for the **PLCY** team to operate the **AI Governance & Policy
 Enforcement Platform** across SaaS and air-gapped single-tenant customers. One
 place to manage customers and their deployments, the models and policies under
@@ -42,20 +53,21 @@ observability backend):
 
 ## The console (this repo)
 
-A React SPA: **~28k LOC**, **57 pages / 59 routes**, **38 data modules**, **9
-context providers**. State is held in React Context providers seeded from the
-mock data modules; user edits persist to `localStorage`.
+A React SPA: **~39k LOC**, **70 pages / 64 routes**, **55 data modules**, **9
+context providers**. State is held in React Context providers and standalone
+observable stores (`useSyncExternalStore`), both seeded from the mock data
+modules; user edits persist to `localStorage`.
 
 ```mermaid
 flowchart LR
   subgraph UI["React SPA"]
-    Pages["57 pages / routes"]
+    Pages["70 pages / routes"]
     Kit["UI kit · shared components"]
   end
   subgraph State["Context providers (src/context)"]
     Ctx["Session · Customers · CustomerScope · Stripe · Policy · DeploymentConfig · MaintenanceWindows · Employees · Provisioning"]
   end
-  subgraph Data["Mock data + logic (src/data · 38 modules)"]
+  subgraph Data["Mock data + logic (src/data · 55 modules)"]
     D["pricing · security · devices · alerting · reports · subscriptions · finops · …"]
     LS[("localStorage · persisted edits")]
   end
@@ -129,7 +141,14 @@ npm install
 npm run dev      # dev server (http://localhost:5173)
 npm run build    # type-check + production build
 npm run preview  # preview the production build
+
+npm run docs:dev-notes   # regenerate docs/plcy_admin_console-developer-notes.md
 ```
+
+The handover notes are **generated** from `src/data/devNotes.ts`, which the
+in-app Dev Notes panel also renders — one copy of the content, so the two cannot
+drift. `npm run build` fails if the generated doc is stale; edit the source and
+regenerate rather than editing the markdown.
 
 Ship checklist for a change: `npx tsc --noEmit` → `VITE_HASH_ROUTER=1 npx vite
 build --base=./` → browser-verify → commit.
@@ -141,9 +160,9 @@ src/
   components/     # Layout, Sidebar, Topbar, ui kit, ReportShell, ManagedDevices, …
   config/         # navigation.ts (sidebar + route groups)
   context/        # 9 state providers (Session, Customers, Stripe, Policy, …)
-  data/           # 38 mock-data + logic modules (pricing, security, alerting, …)
-  pages/          # 57 route components
-  App.tsx         # router (59 routes)
+  data/           # 55 mock-data + logic modules (pricing, security, latency, …)
+  pages/          # 70 route components
+  App.tsx         # router (64 routes)
   main.tsx        # entry
 ```
 
