@@ -4,6 +4,7 @@
  * by the internal PLCY team to manage customers, their deployed instances,
  * the AI models under governance, and the policy packs that enforce controls.
  */
+import type { ChannelConfig } from './notifications'
 
 /* ------------------------------------------------------------------ */
 /* Customers                                                           */
@@ -22,6 +23,67 @@ export interface Customer {
   region: string
   csm: string
   since: string
+  notes?: string
+  /** Where alerts about this customer are sent. Defaults derived if unset. */
+  channels?: ChannelConfig[]
+}
+
+/** Per-customer notification contacts — stored edits if present, else sensible defaults. */
+export function customerChannels(c: Customer): ChannelConfig[] {
+  if (c.channels && c.channels.length) return c.channels
+  return [
+    { id: `${c.id}_email`, type: 'Email', target: `ops@${c.domain}`, endpoint: '', desc: 'Customer ops distribution', connected: true },
+    { id: `${c.id}_slack`, type: 'Slack', target: 'Slack Connect', endpoint: '', desc: 'Shared incident channel', connected: false },
+    { id: `${c.id}_webhook`, type: 'Webhook', target: 'Customer ITSM', endpoint: '', desc: 'ServiceNow / Jira webhook', connected: false },
+    { id: `${c.id}_pd`, type: 'PagerDuty', target: '—', endpoint: '', desc: 'Customer PagerDuty', connected: false },
+  ]
+}
+
+/** Sales regions and CSMs offered when onboarding a customer. */
+export const CUSTOMER_REGIONS = ['US-East', 'US-West', 'EU-Central', 'EU-West', 'APAC']
+export const CSMS = ['Dana Cole', 'Marcus Ihde', 'Priya Nair']
+
+/**
+ * Build a customer record from the few fields anyone actually types.
+ *
+ * Shared by every surface that can onboard someone — the Customers page form
+ * and the inline "new customer" step inside the provisioning flows — so an
+ * account created mid-provisioning is indistinguishable from one created the
+ * long way round. Id and domain derive from the name, so the same name always
+ * resolves to the same record.
+ */
+export function makeCustomer(input: {
+  name: string
+  domain?: string
+  plan?: Customer['plan']
+  status?: Customer['status']
+  seats?: number
+  mrr?: number
+  region?: string
+  csm?: string
+  instances?: number
+}): Customer {
+  const name = input.name.trim()
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 20)
+  const status = input.status ?? 'Active'
+  const now = new Date()
+  const since = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return {
+    id: `cus_${slug}`,
+    name,
+    domain: input.domain?.trim() || `${name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.com`,
+    plan: input.plan ?? 'Business',
+    status,
+    seats: input.seats ?? 25,
+    instances: input.instances ?? 0,
+    models: 0,
+    // A trial isn't billing yet, whatever number the form happened to carry.
+    mrr: status === 'Trial' ? 0 : input.mrr ?? 5000,
+    complianceScore: 70,
+    region: input.region ?? CUSTOMER_REGIONS[0],
+    csm: input.csm ?? CSMS[0],
+    since,
+  }
 }
 
 export const customers: Customer[] = [
@@ -152,20 +214,38 @@ export interface AuditEntry {
   actor: string
   action: string
   target: string
+  category: string
   ip: string
   time: string
   result: 'Success' | 'Denied'
 }
 
 export const auditLog: AuditEntry[] = [
-  { id: 'a1', actor: 'dana.cole@plcy.app', action: 'policy_pack.publish', target: 'PII Redaction Standard v3.2', ip: '10.4.1.22', time: '2025-07-06 10:41:02', result: 'Success' },
-  { id: 'a2', actor: 'system', action: 'instance.autoscale', target: 'meridian-prod-us1', ip: '—', time: '2025-07-06 10:38:55', result: 'Success' },
-  { id: 'a3', actor: 'marcus.ihde@plcy.app', action: 'customer.suspend', target: 'Orbit Telecom', ip: '10.4.1.9', time: '2025-07-06 09:15:33', result: 'Success' },
-  { id: 'a4', actor: 'priya.nair@plcy.app', action: 'model.block', target: 'ShadowGPT (unapproved)', ip: '10.4.2.7', time: '2025-07-06 08:52:11', result: 'Success' },
-  { id: 'a5', actor: 'external.integration', action: 'api.key.rotate', target: 'helix-prod-us1', ip: '52.9.44.10', time: '2025-07-06 07:20:48', result: 'Denied' },
-  { id: 'a6', actor: 'jack@plcy.app', action: 'enforcement.mode.change', target: 'Prompt Injection Defense → block', ip: '10.4.1.2', time: '2025-07-05 22:03:19', result: 'Success' },
-  { id: 'a7', actor: 'dana.cole@plcy.app', action: 'user.invite', target: 'analyst@meridian.com', ip: '10.4.1.22', time: '2025-07-05 17:44:02', result: 'Success' },
-  { id: 'a8', actor: 'system', action: 'compliance.report.generate', target: 'Q2 SOC 2 evidence', ip: '—', time: '2025-07-05 06:00:00', result: 'Success' },
+  { id: 'a1', actor: 'ci-bot@plcy.app', action: 'image.promote', target: 'plcy/policy-engine:v4.8.2', category: 'supply-chain', ip: '10.8.0.4', time: '2026-07-09 06:12:44', result: 'Success' },
+  { id: 'a2', actor: 'marcus.ihde@plcy.app', action: 'release.stage', target: 'Helix Health → v4.8.2', category: 'release', ip: '10.4.1.9', time: '2026-07-09 05:58:10', result: 'Success' },
+  { id: 'a3', actor: 'marcus.ihde@plcy.app', action: 'workload.sync', target: 'plcy-model-gateway → v4.8.2 · Atlas Logistics', category: 'operations', ip: '10.4.1.9', time: '2026-07-09 05:41:22', result: 'Success' },
+  { id: 'a4', actor: 'priya.nair@plcy.app', action: 'image.quarantine', target: 'plcy/data-pipeline:v4.9.0-rc1', category: 'supply-chain', ip: '10.4.2.7', time: '2026-07-09 04:33:07', result: 'Success' },
+  { id: 'a5', actor: 'jack@plcy.app', action: 'notification.rule.create', target: 'Billing past due (Billing)', category: 'notifications', ip: '10.4.1.2', time: '2026-07-09 03:20:55', result: 'Success' },
+  { id: 'a6', actor: 'system', action: 'sla.breach.detected', target: 'Orbit Telecom · 96.2% uptime', category: 'reliability', ip: '—', time: '2026-07-09 02:47:31', result: 'Success' },
+  { id: 'a7', actor: 'nora.fields@plcy.app', action: 'invoice.mark-paid', target: 'INV-2026-0706 · Meridian Bank', category: 'billing', ip: '10.4.3.5', time: '2026-07-08 22:14:09', result: 'Success' },
+  { id: 'a8', actor: 'tom.becker@plcy.app', action: 'cluster.config.update', target: 'Vertex Capital cluster', category: 'operations', ip: '73.55.20.8', time: '2026-07-08 21:02:40', result: 'Denied' },
+  { id: 'a9', actor: 'dana.cole@plcy.app', action: 'customer.channel.update', target: 'Northwind Retail · Slack', category: 'customer', ip: '10.4.1.22', time: '2026-07-08 19:48:17', result: 'Success' },
+  { id: 'a10', actor: 'jack@plcy.app', action: 'employee.access.update', target: 'Sofia Alvarez → Analyst', category: 'team', ip: '10.4.1.2', time: '2026-07-08 18:31:52', result: 'Success' },
+  { id: 'a11', actor: 'priya.nair@plcy.app', action: 'residency.policy.update', target: 'EU-Central · block cross-border', category: 'sovereignty', ip: '10.4.2.7', time: '2026-07-08 17:09:23', result: 'Success' },
+  { id: 'a12', actor: 'priya.nair@plcy.app', action: 'transfer.approve', target: 'TR-2019 · Helix → de-sov-1', category: 'sovereignty', ip: '10.4.2.7', time: '2026-07-08 16:55:41', result: 'Success' },
+  { id: 'a13', actor: 'external.integration', action: 'api.key.rotate', target: 'helix-prod-us1', category: 'security', ip: '52.9.44.10', time: '2026-07-08 15:20:48', result: 'Denied' },
+  { id: 'a14', actor: 'liang.wei@plcy.app', action: 'helm.apply', target: 'plcy-platform · Vertex Capital', category: 'operations', ip: '203.116.8.44', time: '2026-07-08 14:12:30', result: 'Success' },
+  { id: 'a15', actor: 'liang.wei@plcy.app', action: 'namespace.guardrails.update', target: 'plcy-system · Saffron Foods', category: 'operations', ip: '203.116.8.44', time: '2026-07-08 13:47:05', result: 'Success' },
+  { id: 'a16', actor: 'dana.cole@plcy.app', action: 'user.invite', target: 'analyst@meridian.com', category: 'team', ip: '10.4.1.22', time: '2026-07-08 12:44:02', result: 'Success' },
+  { id: 'a17', actor: 'jack@plcy.app', action: 'break-glass.request', target: 'root · Helix Health (air-gapped)', category: 'access', ip: '10.4.1.2', time: '2026-07-08 11:30:18', result: 'Success' },
+  { id: 'a18', actor: 'marcus.ihde@plcy.app', action: 'customer.suspend', target: 'Orbit Telecom', category: 'customer', ip: '10.4.1.9', time: '2026-07-08 10:15:33', result: 'Success' },
+  { id: 'a19', actor: 'priya.nair@plcy.app', action: 'model.block', target: 'ShadowGPT (unapproved)', category: 'governance', ip: '10.4.2.7', time: '2026-07-08 08:52:11', result: 'Success' },
+  { id: 'a20', actor: 'sofia.alvarez@plcy.app', action: 'model.register', target: 'FraudScan-v3 · Vertex Capital', category: 'governance', ip: '68.12.4.90', time: '2026-07-08 08:20:44', result: 'Success' },
+  { id: 'a21', actor: 'jack@plcy.app', action: 'enforcement.mode.change', target: 'Prompt Injection Defense → block', category: 'security', ip: '10.4.1.2', time: '2026-07-07 22:03:19', result: 'Success' },
+  { id: 'a22', actor: 'dana.cole@plcy.app', action: 'policy_pack.publish', target: 'PII Redaction Standard v3.2', category: 'governance', ip: '10.4.1.22', time: '2026-07-07 20:41:02', result: 'Success' },
+  { id: 'a23', actor: 'sofia.alvarez@plcy.app', action: 'privileged.access.request', target: 'Meridian Bank prod', category: 'access', ip: '68.12.4.90', time: '2026-07-07 19:22:56', result: 'Denied' },
+  { id: 'a24', actor: 'system', action: 'backup.completed', target: 'meridian-prod-us1 · daily snapshot', category: 'operations', ip: '—', time: '2026-07-07 06:30:00', result: 'Success' },
+  { id: 'a25', actor: 'system', action: 'compliance.report.generate', target: 'Q2 SOC 2 evidence', category: 'system', ip: '—', time: '2026-07-07 06:00:00', result: 'Success' },
 ]
 
 /* ------------------------------------------------------------------ */

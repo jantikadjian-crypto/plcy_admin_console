@@ -153,7 +153,7 @@ export default function DataClassification() {
       {/* Category table */}
       <Card className="mt-6">
         <CardTitle title="Detected Data Categories" subtitle="Discovered entity types and their enforcement actions" />
-        <Table columns={['Category', 'Example entities', 'Sensitivity', 'Volume', 'Auto-action', 'Trend']}>
+        <Table columns={['Category', 'Example entities', 'Sensitivity', 'Volume', 'Auto-action', 'Trend']} noun="categories">
           {categories.map((c) => (
             <Tr key={c.category}>
               <Td>

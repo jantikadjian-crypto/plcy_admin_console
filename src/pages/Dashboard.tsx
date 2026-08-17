@@ -1,3 +1,4 @@
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Bot,
   ShieldCheck,
@@ -5,8 +6,15 @@ import {
   TrendingUp,
   Users,
   Server,
-  ArrowUpRight,
+  Gauge,
+  Receipt,
+  GitBranch,
+  ShieldAlert,
+  Ban,
+  Boxes,
+  ChevronRight,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import {
   ResponsiveContainer,
   LineChart,
@@ -22,86 +30,215 @@ import {
   BarChart,
   Bar,
 } from 'recharts'
-import { Card, CardTitle, StatCard, PageHeader } from '@/components/ui'
+import { Card, CardTitle, StatCard, PageHeader, Badge } from '@/components/ui'
 import {
   usageTrend,
   riskDistribution,
   complianceScores,
-  recentActivity,
   totals,
+  incidents,
   fmtCompact,
   fmtMoney,
 } from '@/data/mock'
+import { slaTargets, slaTotals } from '@/data/sla'
+import { billingTotals, customerBilling } from '@/data/billing'
+import { deployments } from '@/data/fleet'
+import { clusterTotals, terraformFor, imageDriftForDeployment } from '@/data/clusters'
+import { registryImages, currentTagOf } from '@/data/registry'
+import { useRegistryPromoted } from '@/data/registryStore'
+import { policyTotals } from '@/data/policy'
 
-const activityTone: Record<string, string> = {
-  green: 'bg-emerald-500',
-  blue: 'bg-blue-500',
-  red: 'bg-rose-500',
-  orange: 'bg-orange-500',
-  purple: 'bg-violet-500',
+/* ------------------------------------------------------------------ */
+/* Live command-center signals                                          */
+/* ------------------------------------------------------------------ */
+type Sev = 'critical' | 'high' | 'medium'
+const sevRank: Record<Sev, number> = { critical: 0, high: 1, medium: 2 }
+const sevTone: Record<Sev, 'red' | 'orange' | 'yellow'> = { critical: 'red', high: 'orange', medium: 'yellow' }
+
+interface Signal {
+  key: string
+  label: string
+  value: string
+  icon: LucideIcon
+  tone: 'red' | 'orange' | 'yellow' | 'blue' | 'green' | 'purple'
+  footer: string
+  to: string
+}
+interface AttentionItem {
+  sev: Sev
+  title: string
+  detail: string
+  to: string
+}
+
+const drift = clusterTotals(deployments)
+const criticalImages = registryImages.filter((i) => currentTagOf(i).criticalCves > 0)
+const quarantined = registryImages.filter((i) => i.quarantined)
+const openIncidents = incidents.filter((i) => i.status !== 'Resolved')
+const pastDueCustomers = customerBilling.filter((b) => b.status === 'Past due')
+
+const baseSignals: Signal[] = [
+  { key: 'sla', label: 'SLA breaches', value: String(slaTotals.breached), icon: Gauge, tone: slaTotals.breached ? 'red' : 'green', footer: `${slaTotals.atRisk} at risk`, to: '/sla' },
+  { key: 'billing', label: 'Past due', value: fmtMoney(billingTotals.pastDue), icon: Receipt, tone: billingTotals.pastDue ? 'red' : 'green', footer: `${billingTotals.pastDueCount} invoices`, to: '/billing' },
+  { key: 'drift', label: 'Terraform drift', value: String(drift.drifted), icon: GitBranch, tone: drift.drifted ? 'orange' : 'green', footer: 'Clusters out of sync', to: '/fleet-posture' },
+  { key: 'cve', label: 'Critical CVEs', value: String(criticalImages.length), icon: ShieldAlert, tone: criticalImages.length ? 'red' : 'green', footer: 'Images on current tag', to: '/registry' },
+  { key: 'incidents', label: 'Open incidents', value: String(openIncidents.length), icon: AlertOctagon, tone: openIncidents.length ? 'orange' : 'green', footer: 'Across the fleet', to: '/incidents' },
+  { key: 'quarantine', label: 'Quarantined', value: String(quarantined.length), icon: Ban, tone: quarantined.length ? 'orange' : 'green', footer: 'Images blocked', to: '/registry' },
+]
+
+const baseAttention: AttentionItem[] = [
+  ...slaTargets
+    .filter((s) => s.status !== 'Meeting')
+    .map<AttentionItem>((s) => ({
+      sev: s.status === 'Breached' ? 'critical' : 'high',
+      title: `${s.customer} — SLA ${s.status.toLowerCase()}`,
+      detail: `${s.uptimeMtd}% vs ${s.uptimeTarget}% target${s.creditsOwed ? ` · ${fmtMoney(s.creditsOwed)} credits` : ''}`,
+      to: '/sla',
+    })),
+  ...pastDueCustomers.map<AttentionItem>((b) => ({
+    sev: 'high',
+    title: `${b.customer} — billing past due`,
+    detail: `${b.plan} · next invoice ${b.nextInvoice}`,
+    to: '/billing',
+  })),
+  ...deployments
+    .filter((d) => terraformFor(d).drift === 'Drift detected')
+    .map<AttentionItem>((d) => ({
+      sev: 'medium',
+      title: `${d.customer} — Terraform drift`,
+      detail: `${terraformFor(d).driftedResources} resources differ · plan pending`,
+      to: `/clusters/${d.id}`,
+    })),
+  ...criticalImages.map<AttentionItem>((i) => ({
+    sev: 'critical',
+    title: `${i.name} — critical CVE`,
+    detail: `on ${i.currentTag} · re-scan or quarantine`,
+    to: '/registry',
+  })),
+  ...openIncidents.map<AttentionItem>((i) => ({
+    sev: i.severity === 'Critical' ? 'critical' : i.severity === 'High' ? 'high' : 'medium',
+    title: i.title,
+    detail: `${i.customer} · ${i.severity} · ${i.status}`,
+    to: '/incidents',
+  })),
+]
+
+const toneBox: Record<Signal['tone'], string> = {
+  red: 'bg-rose-50 text-rose-600',
+  orange: 'bg-orange-50 text-orange-600',
+  yellow: 'bg-amber-50 text-amber-600',
+  blue: 'bg-blue-50 text-blue-600',
+  green: 'bg-emerald-50 text-emerald-600',
+  purple: 'bg-violet-50 text-violet-600',
+}
+
+function SignalCard({ s }: { s: Signal }) {
+  const Icon = s.icon
+  return (
+    <Link to={s.to} className="card card-pad group block transition-shadow hover:shadow-cardhover">
+      <div className="flex items-start justify-between">
+        <p className="text-sm font-medium text-ink-500">{s.label}</p>
+        <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${toneBox[s.tone]}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <p className="mt-2 text-2xl font-bold tracking-tight text-ink-900">{s.value}</p>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-xs font-medium text-ink-500">{s.footer}</span>
+        <ChevronRight className="h-4 w-4 text-ink-300 transition-colors group-hover:text-brand-500" />
+      </div>
+    </Link>
+  )
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  const promoted = useRegistryPromoted()
+  // Clusters running an image tag behind what's been promoted in the registry.
+  const imageDriftItems: AttentionItem[] = deployments
+    .map((d) => ({ d, r: imageDriftForDeployment(d, promoted) }))
+    .filter(({ r }) => !r.offline && r.behind > 0)
+    .map(({ d, r }) => ({
+      sev: 'medium' as Sev,
+      title: `${d.customer} — image drift`,
+      detail: `${r.behind} workload${r.behind === 1 ? '' : 's'} behind promoted tag`,
+      to: `/clusters/${d.id}`,
+    }))
+  const attention = [...baseAttention, ...imageDriftItems].sort((a, b) => sevRank[a.sev] - sevRank[b.sev])
+
+  const clustersBehind = imageDriftItems.length
+  const signals: Signal[] = [
+    ...baseSignals,
+    {
+      key: 'imgdrift',
+      label: 'Image drift',
+      value: String(clustersBehind),
+      icon: Boxes,
+      tone: clustersBehind ? 'orange' : 'green',
+      footer: 'Clusters behind promoted',
+      to: '/registry',
+    },
+  ]
+
   return (
     <>
       <PageHeader
         title="AI Governance Dashboard"
-        description="Monitor and manage AI systems across every PLCY customer"
+        description="Live posture across every PLCY customer, cluster, and control"
         actions={
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={() => navigate('/reports/posture')}>
             <TrendingUp className="h-4 w-4" />
             Generate report
           </button>
         }
       />
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Active Models"
-          value={totals.models}
-          icon={Bot}
-          tone="blue"
-          footer={
-            <span className="inline-flex items-center gap-1 text-emerald-600">
-              <ArrowUpRight className="h-3.5 w-3.5" /> +3 this month
-            </span>
-          }
-        />
-        <StatCard
-          label="Avg. Compliance"
-          value={`${totals.avgCompliance}%`}
-          icon={ShieldCheck}
-          tone="green"
-          footer={<span className="text-emerald-600">✓ Excellent</span>}
-        />
-        <StatCard
-          label="Open Incidents"
-          value={totals.openIncidents}
-          icon={AlertOctagon}
-          tone="orange"
-          footer={<span className="text-orange-600">⚠ Requires attention</span>}
-        />
-        <StatCard
-          label="Daily Requests"
-          value={fmtCompact(totals.dailyRequests)}
-          icon={TrendingUp}
-          tone="purple"
-          footer={<span>{fmtCompact(totals.dailyTokens)} tokens</span>}
-        />
+      {/* Command-center signals */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        {signals.map((s) => (
+          <SignalCard key={s.key} s={s} />
+        ))}
       </div>
 
-      {/* Secondary stat row */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Customers" value={totals.customers} icon={Users} tone="slate" footer={`${totals.activeCustomers} active`} />
-        <StatCard label="Instances" value={totals.instances} icon={Server} tone="slate" footer={`${totals.healthyInstances} healthy`} />
-        <StatCard label="Policy Packs" value={totals.policyPacks} icon={ShieldCheck} tone="slate" footer="Published & enforced" />
-        <StatCard label="Platform MRR" value={fmtMoney(totals.mrr)} icon={TrendingUp} tone="slate" footer="Across all plans" />
+      {/* Needs attention + fleet snapshot */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardTitle title="Needs Attention" subtitle="Prioritized across SLA, billing, security, and infrastructure" />
+          {attention.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink-400">All clear — nothing needs attention.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {attention.slice(0, 9).map((a, i) => (
+                <li key={i}>
+                  <Link to={a.to} className="group -mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-slate-50">
+                    <Badge tone={sevTone[a.sev]} dot>{a.sev}</Badge>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-ink-900">{a.title}</p>
+                      <p className="truncate text-xs text-ink-500">{a.detail}</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-ink-300 transition-colors group-hover:text-brand-500" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <CardTitle title="Fleet Snapshot" subtitle="Estate at a glance" />
+          <div className="grid grid-cols-2 gap-4">
+            <Mini label="Customers" value={String(totals.customers)} sub={`${totals.activeCustomers} active`} />
+            <Mini label="Instances" value={String(totals.instances)} sub={`${totals.healthyInstances} healthy`} />
+            <Mini label="Models" value={String(totals.models)} sub="Governed" />
+            <Mini label="Policy packs" value={String(policyTotals.packs)} sub={`${policyTotals.controls} controls`} />
+            <Mini label="Avg compliance" value={`${totals.avgCompliance}%`} sub="Fleet score" />
+            <Mini label="MRR" value={fmtMoney(totals.mrr)} sub="Recurring" />
+          </div>
+        </Card>
       </div>
 
       {/* Charts row */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Usage trend */}
         <Card>
           <CardTitle title="Model Usage Trend" subtitle="API requests and tokens over the last 7 days" />
           <div className="h-72">
@@ -120,7 +257,6 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Risk distribution */}
         <Card>
           <CardTitle title="Risk Distribution" subtitle="Model risk classification across the fleet" />
           <div className="h-72">
@@ -139,7 +275,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Compliance scores */}
       <Card className="mt-6">
         <CardTitle title="Compliance Policy Scores" subtitle="Aggregate scores by governance domain" />
         <div className="h-72">
@@ -154,24 +289,17 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
       </Card>
-
-      {/* Recent activity */}
-      <Card className="mt-6">
-        <CardTitle title="Recent Activity" subtitle="Latest platform events" />
-        <ul className="divide-y divide-slate-100">
-          {recentActivity.map((a, i) => (
-            <li key={i} className="flex items-center gap-3 py-3">
-              <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${activityTone[a.tone]}`} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink-900">{a.title}</p>
-                <p className="truncate text-xs text-ink-500">{a.detail}</p>
-              </div>
-              <span className="shrink-0 text-xs text-ink-400">{a.time}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
     </>
+  )
+}
+
+function Mini({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-ink-500">{label}</p>
+      <p className="mt-0.5 text-xl font-bold text-ink-900">{value}</p>
+      <p className="text-[11px] text-ink-400">{sub}</p>
+    </div>
   )
 }
 

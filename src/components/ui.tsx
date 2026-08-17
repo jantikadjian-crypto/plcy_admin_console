@@ -1,5 +1,7 @@
 import { clsx } from 'clsx'
+import { Children, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { X, ChevronDown, ChevronUp } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -45,7 +47,7 @@ export function PageHeader({
   description,
   actions,
 }: {
-  title: string
+  title: ReactNode
   description?: string
   actions?: ReactNode
 }) {
@@ -162,39 +164,210 @@ export function StatusBadge({ status }: { status: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* List cap — long lists show the leading slice, rest one click away    */
+/* ------------------------------------------------------------------ */
+
+/** Rows shown before a list collapses behind "Show all". */
+export const LIST_CAP = 25
+
+/**
+ * Caps a list at `LIST_CAP` and hands back the slice plus the toggle state.
+ *
+ * `resetOn` is the filter state that decides *which* rows lead the list —
+ * change any of it and the cap re-applies, so an expansion never carries over
+ * into a set the operator didn't ask to see.
+ */
+export function useListCap<T>(items: T[], resetOn: unknown[] = [], cap = LIST_CAP) {
+  const [showAll, setShowAll] = useState(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setShowAll(false), resetOn)
+
+  const visible = showAll ? items : items.slice(0, cap)
+  return {
+    visible,
+    showAll,
+    capped: items.length > cap,
+    hidden: items.length - visible.length,
+    toggle: () => setShowAll((v) => !v),
+  }
+}
+
+/**
+ * The "Show all / Show first N" control that pairs with {@link useListCap}.
+ * Renders nothing when the list is short enough to not need capping.
+ */
+export function ShowAllToggle({
+  total,
+  showAll,
+  hidden,
+  onToggle,
+  noun = 'rows',
+  recent = false,
+  cap = LIST_CAP,
+}: {
+  total: number
+  showAll: boolean
+  hidden: number
+  onToggle: () => void
+  /** Plural noun for the expand label — "decisions", "customers", "events". */
+  noun?: string
+  /** Newest-first lists collapse to the *most recent* N, not the first N. */
+  recent?: boolean
+  cap?: number
+}) {
+  if (total <= cap) return null
+  return (
+    <div className="mt-3 flex justify-center">
+      <button
+        onClick={onToggle}
+        className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+      >
+        {showAll ? (
+          <>
+            <ChevronUp className="h-3.5 w-3.5" />
+            Show {recent ? 'most recent' : 'first'} {cap}
+          </>
+        ) : (
+          <>
+            <ChevronDown className="h-3.5 w-3.5" />
+            Show all {total} {noun}
+            <span className="text-ink-400">({hidden} more)</span>
+          </>
+        )}
+      </button>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Table                                                               */
 /* ------------------------------------------------------------------ */
+/**
+ * A column heading. Pass a plain string, or `{ label, hint }` to attach a
+ * hover/focus description — worth doing wherever the heading is a term of art
+ * ("p95 latency", "Attainment") rather than plain English.
+ */
+export type Column = string | { label: string; hint: string }
+
+const columnLabel = (c: Column) => (typeof c === 'string' ? c : c.label)
+const columnHint = (c: Column) => (typeof c === 'string' ? undefined : c.hint)
+
+/**
+ * Every table caps itself at {@link LIST_CAP} rows and puts the rest behind a
+ * "Show all" toggle — the rule holds for tables that are short today but grow
+ * with real data, without each page having to remember it.
+ *
+ * Pass `cap={false}` when the page drives the cap itself (because it also
+ * reports counts elsewhere), or a number to override the limit.
+ */
 export function Table({
   columns,
   children,
+  cap = LIST_CAP,
+  noun = 'rows',
+  recent = false,
 }: {
-  columns: string[]
+  columns: Column[]
   children: ReactNode
+  cap?: number | false
+  /** Plural noun for the expand label — "customers", "alerts", "images". */
+  noun?: string
+  /** Newest-first tables collapse to the *most recent* N, not the first N. */
+  recent?: boolean
 }) {
+  const [showAll, setShowAll] = useState(false)
+
+  // Children.toArray flattens row arrays and drops the false/null of a
+  // conditionally rendered row, so this counts real rows.
+  const rows = Children.toArray(children)
+  const total = rows.length
+  const limit = cap === false ? Infinity : cap
+
+  // A filter change swaps the row set out from under an expansion.
+  useEffect(() => setShowAll(false), [total])
+
+  const visible = showAll ? rows : rows.slice(0, limit)
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead>
           <tr className="border-b border-slate-200">
-            {columns.map((c) => (
-              <th key={c} className="table-th">
-                {c}
-              </th>
+            {columns.map((c, i) => (
+              <ColumnHeader key={`${columnLabel(c)}-${i}`} label={columnLabel(c)} hint={columnHint(c)} />
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
+        <tbody className="divide-y divide-slate-100">{visible}</tbody>
       </table>
+      {cap !== false && (
+        <ShowAllToggle
+          total={total}
+          showAll={showAll}
+          hidden={total - visible.length}
+          onToggle={() => setShowAll((v) => !v)}
+          noun={noun}
+          recent={recent}
+          cap={cap}
+        />
+      )}
     </div>
   )
 }
 
-export function Tr({ children }: { children: ReactNode }) {
-  return <tr className="transition-colors hover:bg-slate-50/70">{children}</tr>
+/**
+ * A header cell, with an optional description on hover or keyboard focus.
+ *
+ * The bubble opens *downward*, into the table's own space: the wrapper is
+ * `overflow-x-auto`, and a browser cannot scroll one axis while leaving the
+ * other visible, so anything drawn above the header would be clipped.
+ *
+ * The dotted underline is the affordance — a tooltip nobody knows is there
+ * explains nothing.
+ */
+function ColumnHeader({ label, hint }: { label: string; hint?: string }) {
+  if (!hint) return <th className="table-th" scope="col">{label}</th>
+  return (
+    <th className="table-th relative" scope="col">
+      <span
+        tabIndex={0}
+        className="group inline-flex cursor-help border-b border-dotted border-slate-400 focus:outline-none"
+      >
+        {label}
+        {/* Read out by screen readers, which never see the hover bubble. */}
+        <span className="sr-only"> — {hint}</span>
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-0 top-full z-30 mt-1.5 hidden w-64 rounded-lg bg-ink-900 px-3 py-2 text-[11px] font-normal normal-case leading-snug tracking-normal text-white shadow-lg group-hover:block group-focus:block"
+        >
+          {hint}
+        </span>
+      </span>
+    </th>
+  )
 }
 
-export function Td({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={clsx('table-td', className)}>{children}</td>
+export function Tr({
+  children,
+  onClick,
+  className,
+}: {
+  children: ReactNode
+  onClick?: () => void
+  className?: string
+}) {
+  return (
+    <tr
+      onClick={onClick}
+      className={clsx('transition-colors hover:bg-slate-50/70', onClick && 'cursor-pointer', className)}
+    >
+      {children}
+    </tr>
+  )
+}
+
+export function Td({ children, className, colSpan }: { children: ReactNode; className?: string; colSpan?: number }) {
+  return <td className={clsx('table-td', className)} colSpan={colSpan}>{children}</td>
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,6 +441,64 @@ export function EmptyState({
       </div>
       <p className="font-semibold text-ink-700">{title}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-ink-500">{description}</p>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Modal                                                               */
+/* ------------------------------------------------------------------ */
+export function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  headerRight,
+  footer,
+  children,
+  maxWidth = 'max-w-2xl',
+}: {
+  open: boolean
+  onClose: () => void
+  title: ReactNode
+  subtitle?: ReactNode
+  headerRight?: ReactNode
+  footer?: ReactNode
+  children: ReactNode
+  maxWidth?: string
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 backdrop-blur-sm sm:p-8"
+      onClick={onClose}
+    >
+      <div
+        className={clsx('my-4 w-full rounded-2xl bg-white shadow-xl ring-1 ring-slate-200', maxWidth)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-ink-900">{title}</h2>
+              {headerRight}
+            </div>
+            {subtitle && <p className="mt-0.5 text-sm text-ink-500">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-ink-400 hover:bg-slate-100" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-6">{children}</div>
+        {footer && <div className="flex justify-end gap-2 border-t border-slate-100 p-4">{footer}</div>}
+      </div>
     </div>
   )
 }

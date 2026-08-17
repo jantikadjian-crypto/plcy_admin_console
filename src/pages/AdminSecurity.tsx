@@ -1,10 +1,11 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ShieldCheck,
   KeyRound,
   Users,
   Fingerprint,
   RotateCw,
-  AlertTriangle,
 } from 'lucide-react'
 import {
   Card,
@@ -18,25 +19,11 @@ import {
   Td,
   Avatar,
 } from '@/components/ui'
-
-interface AdminUser {
-  name: string
-  email: string
-  role: string
-  roleTone: 'purple' | 'blue' | 'green' | 'slate'
-  mfa: boolean
-  lastActive: string
-  status: string
-}
-
-const admins: AdminUser[] = [
-  { name: 'Jack Reed', email: 'jack@plcy.app', role: 'Owner', roleTone: 'purple', mfa: true, lastActive: '2 min ago', status: 'Active' },
-  { name: 'Dana Cole', email: 'dana.cole@plcy.app', role: 'Admin', roleTone: 'blue', mfa: true, lastActive: '18 min ago', status: 'Active' },
-  { name: 'Marcus Ihde', email: 'marcus.ihde@plcy.app', role: 'Admin', roleTone: 'blue', mfa: true, lastActive: '1 hour ago', status: 'Active' },
-  { name: 'Priya Nair', email: 'priya.nair@plcy.app', role: 'Security', roleTone: 'green', mfa: true, lastActive: '3 hours ago', status: 'Active' },
-  { name: 'Sofia Alvarez', email: 'sofia.alvarez@plcy.app', role: 'Support', roleTone: 'slate', mfa: false, lastActive: '2 days ago', status: 'Active' },
-  { name: 'Tom Becker', email: 'tom.becker@plcy.app', role: 'Billing', roleTone: 'slate', mfa: false, lastActive: '11 days ago', status: 'Suspended' },
-]
+import { admins, effectiveRoleById } from '@/data/roles'
+import { useEmployees } from '@/context/Employees'
+import { useActivity, useNow, lastActiveOf, relativeTime, isActiveNow, exactTime } from '@/data/activity'
+import { SecurityPostureBanner } from '@/components/SecurityPostureBanner'
+import { scoreSecurity, loadSecurityPolicy } from '@/data/security'
 
 interface ApiKey {
   name: string
@@ -54,25 +41,6 @@ const apiKeys: ApiKey[] = [
   { name: 'Legacy Webhook', prefix: 'plcy_live_…0e18', scopes: ['read', 'write'], created: '2023-08-22', lastUsed: '90 days ago', status: 'Expired' },
 ]
 
-interface Recommendation {
-  title: string
-  detail: string
-  severity: 'high' | 'medium' | 'low'
-}
-
-const recommendations: Recommendation[] = [
-  { title: 'Enforce MFA for all admins', detail: '2 admin users have not enrolled a second factor.', severity: 'high' },
-  { title: 'Rotate the Legacy Webhook key', detail: 'Key is over 20 months old and unused for 90 days.', severity: 'medium' },
-  { title: 'Review dormant sessions', detail: 'Tom Becker has an active session but last signed in 11 days ago.', severity: 'medium' },
-  { title: 'Enable IP allowlisting', detail: 'Restrict console access to corporate egress ranges.', severity: 'low' },
-]
-
-const severityDot: Record<Recommendation['severity'], string> = {
-  high: 'bg-rose-500',
-  medium: 'bg-amber-500',
-  low: 'bg-emerald-500',
-}
-
 const scopeTone: Record<string, 'red' | 'blue' | 'green' | 'orange' | 'slate' | 'purple'> = {
   admin: 'red',
   write: 'orange',
@@ -82,7 +50,18 @@ const scopeTone: Record<string, 'red' | 'blue' | 'green' | 'orange' | 'slate' | 
 
 const mfaEnrolled = Math.round((admins.filter((a) => a.mfa).length / admins.length) * 100)
 
+const SSO_ROWS = [
+  { key: 'enforce', label: 'Enforce SSO for all users' },
+  { key: 'scim', label: 'Auto-provision new members (SCIM)' },
+  { key: 'fallback', label: 'Allow password fallback' },
+] as const
+
 export default function AdminSecurity() {
+  const posture = scoreSecurity(loadSecurityPolicy())
+  const { list: employees } = useEmployees()
+  const activity = useActivity()
+  const now = useNow()
+  const [sso, setSso] = useState<Record<string, boolean>>({ enforce: true, scim: true, fallback: false })
   return (
     <>
       <PageHeader
@@ -96,6 +75,10 @@ export default function AdminSecurity() {
         }
       />
 
+      <div className="mb-6">
+        <SecurityPostureBanner />
+      </div>
+
       {/* Stat row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Admin users" value={admins.length} icon={Users} tone="blue" footer="With console access" />
@@ -107,7 +90,7 @@ export default function AdminSecurity() {
       {/* Admin users table */}
       <Card className="mt-6">
         <CardTitle title="Administrator Accounts" subtitle="PLCY staff with elevated privileges" />
-        <Table columns={['User', 'Role', 'MFA', 'Last active', 'Status']}>
+        <Table columns={['User', 'Role', 'MFA', 'Last active', 'Status']} noun="admins">
           {admins.map((u) => (
             <Tr key={u.email}>
               <Td>
@@ -120,7 +103,10 @@ export default function AdminSecurity() {
                 </div>
               </Td>
               <Td>
-                <Badge tone={u.roleTone}>{u.role}</Badge>
+                {(() => {
+                  const role = effectiveRoleById(u.roleId)
+                  return <Badge tone={role?.tone ?? 'slate'}>{role?.name ?? 'Unassigned'}</Badge>
+                })()}
               </Td>
               <Td>
                 {u.mfa ? (
@@ -129,7 +115,22 @@ export default function AdminSecurity() {
                   <Badge tone="red" dot>Disabled</Badge>
                 )}
               </Td>
-              <Td className="text-ink-700">{u.lastActive}</Td>
+              {/* Resolved from the employee record + live activity — this table
+                  no longer keeps its own copy of the value. */}
+              <Td className="text-ink-700">
+                {(() => {
+                  const at = lastActiveOf(u.email, activity, employees.find((e) => e.email === u.email)?.lastActiveAt)
+                  const live = isActiveNow(at, now)
+                  return (
+                    <span className="inline-flex items-center gap-1.5" title={exactTime(at)}>
+                      {live && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />}
+                      <span className={live ? 'font-medium text-emerald-700' : at ? undefined : 'text-ink-300'}>
+                        {relativeTime(at, now)}
+                      </span>
+                    </span>
+                  )
+                })()}
+              </Td>
               <Td>
                 <StatusBadge status={u.status} />
               </Td>
@@ -156,50 +157,59 @@ export default function AdminSecurity() {
             </div>
           </div>
           <div className="mt-4 divide-y divide-slate-100">
-            {[
-              { label: 'Enforce SSO for all users', on: true },
-              { label: 'Auto-provision new members (SCIM)', on: true },
-              { label: 'Allow password fallback', on: false },
-            ].map((s) => (
-              <div key={s.label} className="flex items-center justify-between py-3">
-                <span className="text-sm text-ink-700">{s.label}</span>
-                <div
-                  className={`flex h-6 w-11 items-center rounded-full px-0.5 ${
-                    s.on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'
-                  }`}
-                >
-                  <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+            {SSO_ROWS.map((s) => {
+              const on = sso[s.key]
+              return (
+                <div key={s.key} className="flex items-center justify-between py-3">
+                  <span className="text-sm text-ink-700">{s.label}</span>
+                  <button
+                    onClick={() => setSso((p) => ({ ...p, [s.key]: !p[s.key] }))}
+                    aria-pressed={on}
+                    aria-label={s.label}
+                    className={`flex h-6 w-11 items-center rounded-full px-0.5 transition-colors ${
+                      on ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'
+                    }`}
+                  >
+                    <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
 
         <Card>
-          <CardTitle title="Security Recommendations" subtitle="Prioritized hardening actions" />
-          <ul className="divide-y divide-slate-100">
-            {recommendations.map((r) => (
-              <li key={r.title} className="flex items-start gap-3 py-3">
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${severityDot[r.severity]}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-ink-900">{r.title}</p>
-                  <p className="text-xs text-ink-500">{r.detail}</p>
-                </div>
-                <AlertTriangle
-                  className={`h-4 w-4 shrink-0 ${
-                    r.severity === 'high' ? 'text-rose-500' : r.severity === 'medium' ? 'text-amber-500' : 'text-emerald-500'
-                  }`}
-                />
-              </li>
-            ))}
-          </ul>
+          <CardTitle
+            title="Security Recommendations"
+            subtitle="Live gaps from the configured security policy"
+            action={<Link to="/settings?tab=Security" className="btn-ghost px-2 py-1 text-xs">Configure</Link>}
+          />
+          {posture.findings.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <ShieldCheck className="h-5 w-5 shrink-0" />
+              Every hardening control in the security policy is enabled — no open gaps.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {posture.findings.map((f, i) => (
+                <li key={f.label} className="flex items-start gap-3 py-3">
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${i < 2 ? 'bg-rose-500' : i < 4 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ink-900">{f.label}</p>
+                    <p className="text-xs text-ink-500">{f.fix}</p>
+                  </div>
+                  <Badge tone="slate">{f.group}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 
       {/* API keys */}
       <Card className="mt-6">
         <CardTitle title="API Keys" subtitle="Platform credentials for programmatic access" />
-        <Table columns={['Name', 'Key', 'Scopes', 'Created', 'Last used', 'Status', '']}>
+        <Table columns={['Name', 'Key', 'Scopes', 'Created', 'Last used', 'Status', '']} noun="keys">
           {apiKeys.map((k) => (
             <Tr key={k.prefix}>
               <Td className="font-semibold text-ink-900">{k.name}</Td>

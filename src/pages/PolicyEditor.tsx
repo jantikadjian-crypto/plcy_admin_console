@@ -83,6 +83,9 @@ const codeLines = policyYaml.split('\n')
 export default function PolicyEditor() {
   const [activeRule, setActiveRule] = useState('r1')
   const [mode, setMode] = useState<(typeof modes)[number]>('Block')
+  const [severity, setSeverity] = useState('high')
+  const [confidence, setConfidence] = useState('0.85')
+  const [logMatches, setLogMatches] = useState(true)
   const scopeCount = instances.filter((i) => i.policyPacks >= 5).length
 
   return (
@@ -240,7 +243,7 @@ export default function PolicyEditor() {
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-500">Severity</label>
-              <select className="input" defaultValue="high">
+              <select className="input" value={severity} onChange={(e) => setSeverity(e.target.value)}>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -250,7 +253,7 @@ export default function PolicyEditor() {
 
             <div>
               <label className="mb-1.5 block text-xs font-medium text-ink-500">Confidence threshold</label>
-              <select className="input" defaultValue="0.85">
+              <select className="input" value={confidence} onChange={(e) => setConfidence(e.target.value)}>
                 <option value="0.7">0.70</option>
                 <option value="0.85">0.85</option>
                 <option value="0.9">0.90</option>
@@ -268,9 +271,16 @@ export default function PolicyEditor() {
 
             <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2.5">
               <span className="text-xs font-medium text-ink-700">Log matches</span>
-              <div className="flex h-5 w-9 items-center rounded-full bg-brand-600 px-0.5">
-                <span className="ml-auto h-4 w-4 rounded-full bg-white shadow-sm" />
-              </div>
+              <button
+                onClick={() => setLogMatches((v) => !v)}
+                aria-pressed={logMatches}
+                aria-label="Log matches"
+                className={`flex h-5 w-9 items-center rounded-full px-0.5 transition-colors ${
+                  logMatches ? 'justify-end bg-brand-600' : 'justify-start bg-slate-200'
+                }`}
+              >
+                <span className="h-4 w-4 rounded-full bg-white shadow-sm" />
+              </button>
             </div>
           </div>
         </Card>

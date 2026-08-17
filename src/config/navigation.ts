@@ -1,23 +1,31 @@
 import {
   LayoutDashboard,
+  LayoutGrid,
   Users,
   Server,
   Bot,
-  Database,
   ShieldCheck,
-  Code2,
-  SlidersHorizontal,
-  Tags,
   Activity,
   FileBarChart,
   AlertOctagon,
   TriangleAlert,
-  ScrollText,
   Lock,
-  TerminalSquare,
-  Crown,
   Settings,
   Package,
+  Rocket,
+  Cpu,
+  Globe,
+  ServerCog,
+  DatabaseBackup,
+  PackageCheck,
+  BellRing,
+  Layers,
+  Gauge,
+  Receipt,
+  BadgeDollarSign,
+  BookOpen,
+  FlaskConical,
+  HeartPulse,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -35,29 +43,39 @@ export interface NavGroup {
 export const navGroups: NavGroup[] = [
   {
     title: 'Overview',
-    items: [{ label: 'Dashboard', to: '/', icon: LayoutDashboard }],
+    items: [
+      { label: 'Dashboard', to: '/', icon: LayoutDashboard },
+      { label: 'Fleet Overview', to: '/fleet', icon: LayoutGrid },
+      { label: 'Reports', to: '/reports', icon: FileBarChart },
+    ],
   },
   {
-    title: 'Customers',
+    title: 'Customers & Billing',
     items: [
       { label: 'Customers', to: '/customers', icon: Users },
+      { label: 'Customer Success', to: '/success', icon: HeartPulse },
       { label: 'Instances', to: '/instances', icon: Server },
+      { label: 'Pricing & Plans', to: '/pricing', icon: BadgeDollarSign },
+      { label: 'Billing', to: '/billing', icon: Receipt },
+    ],
+  },
+  {
+    title: 'Fleet',
+    items: [
+      { label: 'Provisioning', to: '/provisioning', icon: ServerCog },
+      { label: 'Bulk Operations', to: '/bulk-ops', icon: Layers },
+      { label: 'Releases', to: '/releases', icon: Rocket },
+      { label: 'Clusters', to: '/clusters', icon: Cpu },
+      { label: 'Backups & DR', to: '/backups', icon: DatabaseBackup },
     ],
   },
   {
     title: 'Governance',
     items: [
-      { label: 'AI Models', to: '/models', icon: Bot },
-      { label: 'Model Registry', to: '/model-registry', icon: Database },
-      { label: 'Data Classification', to: '/data-classification', icon: Tags },
-    ],
-  },
-  {
-    title: 'Policy',
-    items: [
-      { label: 'Policy Packs', to: '/policy-packs', icon: Package },
-      { label: 'Policy Editor', to: '/policy-editor', icon: Code2 },
-      { label: 'Enforcement Controls', to: '/enforcement', icon: SlidersHorizontal },
+      { label: 'Models', to: '/models', icon: Bot },
+      { label: 'Policy', to: '/policy', icon: Package },
+      { label: 'Evaluations', to: '/evaluations', icon: FlaskConical },
+      { label: 'Residency', to: '/residency', icon: Globe },
     ],
   },
   {
@@ -66,20 +84,70 @@ export const navGroups: NavGroup[] = [
       { label: 'Observability', to: '/observability', icon: Activity },
       { label: 'Compliance Reporting', to: '/compliance', icon: FileBarChart },
       { label: 'Incident Management', to: '/incidents', icon: AlertOctagon },
+      { label: 'SLA & Maintenance', to: '/sla', icon: Gauge },
       { label: 'Risk Assessment', to: '/risk', icon: TriangleAlert },
+      { label: 'Notifications', to: '/notifications', icon: BellRing },
     ],
   },
   {
-    title: 'Platform',
+    title: 'Administration',
     items: [
-      { label: 'Audit Log', to: '/audit-log', icon: ScrollText },
-      { label: 'Admin Security', to: '/admin-security', icon: Lock },
-      { label: 'Developer Tools', to: '/developer-tools', icon: TerminalSquare },
-      { label: 'Super Admin', to: '/super-admin', icon: Crown },
+      { label: 'Security', to: '/admin-security', icon: Lock },
+      { label: 'Supply Chain', to: '/supply-chain', icon: PackageCheck },
+      { label: 'Documentation', to: '/docs', icon: BookOpen },
       { label: 'Settings', to: '/settings', icon: Settings },
     ],
   },
 ]
 
 export const flatNav = navGroups.flatMap((g) => g.items)
+
+/**
+ * Individual pages that now live inside a section hub as a `?tab=`. Kept here so
+ * the ⌘K search can still find each one by its familiar name and deep-link to
+ * the right tab, even though the sidebar shows only the hub.
+ */
+export const hubSubPages: { label: string; to: string }[] = [
+  { label: 'Customer Health', to: '/success?tab=health' },
+  { label: 'Churn Watch', to: '/success?tab=churn' },
+  { label: 'CS Tasks & Plays', to: '/success?tab=tasks' },
+  { label: 'Support', to: '/success?tab=support' },
+  { label: 'Renewals', to: '/success?tab=renewals' },
+  { label: 'Billing & Usage', to: '/billing?tab=usage' },
+  { label: 'Stripe Integration', to: '/billing?tab=stripe' },
+  { label: 'Billing Health', to: '/billing?tab=health' },
+  { label: 'Cost & Margin (FinOps)', to: '/billing?tab=finops' },
+  { label: 'Licensing', to: '/billing?tab=licensing' },
+  { label: 'Releases', to: '/releases?tab=releases' },
+  { label: 'Update Bundles', to: '/releases?tab=bundles' },
+  { label: 'Cluster Health', to: '/clusters?tab=health' },
+  { label: 'Fleet Posture', to: '/clusters?tab=posture' },
+  { label: 'AI Models', to: '/models?tab=models' },
+  { label: 'Model Registry', to: '/models?tab=registry' },
+  { label: 'Model Routing', to: '/models?tab=routing' },
+  { label: 'Data Classification', to: '/models?tab=classification' },
+  { label: 'Policy Packs', to: '/policy?tab=packs' },
+  { label: 'Policy Editor', to: '/policy?tab=editor' },
+  { label: 'Policy Change Management', to: '/policy?tab=changes' },
+  { label: 'Enforcement Controls', to: '/policy?tab=enforcement' },
+  { label: 'Guardrail Efficacy', to: '/evaluations?tab=efficacy' },
+  { label: 'QA Review Queue', to: '/evaluations?tab=review' },
+  { label: 'Red-Team', to: '/evaluations?tab=redteam' },
+  { label: 'Attack Library', to: '/evaluations?tab=library' },
+  { label: 'Model Scorecards', to: '/evaluations?tab=scorecards' },
+  { label: 'Eval Suites', to: '/evaluations?tab=suites' },
+  { label: 'Regions', to: '/residency?tab=regions' },
+  { label: 'Residency Controls', to: '/residency?tab=controls' },
+  { label: 'Data Transfers', to: '/residency?tab=transfers' },
+  { label: 'Sub-processors', to: '/residency?tab=subprocessors' },
+  { label: 'Data Requests (DSAR)', to: '/residency?tab=dsar' },
+  { label: 'Admin Security', to: '/admin-security?tab=security' },
+  { label: 'Privileged Access', to: '/admin-security?tab=privileged' },
+  { label: 'Audit Log', to: '/admin-security?tab=audit' },
+  { label: 'Supply Chain', to: '/supply-chain?tab=supply' },
+  { label: 'Container Registry', to: '/supply-chain?tab=registry' },
+  { label: 'Team', to: '/settings?tab=Team' },
+  { label: 'Super Admin', to: '/settings?tab=Super Admin' },
+]
+
 export { ShieldCheck }

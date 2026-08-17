@@ -1,66 +1,180 @@
 # PLCY — Admin Console
 
-Internal admin console for the **PLCY** team to operate the *AI Governance &
-Policy Enforcement Platform*. It provides a single place to manage customers,
-their deployed instances, the AI models under governance, and the policy packs
-that enforce controls across the fleet.
+> ### 👋 New to this codebase? Start here.
+> **[Developer handover notes →](docs/plcy_admin_console-developer-notes.md)**
+>
+> Business rules, data fields, edge cases, integrations, permissions and open
+> questions for every module. **Read its section 2, "What is NOT a
+> specification", before anything else** — it marks which parts are real
+> business rules and which are placeholder data, and that distinction is the
+> most important thing to carry out of this prototype.
+>
+> The same notes are in the running app: the **Dev Notes** button, bottom-right.
 
-> This is a front-end prototype driven entirely by mock data (`src/data/mock.ts`).
-> No backend is required to run it.
+Internal console for the **PLCY** team to operate the **AI Governance & Policy
+Enforcement Platform** across SaaS and air-gapped single-tenant customers. One
+place to manage customers and their deployments, the models and policies under
+governance, billing and pricing, security posture, incidents, compliance
+reporting, and fleet operations.
+
+> **Prototype note.** This repository is a **front-end prototype driven entirely
+> by mock data** (`src/data/*`). There is no backend — Stripe, AWS/Bedrock,
+> clusters, and audit are modeled faithfully for demos and design, but nothing
+> bills a card or provisions infrastructure. Interactive edits persist to
+> `localStorage`.
+
+---
+
+## Product context
+
+PLCY enforces security, privacy, compliance, and human-oversight policies on
+**every AI request in real time**. It pairs a **SaaS governance console** (this
+kind of app) and control plane with an **open-source data plane** that runs
+inside the customer's own cloud, VPC, sovereign infrastructure, or air-gapped
+network. Model access is **BYOK by default** (the customer pays their provider /
+AWS directly) with an optional **PLCY-managed** credits layer.
+
+**Logical architecture** — the SaaS control plane, the customer-hosted data
+plane, and model access:
+
+![PLCY logical architecture — SaaS control plane, customer-hosted data plane, and model access](docs/diagrams/architecture.svg)
+
+**Network & deployment topology** — how the data plane runs inside a customer
+AWS VPC (load balancing, EKS pods with OPA/OTel sidecars, data stores, and the
+observability backend):
+
+![AWS network & deployment topology — the PLCY data plane inside a customer VPC](docs/diagrams/network-topology.svg)
+
+> These figures are also in the console under **Documentation → Technical**
+> (Architecture overview · Network & deployment topology), rendered from the
+> same source.
+
+---
+
+## The console (this repo)
+
+A React SPA: **~39k LOC**, **70 pages / 64 routes**, **55 data modules**, **9
+context providers**. State is held in React Context providers and standalone
+observable stores (`useSyncExternalStore`), both seeded from the mock data
+modules; user edits persist to `localStorage`.
+
+```mermaid
+flowchart LR
+  subgraph UI["React SPA"]
+    Pages["70 pages / routes"]
+    Kit["UI kit · shared components"]
+  end
+  subgraph State["Context providers (src/context)"]
+    Ctx["Session · Customers · CustomerScope · Stripe · Policy · DeploymentConfig · MaintenanceWindows · Employees · Provisioning"]
+  end
+  subgraph Data["Mock data + logic (src/data · 55 modules)"]
+    D["pricing · security · devices · alerting · reports · subscriptions · finops · …"]
+    LS[("localStorage · persisted edits")]
+  end
+  RBAC["RBAC · can() / GatedButton"]
+  AuditL["Universal audit · logAction()"]
+  Scope["Customer scope · fleet vs single"]
+
+  Pages --> Kit
+  Pages --> Ctx
+  Ctx --> Data
+  Pages --> Data
+  Data <--> LS
+  Pages -.-> RBAC
+  Pages -.-> AuditL
+  Pages -.-> Scope
+```
+
+### Cross-cutting systems
+
+- **RBAC** — capability-gated actions via `useSession().can(cap)` / `<GatedButton cap=…>`; an editable access matrix in Settings.
+- **Universal audit** — every action logs through `logAction({ action, target, category })`.
+- **Customer scope** — a fleet-vs-single-customer switcher (`useCustomerScope()`) that re-scopes reports and pages.
+- **Live signal routing** — fleet, billing, and device signals flow into Notifications and page on-call.
+- **Persistence** — security policy, device registry, pricing catalog, on-call, incidents, org settings, etc. survive reloads.
+
+---
+
+## Navigation map
+
+The sidebar is organized into **6 groups**; related pages are consolidated into
+**tabbed section hubs** (addressed by `?tab=`), so a hub is one sidebar entry
+with several pages inside.
+
+| Group | Screens |
+|---|---|
+| **Overview** | Dashboard · Fleet Overview · **Reports** (8 generators) |
+| **Customers & Billing** | Customers (drill-down + config change-requests) · Instances · **Pricing & Plans** · **Billing** hub (Usage · Stripe · Health · Cost & Margin · Licensing) |
+| **Fleet** | Provisioning · Bulk Operations · **Releases** hub (Releases · Update Bundles) · **Clusters** hub (Cluster Health · Fleet Posture) · Backups & DR |
+| **Governance** | **Models** hub (AI Models · Registry · Model Routing · Data Classification) · **Policy** hub (Packs · Editor · Enforcement) · **Residency** hub (Regions · Controls · Transfers · Sub-processors · DSAR) |
+| **Operations** | Observability · Compliance Reporting · Incident Management · SLA & Maintenance · Risk Assessment · Notifications |
+| **Administration** | **Security** hub (Admin Security · Privileged Access · Audit Log) · **Supply Chain** hub (Supply Chain · Container Registry) · Documentation · **Settings** (General · Branding · Team · Notifications · Billing · Integrations · Roles & Permissions · Security · Super Admin) |
+
+Old standalone routes redirect into the matching hub tab, so deep links keep
+working.
+
+---
+
+## Notable subsystems
+
+- **Reports hub** (`/reports`) — 8 scope-aware generators (Fleet Posture, Compliance, Security, SLA & Credits, Cost & Margin, Incident Post-Mortem, DSAR Fulfilment, per-customer Account) on a shared `ReportShell` + download util, with CSV/Markdown/print export.
+- **Pricing & Plans** (`/pricing`) — editable plans catalog (capacity + entitlements), add-ons with bulk packs, discount levers, throughput tiers, a Bedrock model catalog, and a live **quote builder** (dedicated cloud, cache-hit discount, BYOK vs managed, order-form + export). Reconciled to customers and Stripe MRR.
+- **Security & device trust** (Settings → Security) — an org security-policy surface with a live **posture score**, plus **device enrollment** (hardware-bound Device ID, VPN + posture checks).
+- **Notifications** — a **live signal-routing** engine (signals → rules → channels → on-call), with editable on-call, rotation, and escalation.
+
+---
 
 ## Tech stack
 
-- **React 18** + **TypeScript** (strict)
-- **Vite** (dev server & build)
-- **Tailwind CSS** (design system)
-- **React Router v6** (routing)
-- **Recharts** (charts)
-- **lucide-react** (icons)
+- **React 18** + **TypeScript** (strict, `noUnusedLocals`)
+- **Vite** — dev server & build
+- **Tailwind CSS v3** — design system
+- **React Router v6** — routing (HashRouter for the standalone preview)
+- **Recharts** — charts · **lucide-react** — icons · **clsx** — class merging
+
+No backend or other runtime dependencies.
 
 ## Getting started
 
 ```bash
 npm install
-npm run dev      # start the dev server (http://localhost:5173)
+npm run dev      # dev server (http://localhost:5173)
 npm run build    # type-check + production build
 npm run preview  # preview the production build
+
+npm run docs:dev-notes   # regenerate docs/plcy_admin_console-developer-notes.md
 ```
 
-## What's inside
+The handover notes are **generated** from `src/data/devNotes.ts`, which the
+in-app Dev Notes panel also renders — one copy of the content, so the two cannot
+drift. `npm run build` fails if the generated doc is stale; edit the source and
+regenerate rather than editing the markdown.
 
-The console is organized into the sidebar groups below. Every screen is a
-route under `src/pages/`.
-
-| Group        | Screens |
-|--------------|---------|
-| **Overview** | Dashboard — fleet-wide KPIs, usage trend, risk distribution, compliance scores, activity feed |
-| **Customers**| Customers (accounts, plans, MRR, compliance), Instances (per-customer deployments & health) |
-| **Governance**| AI Models (models under governance + shadow-AI detection), Model Registry (versions, lifecycle, approvals), Data Classification (sensitivity levels & detections) |
-| **Policy**   | Policy Packs (reusable rule bundles), Policy Editor (IDE-style rule authoring), Enforcement Controls (Monitor / Warn / Block) |
-| **Operations**| Observability (latency, throughput, errors), Compliance Reporting (SOC 2, GDPR, HIPAA, EU AI Act…), Incident Management, Risk Assessment |
-| **Platform** | Audit Log, Admin Security (users, SSO, API keys), Developer Tools (API, webhooks, SDKs), Super Admin (platform-wide health & feature flags), Settings |
+Ship checklist for a change: `npx tsc --noEmit` → `VITE_HASH_ROUTER=1 npx vite
+build --base=./` → browser-verify → commit.
 
 ## Project structure
 
 ```
 src/
-  components/
-    Layout.tsx        # app shell (sidebar + topbar)
-    Sidebar.tsx       # navigation + customer switcher
-    Topbar.tsx        # header, search, notifications
-    ui.tsx            # shared UI kit (Card, StatCard, Badge, Table, …)
-  config/
-    navigation.ts     # sidebar route definitions
-  data/
-    mock.ts           # single source of mock data + formatters
-  pages/              # one file per route
-  App.tsx             # router
-  main.tsx            # entry point
+  components/     # Layout, Sidebar, Topbar, ui kit, ReportShell, ManagedDevices, …
+  config/         # navigation.ts (sidebar + route groups)
+  context/        # 9 state providers (Session, Customers, Stripe, Policy, …)
+  data/           # 55 mock-data + logic modules (pricing, security, latency, …)
+  pages/          # 70 route components
+  App.tsx         # router (64 routes)
+  main.tsx        # entry
 ```
 
 ## Design system
 
-Shared primitives live in `src/components/ui.tsx` and global component classes
-(`.card`, `.btn-primary`, `.input`, …) in `src/index.css`. Brand color is the
-blue `brand-*` scale defined in `tailwind.config.js`; emerald = healthy,
-amber/orange = warning, rose = danger, slate = neutral.
+Shared primitives in `src/components/ui.tsx`; global classes (`.card`,
+`.btn-primary`, `.input`, …) in `src/index.css`. Brand = the blue `brand-*`
+scale; emerald = healthy, amber/orange = warning, rose = danger, slate =
+neutral. Pages follow a RAG (red/amber/green) status language throughout.
+
+## Roadmap
+
+- **Backend** — a Go control-plane API + open-source data plane; migrate the console off mock data module-by-module.
+- **Model/ML services** — Python for evaluation, guardrail classifiers, and RAG.
+- **Deeper Stripe/AWS** — live billing and dedicated-cloud provisioning.

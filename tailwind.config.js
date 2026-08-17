@@ -4,17 +4,20 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Driven by CSS variables so the accent color can be re-themed at
+        // runtime (Settings → Branding). RGB-channel form keeps Tailwind's
+        // opacity modifiers (e.g. brand-600/20) working.
         brand: {
-          50: '#eef4ff',
-          100: '#d9e6ff',
-          200: '#bcd3ff',
-          300: '#8db6ff',
-          400: '#578dff',
-          500: '#3366ff',
-          600: '#1f47f5',
-          700: '#1836e1',
-          800: '#1a2fb6',
-          900: '#1c2e8f',
+          50: 'rgb(var(--brand-50) / <alpha-value>)',
+          100: 'rgb(var(--brand-100) / <alpha-value>)',
+          200: 'rgb(var(--brand-200) / <alpha-value>)',
+          300: 'rgb(var(--brand-300) / <alpha-value>)',
+          400: 'rgb(var(--brand-400) / <alpha-value>)',
+          500: 'rgb(var(--brand-500) / <alpha-value>)',
+          600: 'rgb(var(--brand-600) / <alpha-value>)',
+          700: 'rgb(var(--brand-700) / <alpha-value>)',
+          800: 'rgb(var(--brand-800) / <alpha-value>)',
+          900: 'rgb(var(--brand-900) / <alpha-value>)',
         },
         ink: {
           900: '#0f172a',

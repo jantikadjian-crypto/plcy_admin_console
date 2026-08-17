@@ -1,16 +1,126 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { ChevronsUpDown, Building2, X } from 'lucide-react'
-import { navGroups, ShieldCheck } from '@/config/navigation'
+import { ChevronsUpDown, Building2, X, Check } from 'lucide-react'
+import { navGroups } from '@/config/navigation'
+import { currentUser, roleDefs } from '@/data/roles'
+import { customers } from '@/data/mock'
+import { useCustomerScope, ALL } from '@/context/CustomerScope'
+import { useSession } from '@/context/Session'
+import { useOrgSettings } from '@/data/orgSettings'
+
+/**
+ * Brand mark. Prefers the org's uploaded logo (Settings → Branding); otherwise
+ * falls back to the bundled logo at /plcy-logo.png (then /plcy-logo.svg).
+ * `object-contain` preserves aspect ratio so the artwork is never stretched.
+ */
+const LOGO_CANDIDATES = ['/plcy-logo.png', '/plcy-logo.svg']
+
+function BrandMark() {
+  const { logo, orgName } = useOrgSettings()
+  const [idx, setIdx] = useState(0)
+  const src = logo || LOGO_CANDIDATES[Math.min(idx, LOGO_CANDIDATES.length - 1)]
+  return (
+    <img
+      src={src}
+      alt={orgName || 'PLCY'}
+      className="h-10 w-auto max-w-[180px] object-contain object-left"
+      onError={() => !logo && setIdx((i) => i + 1)}
+    />
+  )
+}
+
+function CustomerSwitcher() {
+  const { scope, setScope } = useCustomerScope()
+  const [open, setOpen] = useState(false)
+  const options = [ALL, ...customers.map((c) => c.name)]
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="group flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100"
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-brand-600 ring-1 ring-slate-200">
+          <Building2 className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">Current Customer</p>
+          <p className="truncate text-sm font-semibold text-ink-900">{scope}</p>
+        </div>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-400" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-cardhover">
+            {options.map((name) => (
+              <button
+                key={name}
+                onClick={() => { setScope(name); setOpen(false) }}
+                className={clsx(
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100',
+                  name === scope ? 'font-semibold text-brand-700' : 'text-ink-700',
+                )}
+              >
+                <span className="flex-1 truncate">{name}</span>
+                {name === scope && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ProfileRoleSwitcher() {
+  const { actingRole, setActingRole } = useSession()
+  const [open, setOpen] = useState(false)
+  const current = roleDefs.find((r) => r.id === actingRole)
+  const previewing = actingRole !== currentUser.roleId
+  const initials = currentUser.name.split(' ').map((n) => n[0]).slice(0, 2).join('')
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-slate-100">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-500 text-xs font-semibold text-white">
+          {initials}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink-900">{currentUser.name}</p>
+          <p className="truncate text-xs text-ink-400">
+            {previewing ? <span className="text-orange-500">Viewing as {current?.name}</span> : current?.name ?? 'Member'}
+          </p>
+        </div>
+        <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-400" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full left-0 right-0 z-20 mb-1 rounded-xl border border-slate-200 bg-white p-1 shadow-cardhover">
+            <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">View as role</p>
+            {roleDefs.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => { setActingRole(r.id); setOpen(false) }}
+                className={clsx('flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100', r.id === actingRole ? 'font-semibold text-brand-700' : 'text-ink-700')}
+              >
+                <span className="flex-1 truncate">{r.name}</span>
+                {r.id === actingRole && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function Sidebar({
   open,
   onClose,
-  currentCustomer,
 }: {
   open: boolean
   onClose: () => void
-  currentCustomer: string
 }) {
   return (
     <>
@@ -29,17 +139,12 @@ export default function Sidebar({
         )}
       >
         {/* Brand */}
-        <div className="flex items-center justify-between gap-2 px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold leading-tight tracking-tight text-ink-900">
-                PLCY
-              </p>
-              <p className="text-[11px] font-medium leading-tight text-ink-400">Admin Console</p>
-            </div>
+        <div className="flex items-start justify-between gap-2 px-5 py-5">
+          <div>
+            <BrandMark />
+            <p className="mt-1.5 text-[10px] font-semibold uppercase leading-tight tracking-[0.16em] text-ink-400">
+              Administration
+            </p>
           </div>
           <button className="btn-ghost -mr-2 p-1.5 lg:hidden" onClick={onClose} aria-label="Close menu">
             <X className="h-5 w-5" />
@@ -48,18 +153,7 @@ export default function Sidebar({
 
         {/* Current customer switcher */}
         <div className="px-3">
-          <button className="group flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-brand-600 ring-1 ring-slate-200">
-              <Building2 className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-ink-400">
-                Current Customer
-              </p>
-              <p className="truncate text-sm font-semibold text-ink-900">{currentCustomer}</p>
-            </div>
-            <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-400" />
-          </button>
+          <CustomerSwitcher />
         </div>
 
         {/* Navigation */}
@@ -89,17 +183,9 @@ export default function Sidebar({
           ))}
         </nav>
 
-        {/* User */}
+        {/* User + role switcher */}
         <div className="border-t border-slate-200 p-3">
-          <div className="flex items-center gap-3 rounded-xl p-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-500 text-xs font-semibold text-white">
-              JC
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink-900">Jack Chen</p>
-              <p className="truncate text-xs text-ink-400">Platform Admin</p>
-            </div>
-          </div>
+          <ProfileRoleSwitcher />
         </div>
       </aside>
     </>

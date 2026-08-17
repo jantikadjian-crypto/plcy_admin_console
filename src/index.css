@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Brand palette as RGB channels — overridden at runtime by the accent color
+     chosen in Settings → Branding (see src/lib/theme.ts). Defaults = brand blue. */
+  --brand-50: 238 244 255;
+  --brand-100: 217 230 255;
+  --brand-200: 188 211 255;
+  --brand-300: 141 182 255;
+  --brand-400: 87 141 255;
+  --brand-500: 51 102 255;
+  --brand-600: 31 71 245;
+  --brand-700: 24 54 225;
+  --brand-800: 26 47 182;
+  --brand-900: 28 46 143;
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;

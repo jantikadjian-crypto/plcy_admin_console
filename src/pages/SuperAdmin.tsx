@@ -183,7 +183,7 @@ export default function SuperAdmin() {
 
         <Card>
           <CardTitle title="Feature Flags" subtitle="Platform-wide rollout controls" />
-          <Table columns={['Flag', 'Rollout', '']}>
+          <Table columns={['Flag', 'Rollout', '']} noun="flags">
             {initialFlags.map((f) => (
               <Tr key={f.name}>
                 <Td>

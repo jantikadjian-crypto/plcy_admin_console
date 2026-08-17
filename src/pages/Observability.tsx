@@ -12,6 +12,7 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardTitle, StatCard, PageHeader, Table, Tr, Td, StatusBadge } from '@/components/ui'
+import { gatewayHours, percentiles } from '@/data/latency'
 import { instances, fmtCompact } from '@/data/mock'
 
 const tooltipStyle = {
@@ -21,21 +22,21 @@ const tooltipStyle = {
   fontSize: 12,
 }
 
-/* 24 hourly points of gateway latency (ms) and request volume */
-const latencySeries = Array.from({ length: 24 }, (_, h) => {
-  const load = Math.sin((h / 24) * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5
-  const p50 = Math.round(58 + load * 46)
-  const p95 = Math.round(p50 * 2.1 + load * 40)
-  const p99 = Math.round(p50 * 3.3 + load * 90)
-  const requests = Math.round(1800 + load * 3400 + (h % 3) * 120)
-  return {
-    t: `${String(h).padStart(2, '0')}:00`,
-    p50,
-    p95,
-    p99,
-    requests,
-  }
-})
+/*
+ * 24 hourly points of gateway latency and request volume, reduced from the
+ * shared sample generator. The chart and the headline card above it both come
+ * from these same samples — the card used to be a hardcoded string, so it could
+ * (and did) drift away from the chart it captioned.
+ */
+const hours = gatewayHours()
+const latencySeries = hours.map((h) => ({
+  t: h.hour,
+  requests: h.requests,
+  ...percentiles(h.samples),
+}))
+
+/** The whole day's requests, so the headline is a true percentile rather than an average of percentiles. */
+const dayLatency = percentiles(hours.flatMap((h) => h.samples))
 
 interface EndpointRow {
   name: string
@@ -72,7 +73,13 @@ export default function Observability() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="p95 Latency" value="214 ms" icon={Gauge} tone="blue" footer="p50 78 ms · p99 486 ms" />
+        <StatCard
+          label="p95 Latency"
+          value={`${dayLatency.p95} ms`}
+          icon={Gauge}
+          tone="blue"
+          footer={`p50 ${dayLatency.p50} ms · p99 ${dayLatency.p99} ms · ${fmtCompact(dayLatency.count)} sampled requests`}
+        />
         <StatCard label="Throughput" value="4.9k req/s" icon={Activity} tone="purple" footer="24h avg across fleet" />
         <StatCard label="Error Rate" value="0.32%" icon={AlertTriangle} tone="orange" footer="within 0.5% SLO" />
         <StatCard label="Tokens/s" value="1.4M" icon={Cpu} tone="green" footer="prompt + completion" />
@@ -80,7 +87,7 @@ export default function Observability() {
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <CardTitle title="Gateway Latency" subtitle="p50 / p95 / p99 over the last 24 hours (ms)" />
+          <CardTitle title="Gateway Latency" subtitle="p50 / p95 / p99 over the last 24 hours (ms) · each point is a percentile of that hour's requests" />
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={latencySeries} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
@@ -121,7 +128,7 @@ export default function Observability() {
 
       <Card className="mt-6">
         <CardTitle title="Top Models & Endpoints" subtitle="Ranked by traffic through the governance gateway" />
-        <Table columns={['Model / endpoint', 'Requests', 'Avg latency', 'Error rate', 'Status']}>
+        <Table columns={['Model / endpoint', 'Requests', 'Avg latency', 'Error rate', 'Status']} noun="endpoints">
           {endpoints.map((e) => (
             <Tr key={e.name}>
               <Td>
