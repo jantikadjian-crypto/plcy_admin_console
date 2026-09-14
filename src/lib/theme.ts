@@ -2,7 +2,8 @@
  * Runtime accent theming. The `brand-*` Tailwind scale reads CSS variables
  * (--brand-50 … --brand-900) as RGB channels; this derives a full scale from a
  * single accent hex and writes those variables onto :root, so choosing an
- * accent color in Settings → Branding recolors the whole console live.
+ * accent color in `orgSettings` recolors the whole console live. (No UI sets
+ * it since the Branding tab was removed; it runs off the stored/default value.)
  */
 type RGB = [number, number, number]
 
