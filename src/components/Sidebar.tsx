@@ -10,7 +10,7 @@ import { useSession } from '@/context/Session'
 import { useOrgSettings } from '@/data/orgSettings'
 
 /**
- * Brand mark. Prefers the org's uploaded logo (Settings → Branding); otherwise
+ * Brand mark. Prefers the org's uploaded logo (`orgSettings.logo`); otherwise
  * falls back to the bundled logo at /plcy-logo.png (then /plcy-logo.svg).
  * `object-contain` preserves aspect ratio so the artwork is never stretched.
  */

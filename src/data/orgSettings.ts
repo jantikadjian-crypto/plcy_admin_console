@@ -1,7 +1,13 @@
 /**
- * Org-wide General & Branding settings behind Settings → General / Branding.
- * Persisted to localStorage and exposed as a tiny observable so branding edits
- * (e.g. an uploaded logo) show up live in the sidebar via useSyncExternalStore.
+ * Org-wide settings behind Settings → General.
+ *
+ * Persisted to localStorage and exposed as a tiny observable so edits show up
+ * live (the sidebar reads `logo` and `orgName` via useSyncExternalStore).
+ *
+ * `accentColor` and `logo` have no editor: the Branding tab that set them was
+ * removed. Both are still read — the sidebar renders a stored logo and the
+ * shell applies a stored accent — so any value saved before the tab went away
+ * still applies. Delete the fields too if that behaviour isn't wanted.
  */
 import { useSyncExternalStore } from 'react'
 

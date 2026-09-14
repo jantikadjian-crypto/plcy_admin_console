@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import {
   Settings as SettingsIcon,
-  Palette,
   Bell,
   CreditCard,
   Plug,
@@ -24,7 +23,6 @@ import {
   AlertTriangle,
   Users,
   Crown,
-  Upload,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardTitle, PageHeader, Badge, Progress } from '@/components/ui'
@@ -47,9 +45,8 @@ import {
   scoreSecurity,
 } from '@/data/security'
 import type { SecurityPolicy, MfaMethod, AllowlistMode, PostureRag } from '@/data/security'
-import { loadOrgSettings, saveOrgSettings, defaultOrgSettings } from '@/data/orgSettings'
+import { loadOrgSettings, saveOrgSettings } from '@/data/orgSettings'
 import type { OrgSettings } from '@/data/orgSettings'
-import { applyBrandColor } from '@/lib/theme'
 import {
   roleDefs,
   assignedCount,
@@ -70,7 +67,6 @@ import {
 
 type TabKey =
   | 'General'
-  | 'Branding'
   | 'Team'
   | 'Notifications'
   | 'Billing'
@@ -81,7 +77,6 @@ type TabKey =
 
 const tabs: { key: TabKey; icon: LucideIcon }[] = [
   { key: 'General', icon: SettingsIcon },
-  { key: 'Branding', icon: Palette },
   { key: 'Team', icon: Users },
   { key: 'Notifications', icon: Bell },
   { key: 'Billing', icon: CreditCard },
@@ -603,15 +598,6 @@ function SecuritySettings({ policy, onChange }: { policy: SecurityPolicy; onChan
   )
 }
 
-const swatches = [
-  { name: 'Brand Blue', hex: '#1f47f5' },
-  { name: 'Violet', hex: '#8b5cf6' },
-  { name: 'Emerald', hex: '#10b981' },
-  { name: 'Amber', hex: '#f59e0b' },
-  { name: 'Rose', hex: '#ef4444' },
-  { name: 'Slate', hex: '#64748b' },
-]
-
 const integrations = [
   { name: 'Stripe', desc: 'Subscriptions, invoices & payments.', connected: true, to: '/billing-integration' },
   { name: 'Slack', desc: 'Send alerts to your workspace channels.', connected: true },
@@ -628,30 +614,6 @@ export default function Settings() {
   const [active, setActive] = useState<TabKey>(initialTab)
   const [org, setOrg] = useState<OrgSettings>(loadOrgSettings)
   const setOrgField = (patch: Partial<OrgSettings>) => setOrg((p) => ({ ...p, ...patch }))
-  const logoInputRef = useRef<HTMLInputElement>(null)
-  const [logoErr, setLogoErr] = useState('')
-
-  // Set the accent color and preview it across the console immediately.
-  const setAccent = (hex: string) => {
-    setOrgField({ accentColor: hex })
-    applyBrandColor(hex)
-  }
-
-  const onLogoFile = (file?: File | null) => {
-    if (!file) return
-    if (!/^image\/(png|svg\+xml|jpeg)$/.test(file.type)) {
-      setLogoErr('Use a PNG, SVG, or JPEG image.')
-      return
-    }
-    if (file.size > 1024 * 1024) {
-      setLogoErr('Image must be under 1 MB.')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => { setOrgField({ logo: String(reader.result) }); setLogoErr('') }
-    reader.onerror = () => setLogoErr('Could not read that file.')
-    reader.readAsDataURL(file)
-  }
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     notifyIncidents: true,
     notifyViolations: true,
@@ -783,74 +745,6 @@ export default function Settings() {
                   <Progress value={55} tone="blue" />
                 </div>
                 <p className="mt-2 text-xs text-ink-500">Audit and evaluation logs are retained for 400 days.</p>
-              </div>
-            </Card>
-          )}
-
-          {active === 'Branding' && (
-            <Card>
-              <CardTitle title="Branding" subtitle="Customize the console appearance" />
-              <p className="mb-1 text-sm font-medium text-ink-700">Accent color</p>
-              <p className="mb-3 text-xs text-ink-500">Recolors buttons, links, active navigation, and highlights across the console — live.</p>
-              <div className="flex flex-wrap items-center gap-3">
-                {swatches.map((s) => (
-                  <button
-                    key={s.hex}
-                    onClick={() => setAccent(s.hex)}
-                    className="flex h-11 w-11 items-center justify-center rounded-xl ring-2 ring-offset-2 transition"
-                    style={{
-                      backgroundColor: s.hex,
-                      boxShadow: org.accentColor.toLowerCase() === s.hex.toLowerCase() ? `0 0 0 2px ${s.hex}` : 'none',
-                    }}
-                    aria-label={s.name}
-                  >
-                    {org.accentColor.toLowerCase() === s.hex.toLowerCase() && <Check className="h-5 w-5 text-white" />}
-                  </button>
-                ))}
-                {/* Custom color */}
-                <label className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm text-ink-600 hover:border-slate-300">
-                  <span className="inline-block h-5 w-5 rounded-md ring-1 ring-inset ring-black/10" style={{ backgroundColor: org.accentColor }} />
-                  <span className="font-mono text-xs uppercase">{org.accentColor}</span>
-                  <input type="color" className="sr-only" value={org.accentColor} onChange={(e) => setAccent(e.target.value)} aria-label="Custom accent color" />
-                </label>
-                <button className="btn-ghost text-xs" onClick={() => setAccent(defaultOrgSettings.accentColor)} title="Reset to PLCY blue">
-                  <RotateCcw className="h-3.5 w-3.5" /> Reset
-                </button>
-              </div>
-              <div className="mt-6">
-                <div>
-                  <p className="mb-2 text-sm font-medium text-ink-700">Logo</p>
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/png,image/svg+xml,image/jpeg"
-                    className="hidden"
-                    onChange={(e) => onLogoFile(e.target.files?.[0])}
-                  />
-                  {org.logo ? (
-                    <div className="flex items-center gap-4 rounded-xl border border-slate-200 p-4">
-                      <img src={org.logo} alt="Logo preview" className="h-12 w-auto max-w-[160px] object-contain" />
-                      <div className="flex gap-2">
-                        <button className="btn-secondary" onClick={() => logoInputRef.current?.click()}>Replace</button>
-                        <button className="btn-ghost text-rose-600 hover:bg-rose-50" onClick={() => { setOrgField({ logo: '' }); setLogoErr('') }}>Remove</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => logoInputRef.current?.click()}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => { e.preventDefault(); onLogoFile(e.dataTransfer.files?.[0]) }}
-                      className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-200 text-sm text-ink-400 transition-colors hover:border-brand-300 hover:text-brand-600"
-                    >
-                      <Upload className="h-5 w-5" />
-                      Click to upload or drop a PNG / SVG
-                      <span className="text-xs text-ink-300">Max 1 MB</span>
-                    </button>
-                  )}
-                  {logoErr && <p className="mt-1.5 text-xs text-rose-600">{logoErr}</p>}
-                  <p className="mt-2 text-xs text-ink-400">Shown in the sidebar. Click “Save changes” to apply it across the console.</p>
-                </div>
               </div>
             </Card>
           )}

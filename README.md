@@ -108,7 +108,7 @@ with several pages inside.
 | **Fleet** | Provisioning · Bulk Operations · **Releases** hub (Releases · Update Bundles) · **Clusters** hub (Cluster Health · Fleet Posture) · Backups & DR |
 | **Governance** | **Models** hub (AI Models · Registry · Model Routing · Data Classification) · **Policy** hub (Packs · Editor · Enforcement) · **Residency** hub (Regions · Controls · Transfers · Sub-processors · DSAR) |
 | **Operations** | Observability · Compliance Reporting · Incident Management · SLA & Maintenance · Risk Assessment · Notifications |
-| **Administration** | **Security** hub (Admin Security · Privileged Access · Audit Log) · **Supply Chain** hub (Supply Chain · Container Registry) · Documentation · **Settings** (General · Branding · Team · Notifications · Billing · Integrations · Roles & Permissions · Security · Super Admin) |
+| **Administration** | **Security** hub (Admin Security · Privileged Access · Audit Log) · **Supply Chain** hub (Supply Chain · Container Registry) · Documentation · **Settings** (General · Team · Notifications · Billing · Integrations · Roles & Permissions · Security · Super Admin) |
 
 Old standalone routes redirect into the matching hub tab, so deep links keep
 working.
